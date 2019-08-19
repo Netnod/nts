@@ -14,11 +14,12 @@ module nts_dispatcher_front #(
   // -- TBD --
   // interface to nts_dispatcher_backend
   output wire                  o_dispatch_packet_available,
-  input wire                   i_dispatch_packet_read_discard,
+  input  wire                  i_dispatch_packet_read_discard,
   output wire [ADDR_WIDTH-1:0] o_dispatch_counter,
   output wire [7:0]            o_dispatch_data_valid,
-  input  wire [ADDR_WIDTH-1:0] i_dispatch_raddr,
-  output wire [63:0]           o_dispatch_rdata
+  output wire                  o_dispatch_fifo_empty,
+  input  wire                  i_dispatch_fifo_rd_en,
+  output wire [63:0]           o_dispatch_fifo_rd_data
 );
 
   localparam STATE_EMPTY         = 0;
@@ -26,35 +27,40 @@ module nts_dispatcher_front #(
   localparam STATE_PROCESS       = 2;
   localparam STATE_GOOD          = 3;
   localparam STATE_GOOD_PROCESS  = 4;
+  localparam STATE_FIFO_OUT      = 5;
   localparam STATE_ERROR_GENERAL = 6;
   localparam STATE_ERROR_BUFFER_OVERRUN = 7;
 
   reg           drop_next_frame;
   reg               current_mem;
+  reg                fifo_empty;
   reg  [2:0]          mem_state [1:0];
   reg                     write [1:0];
   reg  [63:0]            w_data [1:0];
   wire [63:0]            r_data [1:0];
+  reg  [ADDR_WIDTH-1:0]  r_addr;
   reg  [ADDR_WIDTH-1:0]  w_addr [1:0];
   reg  [ADDR_WIDTH-1:0] counter [1:0];
   reg  [7:0]         data_valid [1:0];
 
 
-  assign o_dispatch_packet_available  = mem_state[ ~ current_mem ] == STATE_GOOD_PROCESS;
+  assign o_dispatch_packet_available  = mem_state[ ~ current_mem ] == STATE_FIFO_OUT;
   assign o_dispatch_counter           = counter[ ~ current_mem ];
   assign o_dispatch_data_valid        = data_valid[ ~ current_mem ];
-  assign o_dispatch_rdata             = r_data[ ~ current_mem ];
+  assign o_dispatch_fifo_empty        = fifo_empty;
+  assign o_dispatch_fifo_rd_data      = r_data[ ~ current_mem ];
 
   bram #(ADDR_WIDTH,64) mem0 (
      .i_clk(i_clk),
-     .i_addr(write[0] ? w_addr[0] : i_dispatch_raddr),
+     .i_addr(write[0] ? w_addr[0] : r_addr),
      .i_write(write[0]),
      .i_data(w_data[0]),
      .o_data(r_data[0])
   );
+
   bram #(ADDR_WIDTH,64) mem1 (
      .i_clk(i_clk),
-     .i_addr(write[1] ? w_addr[1] : i_dispatch_raddr),
+     .i_addr(write[1] ? w_addr[1] : r_addr),
      .i_write(write[1]),
      .i_data(w_data[1]),
      .o_data(r_data[1])
@@ -64,6 +70,8 @@ module nts_dispatcher_front #(
   begin
     if (i_areset == 1'b1) begin
       current_mem   <= 'b0;
+      fifo_empty    <= 'b1;
+      r_addr        <= 'b0;
       mem_state[0]  <= STATE_EMPTY;
       mem_state[1]  <= STATE_EMPTY;
       write[0]      <= 1'b0;
@@ -83,6 +91,14 @@ module nts_dispatcher_front #(
       w_data[1]   <= 64'b0;
       if (i_dispatch_packet_read_discard) begin
         mem_state[ ~ current_mem] <= STATE_EMPTY;
+        fifo_empty <= 'b1;
+      end
+      if (i_dispatch_fifo_rd_en) begin
+        if (r_addr == counter[~current_mem]) begin
+          fifo_empty <= 'b1;
+        end else begin
+          r_addr <= r_addr + 1;
+        end
       end
       if (i_rx_bad_frame) begin
          mem_state[current_mem]  <= STATE_EMPTY;
@@ -90,15 +106,12 @@ module nts_dispatcher_front #(
          counter[current_mem]    <= 'b0;
          data_valid[current_mem] <= 'b0;
        end else begin
-         $display("Current mem: %h", current_mem);
-         $display("Current state: %h", mem_state[current_mem]);
-         $display("i_rx_good_frame: %h", i_rx_good_frame);
+         //$display("Current mem: %h", current_mem);
+         //$display("Current state: %h", mem_state[current_mem]);
+         //$display("i_rx_good_frame: %h", i_rx_good_frame);
          case (mem_state[current_mem])
            STATE_EMPTY:
-             begin
-             $display("STATE_EMPTY");
              if (i_rx_data_valid == 'hff) begin
-               $display("STATE_EMPTY: ii_rx_data_valid!!!");
                mem_state[current_mem] <= STATE_HAS_DATA;
              end else if (i_rx_data_valid != 0) begin
                //receiving last frame, unexpectedly
@@ -106,7 +119,6 @@ module nts_dispatcher_front #(
              end else if (i_rx_good_frame) begin
                //receiving last frame, unexpectedly
                mem_state[current_mem] <= STATE_ERROR_GENERAL;
-             end
              end
            STATE_HAS_DATA:
              begin
@@ -136,10 +148,12 @@ module nts_dispatcher_front #(
              end
            STATE_GOOD_PROCESS:
              if (mem_state[ ~ current_mem] == STATE_EMPTY) begin
+               mem_state[current_mem] <= STATE_FIFO_OUT;
                current_mem <= ~ current_mem;
+               fifo_empty  <= 'b0;
              end
            default:
-mem_state[current_mem] <= STATE_EMPTY;
+             mem_state[current_mem] <= STATE_EMPTY;
           endcase
           if (i_rx_data_valid != 'b0) begin
             w_data[current_mem] <= i_rx_data;
@@ -167,5 +181,3 @@ mem_state[current_mem] <= STATE_EMPTY;
     end //posedge i_clk
   end //always begin
 endmodule
-
-

@@ -25,6 +25,7 @@ module nts_dispatcher_front #(
   localparam STATE_PROCESS       = 2;
   localparam STATE_GOOD          = 3;
   localparam STATE_GOOD_PROCESS  = 4;
+  localparam STATE_ERROR_GENERAL = 6;
   localparam STATE_ERROR_BUFFER_OVERRUN = 7;
 
   reg           drop_next_frame;
@@ -85,19 +86,36 @@ module nts_dispatcher_front #(
          counter[current_mem]    <= 'b0;
          data_valid[current_mem] <= 'b0;
        end else begin
+         $display("Current mem: %h", current_mem);
+         $display("Current state: %h", mem_state[current_mem]);
+         $display("i_rx_good_frame: %h", i_rx_good_frame);
          case (mem_state[current_mem])
            STATE_EMPTY:
-             //TBD
-              ;
-           STATE_HAS_DATA:
-             if (i_rx_good_frame) begin
-               data_valid[current_mem] <= i_rx_data_valid;
-             end else if (i_rx_good_frame && i_process_frame) begin
-               mem_state[current_mem] <= STATE_GOOD_PROCESS;
+             begin
+             $display("STATE_EMPTY");
+             if (i_rx_data_valid == 'hff) begin
+               $display("STATE_EMPTY: ii_rx_data_valid!!!");
+               mem_state[current_mem] <= STATE_HAS_DATA;
+             end else if (i_rx_data_valid != 0) begin
+               //receiving last frame, unexpectedly
+               mem_state[current_mem] <= STATE_ERROR_GENERAL;
              end else if (i_rx_good_frame) begin
-               mem_state[current_mem] <= STATE_GOOD;
-             end else if (i_process_frame) begin
-               mem_state[current_mem] <= STATE_GOOD_PROCESS;
+               //receiving last frame, unexpectedly
+               mem_state[current_mem] <= STATE_ERROR_GENERAL;
+             end
+             end
+           STATE_HAS_DATA:
+             begin
+               if (i_rx_good_frame) begin
+                 data_valid[current_mem] <= i_rx_data_valid;
+               end
+               if (i_rx_good_frame && i_process_frame) begin
+                 mem_state[current_mem] <= STATE_GOOD_PROCESS;
+               end else if (i_rx_good_frame) begin
+                 mem_state[current_mem] <= STATE_GOOD;
+               end else if (i_process_frame) begin
+                 mem_state[current_mem] <= STATE_PROCESS;
+               end
              end
            STATE_PROCESS:
              begin
@@ -117,7 +135,7 @@ module nts_dispatcher_front #(
                current_mem <= ~ current_mem;
              end
            default:
-             mem_state[current_mem] <= STATE_EMPTY;
+mem_state[current_mem] <= STATE_EMPTY;
           endcase
           if (i_rx_data_valid != 'b0) begin
             w_data[current_mem] <= i_rx_data;

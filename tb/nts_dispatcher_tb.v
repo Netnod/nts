@@ -10,6 +10,7 @@ module nts_dispatcher_front_tb;
   reg                   i_rx_good_frame;
   reg                   i_process_frame;
   wire                  o_dispatch_packet_available;
+  reg                   i_dispatch_packet_read_discard;
   wire [ADDR_WIDTH-1:0] o_dispatch_counter;
   wire [7:0]            o_dispatch_data_valid;
   reg  [ADDR_WIDTH-1:0] i_dispatch_raddr;
@@ -24,6 +25,7 @@ module nts_dispatcher_front_tb;
     .i_rx_good_frame(i_rx_good_frame),
     .i_process_frame(i_process_frame),
     .o_dispatch_packet_available(o_dispatch_packet_available),
+    .i_dispatch_packet_read_discard(i_dispatch_packet_read_discard),
     .o_dispatch_counter(o_dispatch_counter),
     .o_dispatch_data_valid(o_dispatch_data_valid),
     .i_dispatch_raddr(i_dispatch_raddr),
@@ -34,6 +36,7 @@ module nts_dispatcher_front_tb;
     $display("nts dispatcher test.");
     i_clk = 1;
     i_areset = 0;
+    i_dispatch_packet_read_discard = 'b0;
     i_dispatch_raddr = 'b0;
     i_rx_data_valid = 'b0;
     i_rx_data = 'b0;
@@ -105,7 +108,11 @@ module nts_dispatcher_front_tb;
     `assert((o_dispatch_rdata[63:32] == 'h00000003));
     `assert((o_dispatch_rdata[31:0] == 'h30303030));
     i_dispatch_raddr = 'h0;
+    i_dispatch_packet_read_discard = 'b1;
+
     #10
+    `assert((o_dispatch_packet_available == 'b0));
+    i_dispatch_packet_read_discard = 'b0;
     $finish;
   end
   always begin

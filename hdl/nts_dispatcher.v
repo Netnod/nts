@@ -14,6 +14,7 @@ module nts_dispatcher_front #(
   // -- TBD --
   // interface to nts_dispatcher_backend
   output wire                  o_dispatch_packet_available,
+  input wire                   i_dispatch_packet_read_discard,
   output wire [ADDR_WIDTH-1:0] o_dispatch_counter,
   output wire [7:0]            o_dispatch_data_valid,
   input  wire [ADDR_WIDTH-1:0] i_dispatch_raddr,
@@ -80,6 +81,9 @@ module nts_dispatcher_front #(
       write[1]    <= 1'b0;
       w_data[0]   <= 64'b0;
       w_data[1]   <= 64'b0;
+      if (i_dispatch_packet_read_discard) begin
+        mem_state[ ~ current_mem] <= STATE_EMPTY;
+      end
       if (i_rx_bad_frame) begin
          mem_state[current_mem]  <= STATE_EMPTY;
          w_addr[current_mem]     <= 'b0;

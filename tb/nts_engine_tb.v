@@ -28,7 +28,7 @@
 // Author: Peter Magnusson, Assured AB
 //
 
-module nts_engine_tb;
+module nts_engine_tb #( parameter verbose_output = 'b0);
   localparam  [47:0] MY_ETH_ADDR     =  48'h2c_76_8a_ad_f7_86;
   localparam  [31:0] MY_IPV4_ADDR    =  32'hA0_B1_C2_D3;
 //  localparam [127:0] MY_IPV6_ADDR    = 128'hfe80_0000_0000_0000_2e76_8aff_fead_f786;
@@ -235,27 +235,13 @@ module nts_engine_tb;
     end
   endtask //create_ntp4_req
 
-
-  //task_set_port(i_dispatch_fifo_rd_data, packet_eth_ipv4_udp_ntp, offset_hi, 0);a
-/*
-  task task_set_port;
-     output destination_port;
-     input  source_data;
-     input  integer offset_hi;
-     input  integer offset_lo;
-     begin
-       destination_port = 'b0;
-       destination_port = source_data[offset_hi:offset_lo];
-     end
-   endtask;
-*/
-
   task send_packet ( input [65535:0] source, [31:0] length );
     integer i;
     integer packet_ptr;
     integer source_ptr;
     reg [63:0] packet [0:99];
     begin
+      `assert( (0==(length%8)) ); // byte aligned required
       for (i=0; i<100; i=i+1) begin
         packet[i] = 64'habad_1dea_f00d_cafe;
       end
@@ -272,14 +258,14 @@ module nts_engine_tb;
         default:
           `assert(0)
       endcase
-      $display("%s:%0d length=%0d packet=%h", `__FILE__, `__LINE__, length, packet[0]);
+      if (verbose_output) $display("%s:%0d length=%0d packet_ptr=%0d packet=%h", `__FILE__, `__LINE__, length, 0, packet[0]);
       for (i=0; i<length/64; i=i+1) begin
          packet[packet_ptr] = source[source_ptr+:64];
-         $display("%s:%0d length=%0d packet=%h", `__FILE__, `__LINE__, length, packet[packet_ptr]);
+         if (verbose_output) $display("%s:%0d length=%0d packet_ptr=%0d packet=%h", `__FILE__, `__LINE__, length, packet_ptr, packet[packet_ptr]);
          source_ptr = source_ptr + 64;
          packet_ptr = packet_ptr + 1;
       end
-/*
+
       #10
       i_dispatch_packet_available = 0;
       i_dispatch_data_valid       = 'b0;
@@ -291,11 +277,9 @@ module nts_engine_tb;
 
 
       #10
-      length  = $bits(packet_eth_ipv4_udp_ntp);
-      `assert( (0==(length%8)) ); // byte aligned required
       i_dispatch_packet_available = 'b1;
 
-      case (modlen)
+      case ((length/8) % 8)
         0: i_dispatch_data_valid  = 8'b11111111; //all bytes valid
         1: i_dispatch_data_valid  = 8'b00000001; //last byte valid
         2: i_dispatch_data_valid  = 8'b00000011;
@@ -306,7 +290,7 @@ module nts_engine_tb;
         7: i_dispatch_data_valid  = 8'b01111111;
         default:
           begin
-            $display("length:%0d modlen:%0d", length, modlen);
+            $display("length:%0d", length);
             `assert(0);
           end
       endcase
@@ -315,54 +299,20 @@ module nts_engine_tb;
       `assert( o_dispatch_packet_read_discard == 'b0 );
       `assert( o_dispatch_fifo_rd_en == 'b0 );
 
-      //#10
-      //i_dispatch_fifo_empty = 'b0;
-      //i_dispatch_fifo_rd_data = packet_eth_ipv4_udp_ntp[length-:64];
-      //  $display("%08h%08h", i_dispatch_fifo_rd_data[63:32], i_dispatch_fifo_rd_data[31:0]);
-
-      `assert( o_busy == 'b0 );
-      `assert( o_dispatch_packet_read_discard == 'b0 );
-      `assert( o_dispatch_fifo_rd_en == 'b0 );
-
-      $display("%s:%0d length=%0d", `__FILE__, `__LINE__, length);
-      $display("%s:%0d %h", `__FILE__, `__LINE__, packet_eth_ipv4_udp_ntp[719:656]);;
-      for (i=length; i>=0; i=i-64) begin
-        $display("%s:%0d i=%d", `__FILE__, `__LINE__, i);
+      for (packet_ptr=packet_ptr-1; packet_ptr>=0; packet_ptr=packet_ptr-1) begin
         #10
-        //i_dispatch_fifo_rd_data[63:0] = 'b0;
-        //offset_hi = bits - 1;
-        if (i>64) begin
-          //offset_lo = offset_hi - 63;
-          i_dispatch_fifo_empty = 'b0;
-          i_dispatch_fifo_rd_data[63:0] = packet_eth_ipv4_udp_ntp[i-:64];
-          //task_set_port(i_dispatch_fifo_rd_data, packet_eth_ipv4_udp_ntp, offset_hi, offset_lo);
-          $display("%s:%0d %08h%08h", `__FILE__, `__LINE__, i_dispatch_fifo_rd_data[63:32], i_dispatch_fifo_rd_data[31:0]);
-        end else begin
-          i_dispatch_fifo_empty = 'b1;
-          case (i)
-            64: i_dispatch_fifo_rd_data[63:0] = packet_eth_ipv4_udp_ntp[63:0];
-            56: i_dispatch_fifo_rd_data[55:0] = packet_eth_ipv4_udp_ntp[55:0];
-            48: i_dispatch_fifo_rd_data[47:0] = packet_eth_ipv4_udp_ntp[47:0];
-            32: i_dispatch_fifo_rd_data[31:0] = packet_eth_ipv4_udp_ntp[31:0];
-            24: i_dispatch_fifo_rd_data[23:0] = packet_eth_ipv4_udp_ntp[23:0];
-            16: i_dispatch_fifo_rd_data[15:0] = packet_eth_ipv4_udp_ntp[15:0];
-             8: i_dispatch_fifo_rd_data[7:0] = packet_eth_ipv4_udp_ntp[7:0];
-            default:
-              `assert(0)
-          endcase
-          $display("%s:%0d %08h%08h", `__FILE__, `__LINE__, i_dispatch_fifo_rd_data[63:32], i_dispatch_fifo_rd_data[31:0]);
-          //i_dispatch_fifo_rd_data[offset_hi:0] = packet_eth_ipv4_udp_ntp[offset_hi:0];
-          //task_set_port(i_dispatch_fifo_rd_data, packet_eth_ipv4_udp_ntp, offset_hi, 0);
-        end
-        if ( o_dispatch_fifo_rd_en == 'b0 ) begin
-          $display("%s:%0d waiting for dut to wake up...", `__FILE__, `__LINE__);
+        i_dispatch_fifo_empty = (packet_ptr==0)?'b1:'b0;
+        i_dispatch_fifo_rd_data[63:0] = packet[packet_ptr];
+        if (verbose_output) $display("%s:%0d %016h", `__FILE__, `__LINE__, i_dispatch_fifo_rd_data[63:0]);
+        while ( o_dispatch_fifo_rd_en == 'b0 ) begin
+          if (verbose_output) $display("%s:%0d waiting for dut to wake up...", `__FILE__, `__LINE__);
           #10 ;
         end
-        //`assert( o_busy == 'b1 );
-        `assert( o_dispatch_packet_read_discard == 'b0 );
-        `assert( o_dispatch_fifo_rd_en == 'b1 );
-      end;
-      #10 ;
+      end
+      #10
+      `assert( o_dispatch_packet_read_discard == 'b0 );
+      `assert( o_dispatch_fifo_rd_en == 'b0 );
+      #10
       `assert( o_dispatch_fifo_rd_en == 'b0 );
       for ( i=0; i<100000 || o_dispatch_packet_read_discard == 'b1; i=i+1 ) begin
         #10 ;
@@ -376,7 +326,6 @@ module nts_engine_tb;
       `assert( o_dispatch_packet_read_discard == 'b0 );
       `assert( o_dispatch_fifo_rd_en == 'b0 );
 
-*/
     end
   endtask
 
@@ -409,7 +358,7 @@ module nts_engine_tb;
   );
 
   initial begin
-    $display("Test start: %s %d", `__FILE__, `__LINE__);
+    $display("Test start: %s:%0d", `__FILE__, `__LINE__);
     i_clk                       = 0;
     i_areset                    = 1;
     i_dispatch_packet_available = 0;
@@ -426,7 +375,7 @@ module nts_engine_tb;
     create_ntp4_req;
     send_ntp4_req;
 
-    $display("Test stop: %s %d", `__FILE__, `__LINE__);
+    $display("Test stop: %s:%0d", `__FILE__, `__LINE__);
     $finish;
   end
   always begin

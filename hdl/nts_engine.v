@@ -79,8 +79,9 @@ module nts_engine #(
       dispatch_packet_discard <= 'b0;
       dispatch_fifo_rd_en     <= 'b0;
     end else begin
-      dispatch_fifo_rd_en     <= 'b0;
       dispatch_packet_discard <= 'b0;
+      dispatch_fifo_rd_en     <= 'b0;
+      //$display("%s:%0d state=%h busy=%h addr=%h counter=%h discard=%h rd_en=%h", `__FILE__, `__LINE__, state, busy, addr, counter, dispatch_packet_discard, dispatch_fifo_rd_en);
       case (state)
         STATE_EMPTY:
           begin

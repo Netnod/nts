@@ -28,7 +28,7 @@
 // Author: Peter Magnusson, Assured AB
 //
 
-module nts_engine_tb #( parameter verbose_output = 'b0);
+module nts_engine_tb #( parameter verbose_output = 'b1);
   localparam  [47:0] MY_ETH_ADDR     =  48'h2c_76_8a_ad_f7_86;
   localparam  [31:0] MY_IPV4_ADDR    =  32'hA0_B1_C2_D3;
 //  localparam [127:0] MY_IPV6_ADDR    = 128'hfe80_0000_0000_0000_2e76_8aff_fead_f786;

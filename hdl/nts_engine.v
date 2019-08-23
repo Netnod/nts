@@ -59,7 +59,7 @@ module nts_engine #(
   reg                  dispatch_fifo_rd_en;
   wire [63:0]          r_data;
 
-  bram #(ADDR_WIDTH,64) mem (
+  bram #(ADDR_WIDTH,64) nts_rx_buffer (
      .i_clk(i_clk),
      .i_addr(addr),
      .i_write(dispatch_fifo_rd_en),

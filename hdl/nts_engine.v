@@ -36,7 +36,6 @@ module nts_engine #(
   output wire                  o_busy,
   input  wire                  i_dispatch_packet_available,
   output wire                  o_dispatch_packet_read_discard,
-  //input  wire [ADDR_WIDTH-1:0] i_dispatch_counter,
   input  wire [7:0]            i_dispatch_data_valid,
   input  wire                  i_dispatch_fifo_empty,
   output wire                  o_dispatch_fifo_rd_en,
@@ -68,8 +67,10 @@ module nts_engine #(
      .o_data(r_data)
   );
 
-  wire       detect_ipv4;
-  wire       detect_ipv4_bad;
+  wire        detect_ipv4;
+  wire        detect_ipv4_bad;
+  reg   [3:0] ip_read_opcode;
+  wire [31:0] ip_read_data;
 
   nts_ip #(ADDR_WIDTH) ip_decoder (
    .i_areset(i_areset),
@@ -78,8 +79,10 @@ module nts_engine #(
    .i_process(state == STATE_COPY && dispatch_fifo_rd_en),
    .i_last_word_data_valid(i_dispatch_data_valid),
    .i_data(i_dispatch_fifo_rd_data),
+   .i_read_opcode(ip_read_opcode),
    .o_detect_ipv4(detect_ipv4),
-   .o_detect_ipv4_bad(detect_ipv4_bad)
+   .o_detect_ipv4_bad(detect_ipv4_bad),
+   .o_read_data(ip_read_data)
   );
 
   assign o_busy = busy;
@@ -126,7 +129,7 @@ module nts_engine #(
           end
         default:
           begin
-            $display("TODO!!! NOT IMPLEMENTED: %s %d", `__FILE__, `__LINE__);
+            $display("%s:%0d TODO!!! NOT IMPLEMENTED.", `__FILE__, `__LINE__);
             busy  <= 'b0;
             state <= STATE_EMPTY;
           end

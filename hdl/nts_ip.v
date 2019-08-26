@@ -43,6 +43,8 @@ module nts_ip #(
   output wire [31:0]           o_read_data
 );
 
+  localparam [3:0] OPCODE_GET_NTP_OFFSET = 4'b0000;
+
   reg   [ADDR_WIDTH-1:0] addr;
   reg             [15:0] ethernet_protocol;
   reg              [3:0] ip_version;
@@ -54,7 +56,7 @@ module nts_ip #(
   wire                   detect_ipv4_bad;
 
   localparam  [15:0] E_TYPE_IPV4     =  16'h08_00;
-  localparam   [3:0] IP_V4           =  4'h04;
+  localparam   [3:0] IP_V4           =  4'h4;
 
   assign detect_ipv4     = (ethernet_protocol == E_TYPE_IPV4) && (ip_version == IP_V4);
   assign detect_ipv4_bad = detect_ipv4 && ip4_ihl != 5;
@@ -67,7 +69,7 @@ module nts_ip #(
   begin
     read_data = 32'b0;
     case (i_read_opcode)
-      4'b0000:read_data[ADDR_WIDTH+4-1:0] = ntp_offset;
+      OPCODE_GET_NTP_OFFSET: read_data[ADDR_WIDTH+4-1:0] = ntp_offset;
     default: ;
     endcase
   end

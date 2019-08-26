@@ -59,33 +59,24 @@ module nts_engine #(
   reg                  dispatch_fifo_rd_en;
   wire [63:0]          r_data;
 
-  bram #(ADDR_WIDTH,64) nts_rx_buffer (
+  nts_rx_buffer #(ADDR_WIDTH) buffer (
+     .i_areset(i_areset),
      .i_clk(i_clk),
+     .i_clear(state == STATE_EMPTY),
      .i_addr(addr),
-     .i_write(dispatch_fifo_rd_en),
-     .i_data(i_dispatch_fifo_rd_data),
-     .o_data(r_data)
+     .i_dispatch_fifo_rd_en(dispatch_fifo_rd_en),
+     .i_dispatch_fifo_rd_data(i_dispatch_fifo_rd_data)
   );
 
-  wire        detect_ipv4;
-  wire        detect_ipv4_bad;
-  reg   [3:0] ip_read_opcode;
-  wire [31:0] ip_read_data;
-
-  nts_ip #(ADDR_WIDTH) ip_decoder (
+  nts_parser_ctrl #(ADDR_WIDTH) parser (
    .i_areset(i_areset),
    .i_clk(i_clk),
    .i_clear(state == STATE_EMPTY),
-   .i_process(state == STATE_COPY && dispatch_fifo_rd_en),
+   .i_process_initial(state == STATE_COPY && dispatch_fifo_rd_en),
    .i_last_word_data_valid(i_dispatch_data_valid),
-   .i_data(i_dispatch_fifo_rd_data),
-   .i_read_opcode(ip_read_opcode),
-   .o_detect_ipv4(detect_ipv4),
-   .o_detect_ipv4_bad(detect_ipv4_bad),
-   .o_read_data(ip_read_data)
+   .i_data(i_dispatch_fifo_rd_data)
   );
 
-  assign o_busy = busy;
   assign o_dispatch_packet_read_discard = dispatch_packet_discard;
   assign o_dispatch_fifo_rd_en = dispatch_fifo_rd_en;
 
@@ -94,7 +85,6 @@ module nts_engine #(
     if (i_areset == 1'b1) begin
       state                   <= STATE_EMPTY;
       busy                    <= 'b0;
-      addr                    <= 'b0;
       counter                 <= 'b0;
       dispatch_packet_discard <= 'b0;
       dispatch_fifo_rd_en     <= 'b0;

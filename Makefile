@@ -41,10 +41,12 @@ lint:
 	verilator --lint-only hdl/bram.v
 	verilator --lint-only hdl/nts_ip.v
 	verilator --lint-only hdl/nts_dispatcher.v hdl/bram.v
-	verilator --lint-only hdl/nts_engine.v hdl/nts_ip.v hdl/bram.v
+	verilator --lint-only hdl/nts_parser_ctrl.v hdl/nts_ip.v
+	verilator --lint-only hdl/nts_rx_buffer.v hdl/bram.v
+	verilator --lint-only hdl/nts_engine.v hdl/nts_rx_buffer.v hdl/nts_parser_ctrl.v hdl/nts_ip.v hdl/bram.v
 	verilator --lint-only -Wno-STMTDLY tb/bram_tb.v hdl/bram.v
 	verilator --lint-only -Wno-STMTDLY --top-module nts_dispatcher_front_tb tb/nts_dispatcher_tb.v hdl/nts_dispatcher.v hdl/bram.v
-	verilator --lint-only -Wno-STMTDLY --top-module nts_engine_tb tb/nts_engine_tb.v hdl/nts_engine.v hdl/nts_ip.v hdl/bram.v
+	verilator --lint-only -Wno-STMTDLY --top-module nts_engine_tb tb/nts_engine_tb.v hdl/nts_engine.v hdl/nts_rx_buffer.v hdl/nts_parser_ctrl.v hdl/nts_ip.v hdl/bram.v
 
 DIRS: output/vvp
 
@@ -63,10 +65,10 @@ output/vvp/nts_dispatcher_tb.vvp: tb/nts_dispatcher_tb.v hdl/nts_dispatcher.v hd
 output/vvp/nts_dispatcher.vvp: hdl/nts_dispatcher.v hdl/bram.v
 	iverilog -o $@ $^
 
-output/vvp/nts_engine.vvp: hdl/nts_engine.v hdl/nts_ip.v hdl/bram.v
+output/vvp/nts_engine.vvp: hdl/nts_engine.v hdl/nts_rx_buffer.v hdl/nts_parser_ctrl.v hdl/nts_ip.v hdl/bram.v
 	iverilog -o $@ $^
 
-output/vvp/nts_engine_tb.vvp: tb/nts_engine_tb.v hdl/nts_engine.v hdl/nts_ip.v hdl/bram.v
+output/vvp/nts_engine_tb.vvp: tb/nts_engine_tb.v hdl/nts_rx_buffer.v hdl/nts_parser_ctrl.v hdl/nts_engine.v hdl/nts_ip.v hdl/bram.v
 	iverilog -o $@ $^
 
 output/vvp/%_tb.vvp: tb/%_tb.v hdl/%.v

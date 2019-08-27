@@ -59,13 +59,29 @@ module nts_engine #(
   reg                  dispatch_fifo_rd_en;
   wire [63:0]          r_data;
 
+
+  reg [9:0]            delay_counter;
+
+  wire                    access_port_wait;
+  wire [ADDR_WIDTH+3-1:0] access_port_addr;
+  wire [2:0]              access_port_wordsize;
+  wire                    access_port_rd_en;
+  wire                    access_port_rd_dv;
+  wire [63:0]             access_port_rd_data;
+
   nts_rx_buffer #(ADDR_WIDTH) buffer (
      .i_areset(i_areset),
      .i_clk(i_clk),
      .i_clear(state == STATE_EMPTY),
      .i_addr(addr),
      .i_dispatch_fifo_rd_en(dispatch_fifo_rd_en),
-     .i_dispatch_fifo_rd_data(i_dispatch_fifo_rd_data)
+     .i_dispatch_fifo_rd_data(i_dispatch_fifo_rd_data),
+     .o_access_port_wait(access_port_wait),
+     .i_access_port_addr(access_port_addr),
+     .i_access_port_wordsize(access_port_wordsize),
+     .i_access_port_rd_en(access_port_rd_en),
+     .o_access_port_rd_dv(access_port_rd_dv),
+     .o_access_port_rd_data(access_port_rd_data)
   );
 
   nts_parser_ctrl #(ADDR_WIDTH) parser (
@@ -74,7 +90,13 @@ module nts_engine #(
    .i_clear(state == STATE_EMPTY),
    .i_process_initial(state == STATE_COPY && dispatch_fifo_rd_en),
    .i_last_word_data_valid(i_dispatch_data_valid),
-   .i_data(i_dispatch_fifo_rd_data)
+   .i_data(i_dispatch_fifo_rd_data),
+   .i_access_port_wait(access_port_wait),
+   .o_access_port_addr(access_port_addr),
+   .o_access_port_wordsize(access_port_wordsize),
+   .o_access_port_rd_en(access_port_rd_en),
+   .i_access_port_rd_dv(access_port_rd_dv),
+   .i_access_port_rd_data(access_port_rd_data)
   );
 
   assign o_dispatch_packet_read_discard = dispatch_packet_discard;
@@ -84,6 +106,7 @@ module nts_engine #(
   begin
     if (i_areset == 1'b1) begin
       state                   <= STATE_EMPTY;
+      delay_counter           <= 'b0; //this is just for a debug delay in not implemented state :)
       busy                    <= 'b0;
       counter                 <= 'b0;
       dispatch_packet_discard <= 'b0;
@@ -96,6 +119,7 @@ module nts_engine #(
         STATE_EMPTY:
           begin
             addr  <= 'b0;
+            delay_counter         <= 'b0;
             if (i_dispatch_packet_available && i_dispatch_fifo_empty == 'b0) begin
               state               <= STATE_COPY;
               busy                <= 'b1;
@@ -117,9 +141,21 @@ module nts_engine #(
             dispatch_fifo_rd_en <= 'b1;
             addr                 <= addr+1;
           end
+        STATE_TO_BE_IMPLEMENTED:
+          begin
+            if (delay_counter < 1000) begin
+              delay_counter <= delay_counter + 1;
+              if (delay_counter == 0) begin
+                $display("%s:%0d TODO!!! NOT IMPLEMENTED. state = %0d", `__FILE__, `__LINE__, state);
+              end
+            end else begin
+              busy  <= 'b0;
+              state <= STATE_EMPTY;
+            end
+          end
         default:
           begin
-            $display("%s:%0d TODO!!! NOT IMPLEMENTED.", `__FILE__, `__LINE__);
+            $display("%s:%0d TODO!!! NOT IMPLEMENTED. state = %0d", `__FILE__, `__LINE__, state);
             busy  <= 'b0;
             state <= STATE_EMPTY;
           end

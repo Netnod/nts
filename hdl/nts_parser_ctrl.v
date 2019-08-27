@@ -31,12 +31,19 @@
 module nts_parser_ctrl #(
   parameter ADDR_WIDTH = 10
 ) (
-  input  wire                  i_areset, // async reset
-  input  wire                  i_clk,
-  input  wire                  i_clear,
-  input  wire                  i_process_initial,
-  input  wire  [7:0]           i_last_word_data_valid,
-  input  wire [63:0]           i_data
+  input  wire                    i_areset, // async reset
+  input  wire                    i_clk,
+  input  wire                    i_clear,
+  input  wire                    i_process_initial,
+  input  wire  [7:0]             i_last_word_data_valid,
+  input  wire [63:0]             i_data,
+
+  input  wire                    i_access_port_wait,
+  output wire [ADDR_WIDTH+3-1:0] o_access_port_addr,
+  output wire [2:0]              o_access_port_wordsize,
+  output wire                    o_access_port_rd_en,
+  input  wire                    i_access_port_rd_dv,
+  input  wire [63:0]             i_access_port_rd_data
 );
 
   localparam [3:0] OPCODE_GET_NTP_OFFSET = 4'b0000;
@@ -47,13 +54,17 @@ module nts_parser_ctrl #(
   localparam STATE_EXTRACT_EXT_FROM_RAM = 4'h3;
   localparam STATE_ERROR_GENERAL        = 4'hf;
 
-  localparam MEMORY_CTRL_IDLE           = 4'h0;
-  localparam MEMORY_CTRL_READ_SIMPLE    = 4'h1;
-  localparam MEMORY_CTRL_READ_1ST       = 4'h2;
-  localparam MEMORY_CTRL_READ_2ND       = 4'h3;
+
+  reg [ADDR_WIDTH+3-1:0] access_port_addr;
+  reg [2:0]              access_port_wordsize;
+  reg                    access_port_rd_en;
+
+
+  assign o_access_port_addr     = access_port_addr;
+  assign o_access_port_wordsize = access_port_wordsize;
+  assign o_access_port_rd_en    = access_port_rd_en;
 
   reg  [3:0]            state;
-  reg  [3:0]            memctrl;
   reg  [ADDR_WIDTH-1:0] counter;
   wire                  detect_ipv4;
   wire                  detect_ipv4_bad;
@@ -73,74 +84,60 @@ module nts_parser_ctrl #(
     .o_read_data(read_data)
   );
 
-  reg  [ADDR_WIDTH-1:0] ntp_word;
-  reg  [3:0]            ntp_word_offset;
+  reg  [ADDR_WIDTH+3-1:0] ntp_addr;
+  reg  [ADDR_WIDTH-1:0]   ntp_word;
+  reg  [3:0]              ntp_word_offset;
 
-  reg  [2:0]            ntp_extension_counter;
-  reg                   ntp_extension_copied      [0:7];
-  reg  [ADDR_WIDTH-1:0] ntp_extension_first_word  [0:7];
-  reg  [3:0]            ntp_extension_word_offset [0:7];
-  reg  [15:0]           ntp_extension_tag         [0:7];
-  reg  [15:0]           ntp_extension_length      [0:7];
+
+  reg  [2:0]              ntp_extension_counter;
+  reg                     ntp_extension_copied      [0:7];
+  reg  [ADDR_WIDTH+3-1:0] ntp_extension_addr        [0:7];
+  reg  [15:0]             ntp_extension_tag         [0:7];
+  reg  [15:0]             ntp_extension_length      [0:7];
 
   always @ (posedge i_clk, posedge i_areset)
   begin
     if (i_areset == 1'b1) begin : ASYNC_RESET
       integer i;
-      memctrl                         <= 'b0;
       for (i=0; i <= 7; i++) begin
         ntp_extension_copied      [i] <= 'b0;
-        ntp_extension_first_word  [i] <= 'b0;
-        ntp_extension_word_offset [i] <= 'b0;
+        ntp_extension_addr        [i] <= 'b0;
         ntp_extension_tag         [i] <= 'b0;
         ntp_extension_length      [i] <= 'b0;
       end
+      access_port_rd_en               <= 'b0;
+      access_port_wordsize            <= 'b0;
+      access_port_addr                <= 'b0;
     end else if (i_clear) begin : SYNC_RESET_FROM_TOP_MODULE
       integer i;
-      memctrl                         <= 'b0;
       for (i=0; i <= 7; i++) begin
         ntp_extension_copied      [i] <= 'b0;
-        ntp_extension_first_word  [i] <= 'b0;
-        ntp_extension_word_offset [i] <= 'b0;
+        ntp_extension_addr        [i] <= 'b0;
         ntp_extension_tag         [i] <= 'b0;
         ntp_extension_length      [i] <= 'b0;
       end
+      access_port_rd_en               <= 'b0;
+      access_port_wordsize            <= 'b0;
+      access_port_addr                <= 'b0;
     end else begin
-      case (memctrl)
-        MEMORY_CTRL_IDLE:
-          if (state == STATE_EXTRACT_EXT_FROM_RAM)
-            if (ntp_extension_copied[ntp_extension_counter] == 'b0) begin
-              if (ntp_word_offset < 4) begin
-              end else begin
-              end
-          end
-        MEMORY_CTRL_READ_SIMPLE:
-          begin
-            $display("%s:%0d todo implement!!!", `__FILE__, `__LINE__);
-            memctrl <= MEMORY_CTRL_IDLE;
-            ntp_extension_copied[ntp_extension_counter] <= 'b1;
-          end
-        MEMORY_CTRL_READ_1ST:
-          begin
-            $display("%s:%0d todo implement!!!", `__FILE__, `__LINE__);
-            memctrl <= MEMORY_CTRL_READ_2ND;
-          end
-        MEMORY_CTRL_READ_2ND:
-          begin
-            $display("%s:%0d todo implement!!!", `__FILE__, `__LINE__);
-            memctrl <= MEMORY_CTRL_IDLE;
-            ntp_extension_copied[ntp_extension_counter] <= 'b1;
-          end
-        default:
-          begin
-            $display("%s:%0d todo implement!!!", `__FILE__, `__LINE__);
-            memctrl <= MEMORY_CTRL_IDLE;
-            ntp_extension_copied[ntp_extension_counter] <= 'b1;
-          end
-      endcase 
+      access_port_rd_en        <= 'b0;
+      if (state == STATE_EXTRACT_EXT_FROM_RAM && ntp_extension_copied[ntp_extension_counter] == 'b0) begin
+        //$display("%s:%0d i_access_port_rd_dv=%0d i_access_port_wait=%0d", `__FILE__, `__LINE__, i_access_port_rd_dv, i_access_port_wait);
+        if (i_access_port_rd_dv) begin
+          ntp_extension_copied      [ntp_extension_counter] <= 'b1;
+          ntp_extension_addr        [ntp_extension_counter] <= ntp_addr;
+          ntp_extension_tag         [ntp_extension_counter] <= i_access_port_rd_data[31:16];
+          ntp_extension_length      [ntp_extension_counter] <= i_access_port_rd_data[15:0];
+          //$display("%s:%0d tag %0h, length %h", `__FILE__, `__LINE__, i_access_port_rd_data[31:16], i_access_port_rd_data[15:0]);
+        end else if (i_access_port_wait == 'b0) begin
+          //$display("%s:%0d ", `__FILE__, `__LINE__);
+          access_port_rd_en                <= 'b1;
+          access_port_wordsize             <= 2; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit
+          access_port_addr                 <= ntp_addr;
+        end
+      end
     end
   end
-
 
   always @ (posedge i_clk, posedge i_areset)
   begin
@@ -154,7 +151,8 @@ module nts_parser_ctrl #(
 
     end else if (i_clear) begin
       state                 <= STATE_IDLE;
-    end else
+    end else begin
+      //$display("%s:%0d debug: state %0d i_process_initial %0d", `__FILE__, `__LINE__, state, i_process_initial);
       case (state)
         STATE_IDLE:
           begin
@@ -162,7 +160,7 @@ module nts_parser_ctrl #(
             counter         <= 'b0;
             ntp_word        <= 'b0;
             ntp_word_offset <= 'b0;
-
+            ntp_extension_counter <= 'b0;
             if (i_process_initial) begin
               state <= STATE_COPY;
             end
@@ -178,8 +176,39 @@ module nts_parser_ctrl #(
           case (read_opcode)
             OPCODE_GET_NTP_OFFSET:
               begin
-               ntp_word        <= read_data[ADDR_WIDTH+4-1:4];
-               ntp_word_offset <= read_data[3:0];
+               ntp_word                    <= read_data[ADDR_WIDTH+4-1:4];
+               ntp_word_offset             <= read_data[3:0];
+               ntp_addr[ADDR_WIDTH+3-1:3]  <= read_data[ADDR_WIDTH+4-1:4] + 6;
+               ntp_addr[2:0]               <= read_data[2:0];
+/*
+       0                   1                   2                   3
+       0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+      |LI | VN  |Mode |    Stratum     |     Poll      |  Precision   |
+      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+      |                         Root Delay                            |
+      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+      |                         Root Dispersion                       |
+      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+      |                          Reference ID                         |
+      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+      |                                                               |
+      +                     Reference Timestamp (64)                  +
+      |                                                               |
+      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+      |                                                               |
+      +                      Origin Timestamp (64)                    +
+      |                                                               |
+      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+      |                                                               |
+      +                      Receive Timestamp (64)                   +
+      |                                                               |
+      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+      |                                                               |
+      +                      Transmit Timestamp (64)                  +
+      |                                                               |
+ */
+               state           <= STATE_EXTRACT_EXT_FROM_RAM;
               end
             default:
               begin
@@ -187,13 +216,23 @@ module nts_parser_ctrl #(
                 $display("%s:%0d warning: not implemented",`__FILE__,`__LINE__);
               end
           endcase
-      STATE_ERROR_GENERAL:
-        begin
-          state  <= STATE_IDLE;
-          $display("%s:%0d warning: error",`__FILE__,`__LINE__);
-        end
-      default:
-        state <= STATE_ERROR_GENERAL;
+        STATE_EXTRACT_EXT_FROM_RAM:
+           if (ntp_extension_copied[ntp_extension_counter] == 'b1) begin
+             //TODO: implement support for multiple extensions
+             $display("%s:%0d copied, ok? tag: %h len: %h",`__FILE__,`__LINE__, ntp_extension_tag[ntp_extension_counter], ntp_extension_length[ntp_extension_counter]);
+             state <= STATE_IDLE;
+           end
+        STATE_ERROR_GENERAL:
+          begin
+            state  <= STATE_IDLE;
+            $display("%s:%0d warning: error",`__FILE__,`__LINE__);
+          end
+        default:
+          begin
+            state <= STATE_ERROR_GENERAL;
+            $display("%s:%0d warning: not implemented",`__FILE__,`__LINE__);
+          end
       endcase
+    end
   end
 endmodule

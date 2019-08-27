@@ -34,8 +34,9 @@ module nts_rx_buffer #(
   input  wire                    i_areset, // async reset
   input  wire                    i_clk,
   input  wire                    i_clear,
-  input  wire [ADDR_WIDTH-1:0]   i_addr, //TODO: make internal
-  input  wire                    i_dispatch_fifo_rd_en, //TODO: make out instead of in
+  input  wire                    i_dispatch_packet_available,
+  input  wire                    i_dispatch_fifo_empty,
+  output wire                    o_dispatch_fifo_rd_en,
   input  wire [63:0]             i_dispatch_fifo_rd_data,
   output wire                    o_access_port_wait,
   input  wire [ADDR_WIDTH+3-1:0] i_access_port_addr,
@@ -45,21 +46,30 @@ module nts_rx_buffer #(
   output wire [63:0]             o_access_port_rd_data
 );
 
-  localparam MEMORY_CTRL_IDLE           = 4'h0;
-  localparam MEMORY_CTRL_FIFO_WRITE     = 4'h1;
-  localparam MEMORY_CTRL_READ_SIMPLE_DLY= 4'h2;
-  localparam MEMORY_CTRL_READ_SIMPLE    = 4'h3;
-  localparam MEMORY_CTRL_READ_1ST_DLY   = 4'h4;
-  localparam MEMORY_CTRL_READ_1ST       = 4'h5;
-  localparam MEMORY_CTRL_READ_2ND       = 4'h6;
-  localparam MEMORY_CTRL_ERROR          = 4'hf;
+  localparam MEMORY_CTRL_IDLE            = 4'h0;
+  localparam MEMORY_CTRL_FIFO_WRITE      = 4'h1;
+  localparam MEMORY_CTRL_READ_SIMPLE_DLY = 4'h2;
+  localparam MEMORY_CTRL_READ_SIMPLE     = 4'h3;
+  localparam MEMORY_CTRL_READ_1ST_DLY    = 4'h4;
+  localparam MEMORY_CTRL_READ_1ST        = 4'h5;
+  localparam MEMORY_CTRL_READ_2ND        = 4'h6;
+  localparam MEMORY_CTRL_ERROR           = 4'hf;
 
+  //---- internal states
   reg  [3:0]              memctrl;
+
+  //--- internal registers for handling input FIFO
+  reg                     dispatch_fifo_rd_en;
+  reg  [ADDR_WIDTH-1:0]   fifo_addr;
+
+  //---- internal registers for handling access port
   reg  [2:0]              access_ws;
   reg  [63:0]             access_out;
   reg                     access_wait;
   reg                     access_dv;
   reg  [2:0]              access_addr_lo;
+
+  // ---- internal registers, wires for handling memory access
   wire [63:0]             ram_rd_data;
   reg                     ram_wr_en;
   reg  [63:0]             ram_wr_data;
@@ -68,8 +78,7 @@ module nts_rx_buffer #(
   assign o_access_port_wait    = access_wait;
   assign o_access_port_rd_dv   = access_dv;
   assign o_access_port_rd_data = access_out;
-  //assign wire_ram_addr         =  (memctrl == MEMORY_CTRL_IDLE) ? (i_dispatch_fifo_rd_en ? i_addr : i_access_port_addr[ADDR_WIDTH+3-1:3]) :
-  //                               ((memctrl == MEMORY_CTRL_READ_1ST) ? access_addr[ADDR_WIDTH+3-1:3] : 'b0);
+  assign o_dispatch_fifo_rd_en = dispatch_fifo_rd_en;
 
   bram #(ADDR_WIDTH,64) mem (
      .i_clk(i_clk),
@@ -83,6 +92,8 @@ module nts_rx_buffer #(
   begin
     if (i_areset == 1'b1) begin
       memctrl                         <= MEMORY_CTRL_IDLE;
+      fifo_addr                       <= 'b0;
+      dispatch_fifo_rd_en             <= 'b0;
       access_ws                       <= 'b0;
       access_addr_lo                  <= 'b0;
       access_out                      <= 'b0;
@@ -92,6 +103,7 @@ module nts_rx_buffer #(
       ram_wr_en                       <= 'b0;
       ram_wr_data                     <= 'b0;
     end else begin
+      dispatch_fifo_rd_en             <= 'b0;
       ram_addr                        <= 'b0;
       ram_wr_en                       <= 'b0;
       ram_wr_data                     <= 'b0;
@@ -105,10 +117,9 @@ module nts_rx_buffer #(
             ram_addr                  <= 'b0;
             ram_wr_en                 <= 'b0;
             ram_wr_data               <= 'b0;
-            if (i_dispatch_fifo_rd_en == 'b1) begin
-              ram_addr                <= i_addr; //TODO make internal
-              ram_wr_en               <= 'b1;
-              ram_wr_data             <= i_dispatch_fifo_rd_data;
+            if (i_dispatch_packet_available && i_dispatch_fifo_empty == 0) begin
+              dispatch_fifo_rd_en     <= 'b1;
+              fifo_addr               <= 'b0;
               memctrl                 <= MEMORY_CTRL_FIFO_WRITE;
             end else if (i_access_port_rd_en) begin
               access_ws        <= i_access_port_wordsize;
@@ -125,8 +136,10 @@ module nts_rx_buffer #(
             end
           end
         MEMORY_CTRL_FIFO_WRITE:
-          if (i_dispatch_fifo_rd_en == 'b1) begin
-            ram_addr                <= i_addr; //TODO make internal
+          if (i_dispatch_fifo_empty == 'b0) begin
+            dispatch_fifo_rd_en     <= 'b1;
+            fifo_addr               <= fifo_addr + 1;
+            ram_addr                <= fifo_addr;
             ram_wr_en               <= 'b1;
             ram_wr_data             <= i_dispatch_fifo_rd_data;
             memctrl                 <= MEMORY_CTRL_FIFO_WRITE;

@@ -34,8 +34,9 @@ module nts_rx_nuffer__testbench;
   reg                     i_areset;
   reg                     i_clk;
   reg                     i_clear;
-  reg  [ADDR_WIDTH-1:0]   i_addr; //TODO: make internal
-  reg                     dispatch_fifo_rd_en;
+  reg                     dispatch_packet_avialable;
+  reg                     dispatch_fifo_empty;
+  wire                    dispatch_fifo_rd_en;
   reg  [63:0]             dispatch_fifo_rd_data;
 
   wire                    access_port_wait;
@@ -49,8 +50,9 @@ module nts_rx_nuffer__testbench;
      .i_areset(i_areset),
      .i_clk(i_clk),
      .i_clear(i_clear),
-     .i_addr(i_addr),
-     .i_dispatch_fifo_rd_en(dispatch_fifo_rd_en),
+     .i_dispatch_packet_available(dispatch_packet_avialable),
+     .i_dispatch_fifo_empty(dispatch_fifo_empty),
+     .o_dispatch_fifo_rd_en(dispatch_fifo_rd_en),
      .i_dispatch_fifo_rd_data(dispatch_fifo_rd_data),
      .o_access_port_wait(access_port_wait),
      .i_access_port_addr(access_port_addr),
@@ -79,7 +81,6 @@ module nts_rx_nuffer__testbench;
         #10 ;
       end
       `assert(access_port_rd_dv == 'b1);
-      //$display("%s:%0d %h.", `__FILE__, `__LINE__, access_port_rd_data);
     end
   endtask
 
@@ -92,22 +93,23 @@ module nts_rx_nuffer__testbench;
         access_port_addr = 'b0;
         access_port_wordsize = 'b0;
         access_port_rd_en = 'b0;
-        dispatch_fifo_rd_en = 'b0;
+        dispatch_fifo_empty = 'b0;
         dispatch_fifo_rd_data = 'b00;
-        i_addr = 0;
 
         #10 i_areset = 0;
         #10 i_clear = 0;
 
-        #10 dispatch_fifo_rd_en = 1;
-        i_addr = 0;
-        dispatch_fifo_rd_en = 1;
+        #10
+        dispatch_packet_avialable = 'b1;
+        dispatch_fifo_empty = 'b0;
         dispatch_fifo_rd_data = 64'hdeadbeef00000000;
-        #10 i_addr = 1;
+
+        #10 `assert(dispatch_fifo_rd_en);
         dispatch_fifo_rd_data = 64'habad1deac0fef00d;
-        #10 i_addr = 2;
+        #10 `assert(dispatch_fifo_rd_en);
         dispatch_fifo_rd_data = 64'h0123456789abcdef;
-        #10 dispatch_fifo_rd_en = 0;
+        dispatch_fifo_empty = 'b0;
+        #10 `assert(dispatch_fifo_rd_en == 'b0);
 
         #100
         read('b00_000, 3);

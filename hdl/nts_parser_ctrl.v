@@ -151,6 +151,31 @@ module nts_parser_ctrl #(
     end
   endfunction
 
+  task task_incremment_address_for_nts_extension;
+    input  [ADDR_WIDTH+3-1:0] address_in;
+    input              [15:0] ntp_extension_length_value;
+    output [ADDR_WIDTH+3-1:0] address_out;
+    output                    failure;
+    reg    [ADDR_WIDTH+3-1:0] memory_bound;
+    reg                [16:0] acc;
+    begin
+      failure                               = 'b1;
+      address_out                           = address_in;
+      if (ntp_extension_length_value[1:0] == 'b0) begin //All extension fields are zero-padded to a word (four octets) boundary.
+        acc                                 = 0;
+        acc[ADDR_WIDTH+3-1:0]               = address_in;
+        acc                                 = acc + {1'b0, ntp_extension_length_value};
+        if (acc[16:ADDR_WIDTH+4-1] == 'b0) begin
+          memory_bound                        = { counter, 3'b000};
+          if (acc[ADDR_WIDTH+3-1:0] < memory_bound) begin
+            failure                           = 'b0;
+            address_out                       = acc[ADDR_WIDTH+3-1:0];
+          end
+        end
+      end
+    end
+  endtask
+
   always @ (posedge i_clk, posedge i_areset)
   begin
     if (i_areset == 1'b1) begin
@@ -213,10 +238,21 @@ module nts_parser_ctrl #(
               state           <= STATE_EXTRACT_EXT_FROM_RAM;
           end
         STATE_EXTRACT_EXT_FROM_RAM:
-           if (ntp_extension_copied[ntp_extension_counter] == 'b1) begin
+           if (ntp_extension_copied[ntp_extension_counter] == 'b1) begin : CALC_NEXT_ADDR
+             reg                    failure;
+             reg [ADDR_WIDTH+3-1:0] next_address;
              //TODO: implement support for multiple extensions
-             $display("%s:%0d copied, ok? tag: %h len: %h",`__FILE__,`__LINE__, ntp_extension_tag[ntp_extension_counter], ntp_extension_length[ntp_extension_counter]);
-             state <= STATE_IDLE;
+             $display("%s:%0d copied, ok? tag: %h len: %h (%0d)",`__FILE__,`__LINE__, ntp_extension_tag[ntp_extension_counter], ntp_extension_length[ntp_extension_counter],ntp_extension_length[ntp_extension_counter]*4);
+             task_incremment_address_for_nts_extension(ntp_addr, ntp_extension_length[ntp_extension_counter], next_address, failure);
+             $display("%s:%0d ntp_addr %h, next_addr %h, failure: %0d",`__FILE__,`__LINE__, ntp_addr, next_address, failure);
+             if (failure == 'b0) begin
+               if (ntp_extension_counter==7) state <= STATE_ERROR_GENERAL;
+               else begin
+                 ntp_extension_counter <= ntp_extension_counter +1;
+                 ntp_addr <= next_address;
+               end
+             end else
+               state <= STATE_IDLE;
            end
         STATE_ERROR_GENERAL:
           begin

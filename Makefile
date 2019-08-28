@@ -33,8 +33,8 @@
 default: lint all
 
 all: DIRS VVPS
-	vvp output/vvp/bram_tb.vvp
-	vvp output/vvp/nts_dispatcher_tb.vvp
+#	vvp output/vvp/bram_tb.vvp
+#	vvp output/vvp/nts_dispatcher_tb.vvp
 	vvp output/vvp/nts_rx_buffer_tb.vvp
 	vvp output/vvp/nts_engine_tb.vvp
 

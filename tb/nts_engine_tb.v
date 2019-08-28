@@ -28,7 +28,7 @@
 // Author: Peter Magnusson, Assured AB
 //
 
-module nts_engine_tb #( parameter integer verbose_output = 'b1);
+module nts_engine_tb #( parameter integer verbose_output = 'h0);
   localparam  [47:0] MY_ETH_ADDR     =  48'h2c_76_8a_ad_f7_86;
   localparam  [31:0] MY_IPV4_ADDR    =  32'hA0_B1_C2_D3;
 //  localparam [127:0] MY_IPV6_ADDR    = 128'hfe80_0000_0000_0000_2e76_8aff_fead_f786;
@@ -300,16 +300,19 @@ module nts_engine_tb #( parameter integer verbose_output = 'b1);
       `assert( o_dispatch_packet_read_discard == 'b0 );
       `assert( o_dispatch_fifo_rd_en == 'b0 );
 
+      #10
       for (packet_ptr=packet_ptr-1; packet_ptr>=0; packet_ptr=packet_ptr-1) begin
-        #10
-        i_dispatch_fifo_empty = (packet_ptr==0)?'b1:'b0;
+        i_dispatch_fifo_empty = 'b0;
         i_dispatch_fifo_rd_data[63:0] = packet[packet_ptr];
-        if (verbose_output > 2) $display("%s:%0d %016h", `__FILE__, `__LINE__, i_dispatch_fifo_rd_data[63:0]);
-        while ( o_dispatch_fifo_rd_en == 'b0 ) begin
-          if (verbose_output > 1) $display("%s:%0d waiting for dut to wake up...", `__FILE__, `__LINE__);
-          #10 ;
-        end
+        if (verbose_output > 2) $display("%s:%0d i_dispatch_fifo_rd_data = %h", `__FILE__, `__LINE__, packet[packet_ptr]);
+        if (o_dispatch_fifo_rd_en == 'b0) begin
+          while ( o_dispatch_fifo_rd_en == 'b0 ) begin
+            if (verbose_output > 1) $display("%s:%0d waiting for dut to wake up...", `__FILE__, `__LINE__);
+            #10 ;
+          end
+        end else #10 ;
       end
+      i_dispatch_fifo_empty = 'b1;
       #10
       `assert( o_dispatch_packet_read_discard == 'b0 );
       `assert( o_dispatch_fifo_rd_en == 'b0 );

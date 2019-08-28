@@ -46,13 +46,14 @@ module nts_parser_ctrl #(
   input  wire [63:0]             i_access_port_rd_data
 );
 
-  localparam [3:0] OPCODE_GET_NTP_OFFSET = 4'b0000;
+  localparam [3:0] OPCODE_GET_OFFSET_UDP_DATA = 4'b0000;
 
-  localparam STATE_IDLE                 = 4'h0;
-  localparam STATE_COPY                 = 4'h1;
-  localparam STATE_EXTRACT_FROM_IP      = 4'h2;
-  localparam STATE_EXTRACT_EXT_FROM_RAM = 4'h3;
-  localparam STATE_ERROR_GENERAL        = 4'hf;
+  localparam STATE_IDLE                  = 4'h0;
+  localparam STATE_COPY                  = 4'h1;
+  localparam STATE_EXTRACT_FROM_IP       = 4'h2;
+  localparam STATE_LENGTH_CHECKS         = 4'h3;
+  localparam STATE_EXTRACT_EXT_FROM_RAM  = 4'h4;
+  localparam STATE_ERROR_GENERAL         = 4'hf;
 
 
   reg [ADDR_WIDTH+3-1:0] access_port_addr;
@@ -85,9 +86,6 @@ module nts_parser_ctrl #(
   );
 
   reg  [ADDR_WIDTH+3-1:0] ntp_addr;
-  reg  [ADDR_WIDTH-1:0]   ntp_word;
-  reg  [3:0]              ntp_word_offset;
-
 
   reg  [2:0]              ntp_extension_counter;
   reg                     ntp_extension_copied      [0:7];
@@ -143,10 +141,8 @@ module nts_parser_ctrl #(
   begin
     if (i_areset == 1'b1) begin
       state                     <= STATE_IDLE;
-      read_opcode               <= OPCODE_GET_NTP_OFFSET;
+      read_opcode               <= OPCODE_GET_OFFSET_UDP_DATA;
       counter                   <= 'b0;
-      ntp_word                  <= 'b0;
-      ntp_word_offset           <= 'b0;
       ntp_extension_counter     <= 'b0;
 
     end else if (i_clear) begin
@@ -156,10 +152,8 @@ module nts_parser_ctrl #(
       case (state)
         STATE_IDLE:
           begin
-            read_opcode    <= OPCODE_GET_NTP_OFFSET;
+            read_opcode    <= OPCODE_GET_OFFSET_UDP_DATA;
             counter         <= 'b0;
-            ntp_word        <= 'b0;
-            ntp_word_offset <= 'b0;
             ntp_extension_counter <= 'b0;
             if (i_process_initial) begin
               state <= STATE_COPY;
@@ -168,18 +162,18 @@ module nts_parser_ctrl #(
         STATE_COPY:
           if (i_process_initial == 1'b0) begin
             state       <= STATE_EXTRACT_FROM_IP;
-            read_opcode <= OPCODE_GET_NTP_OFFSET;
+            read_opcode <= OPCODE_GET_OFFSET_UDP_DATA;
           end else begin
             counter     <= counter + 1;
           end
         STATE_EXTRACT_FROM_IP:
           case (read_opcode)
-            OPCODE_GET_NTP_OFFSET:
+            OPCODE_GET_OFFSET_UDP_DATA:
               begin
-               ntp_word                    <= read_data[ADDR_WIDTH+4-1:4];
-               ntp_word_offset             <= read_data[3:0];
-               ntp_addr[ADDR_WIDTH+3-1:3]  <= read_data[ADDR_WIDTH+4-1:4] + 6;
+               state           <= STATE_LENGTH_CHECKS;
+               ntp_addr[ADDR_WIDTH+3-1:3]  <= read_data[ADDR_WIDTH+3-1:3] + 6;
                ntp_addr[2:0]               <= read_data[2:0];
+               //$display("%s:%0d read_data[ADDR_WIDTH+3-1:3] = %h, read_data[ADDR_WIDTH+3-1:3] + 6 = %h, read_data[2:0] = %f", `__FILE__, `__LINE__, read_data[ADDR_WIDTH+3-1:3], read_data[ADDR_WIDTH+3-1:3] + 6, read_data[2:0]);
 /*
        0                   1                   2                   3
        0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -208,7 +202,6 @@ module nts_parser_ctrl #(
       +                      Transmit Timestamp (64)                  +
       |                                                               |
  */
-               state           <= STATE_EXTRACT_EXT_FROM_RAM;
               end
             default:
               begin
@@ -216,6 +209,8 @@ module nts_parser_ctrl #(
                 $display("%s:%0d warning: not implemented",`__FILE__,`__LINE__);
               end
           endcase
+        STATE_LENGTH_CHECKS:
+               state           <= STATE_EXTRACT_EXT_FROM_RAM;
         STATE_EXTRACT_EXT_FROM_RAM:
            if (ntp_extension_copied[ntp_extension_counter] == 'b1) begin
              //TODO: implement support for multiple extensions

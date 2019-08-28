@@ -118,7 +118,6 @@ module nts_rx_buffer #(
             ram_wr_en                 <= 'b0;
             ram_wr_data               <= 'b0;
             if (i_dispatch_packet_available && i_dispatch_fifo_empty == 0) begin
-              dispatch_fifo_rd_en     <= 'b1;
               fifo_addr               <= 'b0;
               memctrl                 <= MEMORY_CTRL_FIFO_WRITE;
             end else if (i_access_port_rd_en) begin

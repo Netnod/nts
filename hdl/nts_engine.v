@@ -44,8 +44,9 @@ module nts_engine #(
 
   reg [3:0]  state;
 
-  localparam STATE_EMPTY             = 4'h0;
-  localparam STATE_COPY              = 4'h1;
+  localparam STATE_RESET             = 4'h0;
+  localparam STATE_EMPTY             = 4'h1;
+  localparam STATE_COPY              = 4'h2;
   localparam STATE_ERROR_BAD_PACKET  = 4'hc;
   localparam STATE_ERROR_OVERFLOW    = 4'hd;
   localparam STATE_ERROR_GENERAL     = 4'he;
@@ -69,7 +70,7 @@ module nts_engine #(
   nts_rx_buffer #(ADDR_WIDTH) buffer (
      .i_areset(i_areset),
      .i_clk(i_clk),
-     .i_clear(state == STATE_EMPTY),
+     .i_clear(state == STATE_RESET),
      .i_dispatch_packet_available(i_dispatch_packet_available),
      .i_dispatch_fifo_empty(i_dispatch_fifo_empty),
      .o_dispatch_fifo_rd_en(dispatch_fifo_rd_en),
@@ -85,8 +86,8 @@ module nts_engine #(
   nts_parser_ctrl #(ADDR_WIDTH) parser (
    .i_areset(i_areset),
    .i_clk(i_clk),
-   .i_clear(state == STATE_EMPTY),
-   .i_process_initial(state == STATE_COPY && dispatch_fifo_rd_en),
+   .i_clear(state == STATE_RESET),
+   .i_process_initial(dispatch_fifo_rd_en),
    .i_last_word_data_valid(i_dispatch_data_valid),
    .i_data(i_dispatch_fifo_rd_data),
    .i_access_port_wait(access_port_wait),
@@ -103,16 +104,20 @@ module nts_engine #(
   always @ (posedge i_clk, posedge i_areset)
   begin
     if (i_areset == 1'b1) begin
-      state                   <= STATE_EMPTY;
+      state                   <= STATE_RESET;
       delay_counter           <= 'b0; //this is just for a debug delay in not implemented state :)
       busy                    <= 'b0;
       dispatch_packet_discard <= 'b0;
     end else begin
       dispatch_packet_discard <= 'b0;
       case (state)
+        STATE_RESET:
+          begin
+            state               <= STATE_EMPTY;
+            delay_counter       <= 'b0;
+          end
         STATE_EMPTY:
           begin
-            delay_counter         <= 'b0;
             if (i_dispatch_packet_available && i_dispatch_fifo_empty == 'b0) begin
               state               <= STATE_COPY;
               busy                <= 'b1;
@@ -136,14 +141,14 @@ module nts_engine #(
               end
             end else begin
               busy  <= 'b0;
-              state <= STATE_EMPTY;
+              state <= STATE_RESET;
             end
           end
         default:
           begin
             $display("%s:%0d TODO!!! NOT IMPLEMENTED. state = %0d", `__FILE__, `__LINE__, state);
             busy  <= 'b0;
-            state <= STATE_EMPTY;
+            state <= STATE_RESET;
           end
       endcase
     end

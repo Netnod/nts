@@ -28,7 +28,7 @@
 // Author: Peter Magnusson, Assured AB
 //
 
-module nts_rx_nuffer__testbench;
+module nts_rx_buffer_testbench;
   parameter ADDR_WIDTH = 8;
 
   reg                     i_areset;
@@ -104,11 +104,13 @@ module nts_rx_nuffer__testbench;
         dispatch_fifo_empty = 'b0;
         dispatch_fifo_rd_data = 64'hdeadbeef00000000;
 
+        #10 `assert(dispatch_fifo_rd_en == 'b0);
         #10 `assert(dispatch_fifo_rd_en);
         dispatch_fifo_rd_data = 64'habad1deac0fef00d;
         #10 `assert(dispatch_fifo_rd_en);
         dispatch_fifo_rd_data = 64'h0123456789abcdef;
-        dispatch_fifo_empty = 'b0;
+        #10 `assert(dispatch_fifo_rd_en == 'b1);
+        dispatch_fifo_empty = 'b1;
         #10 `assert(dispatch_fifo_rd_en == 'b0);
 
         #100

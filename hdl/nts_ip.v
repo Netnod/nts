@@ -162,7 +162,7 @@ module nts_ip #(
             //$display("%s:%0d ip_dst (part2)     %0h", `__FILE__, `__LINE__, i_data[63:48]);
             //$display("%s:%0d udp_src            %0h", `__FILE__, `__LINE__, i_data[47:32]);
             //$display("%s:%0d udp_dst            %0h", `__FILE__, `__LINE__, i_data[31:16]);
-            udp_length   <= i_data[15:0];
+            udp_length   <= previous_i_data[15:0];
             //$display("%s:%0d udp_length         %0d", `__FILE__, `__LINE__, i_data[15:0]);
           end else if (addr == 5) begin
             //$display("%s:%0d udp_checksum       %h", `__FILE__, `__LINE__, i_data[63:48]);

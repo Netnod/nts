@@ -47,6 +47,7 @@ module nts_parser_ctrl #(
 );
 
   localparam [3:0] OPCODE_GET_OFFSET_UDP_DATA = 4'b0000;
+  localparam [3:0] OPCODE_GET_LENGTH_UDP      = 4'b0001;
 
   localparam STATE_IDLE                  = 4'h0;
   localparam STATE_COPY                  = 4'h1;
@@ -86,6 +87,7 @@ module nts_parser_ctrl #(
   );
 
   reg  [ADDR_WIDTH+3-1:0] ntp_addr;
+  reg  [15:0]             udp_length;
 
   reg  [2:0]              ntp_extension_counter;
   reg                     ntp_extension_copied      [0:7];
@@ -182,38 +184,14 @@ module nts_parser_ctrl #(
           case (read_opcode)
             OPCODE_GET_OFFSET_UDP_DATA:
               begin
-               state           <= STATE_LENGTH_CHECKS;
+               read_opcode                 <= OPCODE_GET_LENGTH_UDP;
                ntp_addr[ADDR_WIDTH+3-1:3]  <= read_data[ADDR_WIDTH+3-1:3] + 6;
                ntp_addr[2:0]               <= read_data[2:0];
-               //$display("%s:%0d read_data[ADDR_WIDTH+3-1:3] = %h, read_data[ADDR_WIDTH+3-1:3] + 6 = %h, read_data[2:0] = %f", `__FILE__, `__LINE__, read_data[ADDR_WIDTH+3-1:3], read_data[ADDR_WIDTH+3-1:3] + 6, read_data[2:0]);
-/*
-       0                   1                   2                   3
-       0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-      |LI | VN  |Mode |    Stratum     |     Poll      |  Precision   |
-      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-      |                         Root Delay                            |
-      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-      |                         Root Dispersion                       |
-      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-      |                          Reference ID                         |
-      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-      |                                                               |
-      +                     Reference Timestamp (64)                  +
-      |                                                               |
-      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-      |                                                               |
-      +                      Origin Timestamp (64)                    +
-      |                                                               |
-      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-      |                                                               |
-      +                      Receive Timestamp (64)                   +
-      |                                                               |
-      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-      |                                                               |
-      +                      Transmit Timestamp (64)                  +
-      |                                                               |
- */
+              end
+            OPCODE_GET_LENGTH_UDP:
+              begin
+                state                      <= STATE_LENGTH_CHECKS;
+                udp_length                 <= read_data[15:0];
               end
             default:
               begin
@@ -223,10 +201,16 @@ module nts_parser_ctrl #(
           endcase
         STATE_LENGTH_CHECKS:
           begin
-            if (func_address_within_memory_bounds (ntp_addr, 4) == 'b0)
-               state           <= STATE_ERROR_GENERAL;
+            if (udp_length < ( 8 /* UDP Header */ + 6*8 /* Minimum NTP Payload */ + 8 /* Smallest NTP extension */ ))
+              state           <= STATE_ERROR_GENERAL;
+            else if (udp_length > 65507 /* IPv4 maximum UDP packet size */)
+              state           <= STATE_ERROR_GENERAL;
+            else if (udp_length[1:0] != 0) /* NTP packets are 7*8 + M(4+4n), always 4 byte aligned */
+              state           <= STATE_ERROR_GENERAL;
+            else if (func_address_within_memory_bounds (ntp_addr, 4) == 'b0)
+              state           <= STATE_ERROR_GENERAL;
             else
-               state           <= STATE_EXTRACT_EXT_FROM_RAM;
+              state           <= STATE_EXTRACT_EXT_FROM_RAM;
           end
         STATE_EXTRACT_EXT_FROM_RAM:
            if (ntp_extension_copied[ntp_extension_counter] == 'b1) begin

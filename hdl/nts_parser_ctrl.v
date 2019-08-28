@@ -137,6 +137,18 @@ module nts_parser_ctrl #(
     end
   end
 
+  function func_address_within_memory_bounds (input [ADDR_WIDTH+3-1:0] address, [ADDR_WIDTH+3-1:0] bytes);
+    reg [ADDR_WIDTH+3-1:0] memory_bound;
+    reg [ADDR_WIDTH+4-1:0] acc;
+    begin
+      memory_bound = { counter, 3'b000};
+      acc = {1'b0, address} + {1'b0, bytes} - 1;
+      if (acc[ADDR_WIDTH+4-1] == 'b1) func_address_within_memory_bounds  = 'b0;
+      else if (acc[ADDR_WIDTH+3-1:0] >= memory_bound) func_address_within_memory_bounds  = 'b0;
+      else func_address_within_memory_bounds  = 'b1;
+    end
+  endfunction
+
   always @ (posedge i_clk, posedge i_areset)
   begin
     if (i_areset == 1'b1) begin
@@ -210,7 +222,12 @@ module nts_parser_ctrl #(
               end
           endcase
         STATE_LENGTH_CHECKS:
+          begin
+            if (func_address_within_memory_bounds (ntp_addr, 4) == 'b0)
+               state           <= STATE_ERROR_GENERAL;
+            else
                state           <= STATE_EXTRACT_EXT_FROM_RAM;
+          end
         STATE_EXTRACT_EXT_FROM_RAM:
            if (ntp_extension_copied[ntp_extension_counter] == 'b1) begin
              //TODO: implement support for multiple extensions

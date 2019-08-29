@@ -115,7 +115,7 @@ module nts_parser_ctrl #(
   begin
     if (i_areset == 1'b1) begin : ASYNC_RESET
       integer i;
-      for (i=0; i <= 7; i++) begin
+      for (i=0; i <= 7; i=i+1) begin
         ntp_extension_copied      [i] <= 'b0;
         ntp_extension_addr        [i] <= 'b0;
         ntp_extension_tag         [i] <= 'b0;
@@ -126,7 +126,7 @@ module nts_parser_ctrl #(
       access_port_addr                <= 'b0;
     end else if (i_clear) begin : SYNC_RESET_FROM_TOP_MODULE
       integer i;
-      for (i=0; i <= 7; i++) begin
+      for (i=0; i <= 7; i=i+1) begin
         ntp_extension_copied      [i] <= 'b0;
         ntp_extension_addr        [i] <= 'b0;
         ntp_extension_tag         [i] <= 'b0;
@@ -155,7 +155,10 @@ module nts_parser_ctrl #(
     end
   end
 
-  function func_address_within_memory_bounds (input [ADDR_WIDTH+3-1:0] address, [ADDR_WIDTH+3-1:0] bytes);
+  function func_address_within_memory_bounds (
+    input [ADDR_WIDTH+3-1:0] address,
+    input [ADDR_WIDTH+3-1:0] bytes
+  );
     reg [ADDR_WIDTH+4-1:0] acc;
     begin
       acc               = {1'b0, address} + {1'b0, bytes} - 1;

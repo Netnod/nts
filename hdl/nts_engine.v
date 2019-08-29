@@ -100,6 +100,7 @@ module nts_engine #(
 
   assign o_dispatch_packet_read_discard = dispatch_packet_discard;
   assign o_dispatch_fifo_rd_en = dispatch_fifo_rd_en;
+  assign o_busy = busy;
 
   always @ (posedge i_clk, posedge i_areset)
   begin
@@ -140,6 +141,7 @@ module nts_engine #(
                 $display("%s:%0d TODO!!! NOT IMPLEMENTED. state = %0d", `__FILE__, `__LINE__, state);
               end
             end else begin
+              dispatch_packet_discard <= 'b1;
               busy  <= 'b0;
               state <= STATE_RESET;
             end

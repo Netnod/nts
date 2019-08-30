@@ -127,16 +127,10 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
     reg	 [31:0]              tmp_sum;
     integer i;
     begin
-      //bit [20*8/2-1:0] [15:0] head_words;
       tmp_sum = 32'b0;
-//      head_words = ipv4_head;
       for (i=0; i<IPV4HEADER_BITS/16; i=i+1) begin
         tmp_sum = tmp_sum + { 16'b0, ipv4_header[i*16+:16] };
       end
-      //for (i=0; i<20/2; i=i+1) begin
-      //  tmp_sum = tmp_sum + { 16'b0, head_words[i] };
-      //end
-//    tmp_sum = tmp_sum[31:16] + tmp_sum[15:0];
       tmp_sum = { 16'b0, (tmp_sum[31:16] + tmp_sum[15:0]) };
       calc_ipv4h_csum = ~tmp_sum[15:0];
     end
@@ -146,21 +140,10 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
 
   // Calculate checksum of IPV4 UDP NTP packet
   function [15:0] calc_udp_ntp4_csum;
-//    input packet;
     input x; //dont care
     reg [31:0]              tmp_sum;
     integer i;
     begin
-//      tmp_sum = 16'b0;
-//      tmp_sum += packet.ip_head.src_addr[31:16] + packet.ip_head.src_addr[15:0];
-//      tmp_sum += packet.ip_head.dst_addr[31:16] + packet.ip_head.dst_addr[15:0];
-//      tmp_sum += packet.ip_head.protocol;
-//      tmp_sum += packet.udp_head.udp_len;
-//      tmp_sum += packet.udp_head.src_port;
-//      tmp_sum += packet.udp_head.dst_port;
-//      tmp_sum += packet.udp_head.udp_len;
-//      tmp_sum += packet.udp_head.udp_csum;
-      // add ntp payload as data
       tmp_sum = 32'b0;
       tmp_sum = tmp_sum + {28'b0, ip_ver};
       tmp_sum = tmp_sum + {16'b0, ip4_src_addr[31:16]};
@@ -175,21 +158,11 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
       tmp_sum = tmp_sum + {16'b0, udp_csum};
       // add ntp payload as data
       for (i=0; i<NTPPAYLOAD_BITS/16; i=i+1) begin
-//        tmp_sum += packet.payload[i*16+:16];
         tmp_sum = tmp_sum + {16'b0, ntp_payload[i*16+:16]};
       end
-//      for (i=0; i<32/16; i=i+1) begin
-//        tmp_sum += packet.key_id[i*16+:16];
-//        tmp_sum += {16'b0, packet.key_id[i*16+:16]};
-//      end
-//      for (i=0; i<160/16; i=i+1) begin
-//        tmp_sum += packet.digest[i*16+:16];
-//        tmp_sum += {16'b0, packet.digest[i*16+:16]};
-//      end
       while (tmp_sum[31:16] > 0) begin
         tmp_sum = {16'b0, tmp_sum[31:16]} + {16'b0, tmp_sum[15:0]};
       end
-//      if (tmp_sum != 16'hffff) begin
       if (tmp_sum != 32'h0000ffff) begin
         // Avoid generating 00 as csum since it could skip detection
         calc_udp_ntp4_csum = ~tmp_sum[15:0];
@@ -200,10 +173,6 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
   //------------------------------------------------------------------------------------------
 
   task create_ntp4_req;
-    //output ntp4_pkt_t packet;
-    //input  sign = 0;
-    //input  sha1 = 0;
-    //input  key  = 0;
     begin
       e_dst_mac      = MY_ETH_ADDR;
       e_src_mac      = CLNT_ETH_ADDR;
@@ -212,21 +181,19 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
       ip4_ihl        = 4'd5;                            // 20 bytes
       ip4_dscp       = 6'd0;
       ip4_ecn        = 2'd0;
-//      packet.ip_head.tot_len    = sign == 1'b0 ? NTP_IP_PKT_LEN : sha1 == 1'b0 ? NTP_IP_PKT_LEN + 20 : NTP_IP_PKT_LEN + 24;
       ip4_tot_len    = NTP_IP_PKT_LEN;
       ip4_ident      = 0;
       ip4_flags      = 3'b010;                          // Dont fragment
       ip4_frag_offs  = 13'd0;
       ip4_ttl        = 8'd64;
-//      packet.ip_head.protocol   = UDP_PROT;
       ip4_protocol   = UDP_PROT[7:0];
       ip4_head_csum  = 16'd0;                           // tmp value for calculation
       ip4_src_addr   = CLNT_IPV4_ADDR;
       ip4_dst_addr   = MY_IPV4_ADDR;
+      #10 ; /* Vivado Simulator 2015.2 / XSim: delay required for wires to propagate singal value */
       ip4_head_csum  = calc_ipv4h_csum(0); // update checksum
       udp_src_port  = CLNT_PORT;
       udp_dst_port  = NTP_PORT;
-//      packet.udp_head.udp_len   = sign == 1'b0 ? NTP_UDP_PKT_LEN : sha1 == 1'b0 ? NTP_UDP_PKT_LEN + 20 : NTP_UDP_PKT_LEN + 24;
       udp_len   = NTP_UDP_PKT_LEN;
       udp_csum  = 16'b0;
       ntp_li         =  2'b0;
@@ -235,7 +202,6 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
       ntp_stratum    =  8'd0;
       ntp_poll       =  8'd10;
       ntp_precision  =  8'd0;
-//    packet.payload.root_delay = 32'haaaaaaaa;
       ntp_root_delay = $random;
       ntp_root_disp  = 32'hbbbbbbbb;
       ntp_ref_id     = 32'd0;
@@ -243,10 +209,7 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
       ntp_org_ts     = 64'd0;
       ntp_rx_ts      = 64'd0;
       ntp_tx_ts      = 64'h0123456789abcdef;
-      //packet.key_id             = sign == 1'b0 ?  32'b0 : sha1 == 1'b0 ? MD5_KEY_ID[key] : SHA1_KEY_ID[key];
-      //packet.digest             = sign == 1'b0 ? 160'b0 : sha1 == 1'b0 ? md5_func(MD5_KEY[key], packet.payload) << 32 : sha1_func(SHA1_KEY[key], packet.payload);
-      //packet.key_id             = 32'b0;
-      //packet.digest             = 160'b0;
+      #10 ; /* Vivado Simulator 2015.2 / XSim: delay required for wires to propagate singal value */
       udp_csum = calc_udp_ntp4_csum(0);
     end
   endtask //create_ntp4_req

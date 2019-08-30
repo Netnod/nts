@@ -42,7 +42,9 @@ module nts_engine #(
   input  wire [63:0]           i_dispatch_fifo_rd_data
 );
 
-  reg [3:0]  state;
+  //----------------------------------------------------------------
+  // Internal constant and parameter definitions.
+  //----------------------------------------------------------------
 
   localparam STATE_RESET             = 4'h0;
   localparam STATE_EMPTY             = 4'h1;
@@ -52,29 +54,64 @@ module nts_engine #(
   localparam STATE_ERROR_GENERAL     = 4'he;
   localparam STATE_TO_BE_IMPLEMENTED = 4'hf;
 
-  reg                  busy;
-  reg                  dispatch_packet_discard;
-  wire                 dispatch_fifo_rd_en;
-  wire [63:0]          r_data;
+  //----------------------------------------------------------------
+  // Registers including update variables and write enable.
+  //----------------------------------------------------------------
 
+  reg       state_we;
+  reg [3:0] state_new;
+  reg [3:0] state_reg;
 
-  reg [9:0]            delay_counter;
+  reg       busy_we;
+  reg       busy_new;
+  reg       busy_reg;
 
+  reg       dispatch_packet_discard_we;
+  reg       dispatch_packet_discard_new;
+  reg       dispatch_packet_discard_reg;
+
+  reg       delay_counter_we; //temporary debug register for simularing work in unimplemented states
+  reg [7:0] delay_counter_new; //temporary debug register for simularing work in unimplemented states
+  reg [7:0] delay_counter_reg; //temporary debug register for simularing work in unimplemented states
+
+  //----------------------------------------------------------------
+  // Wires.
+  //----------------------------------------------------------------
+
+  wire                    dispatch_fifo_rd_en;
   wire                    access_port_wait;
   wire [ADDR_WIDTH+3-1:0] access_port_addr;
   wire [2:0]              access_port_wordsize;
   wire                    access_port_rd_en;
   wire                    access_port_rd_dv;
   wire [63:0]             access_port_rd_data;
+  wire                    debug_delay_continue;
+
+  //----------------------------------------------------------------
+  // Concurrent connectivity for ports etc.
+  //----------------------------------------------------------------
+
+  assign o_dispatch_packet_read_discard = dispatch_packet_discard_reg;
+  assign o_dispatch_fifo_rd_en          = dispatch_fifo_rd_en;
+  assign o_busy                         = busy_reg;
+
+  assign debug_delay_continue           = state_reg == STATE_TO_BE_IMPLEMENTED && (delay_counter_reg < 100);
+
+  //----------------------------------------------------------------
+  // Receive buffer instantiation.
+  //----------------------------------------------------------------
 
   nts_rx_buffer #(ADDR_WIDTH) buffer (
      .i_areset(i_areset),
      .i_clk(i_clk),
-     .i_clear(state == STATE_RESET),
+
+     .i_clear(state_reg == STATE_RESET),
+
      .i_dispatch_packet_available(i_dispatch_packet_available),
      .i_dispatch_fifo_empty(i_dispatch_fifo_empty),
      .o_dispatch_fifo_rd_en(dispatch_fifo_rd_en),
      .i_dispatch_fifo_rd_data(i_dispatch_fifo_rd_data),
+
      .o_access_port_wait(access_port_wait),
      .i_access_port_addr(access_port_addr),
      .i_access_port_wordsize(access_port_wordsize),
@@ -83,13 +120,20 @@ module nts_engine #(
      .o_access_port_rd_data(access_port_rd_data)
   );
 
+  //----------------------------------------------------------------
+  // Parser Ctrl instantiation.
+  //----------------------------------------------------------------
+
   nts_parser_ctrl #(ADDR_WIDTH) parser (
    .i_areset(i_areset),
    .i_clk(i_clk),
-   .i_clear(state == STATE_RESET),
+
+   .i_clear(state_reg == STATE_RESET),
+
    .i_process_initial(dispatch_fifo_rd_en),
    .i_last_word_data_valid(i_dispatch_data_valid),
    .i_data(i_dispatch_fifo_rd_data),
+
    .i_access_port_wait(access_port_wait),
    .o_access_port_addr(access_port_addr),
    .o_access_port_wordsize(access_port_wordsize),
@@ -98,61 +142,121 @@ module nts_engine #(
    .i_access_port_rd_data(access_port_rd_data)
   );
 
-  assign o_dispatch_packet_read_discard = dispatch_packet_discard;
-  assign o_dispatch_fifo_rd_en = dispatch_fifo_rd_en;
-  assign o_busy = busy;
+  //----------------------------------------------------------------
+  // reg_update
+  // Update functionality for all registers in the core.
+  // All registers are positive edge triggered with asynchronous
+  // active high reset.
+  //----------------------------------------------------------------
 
   always @ (posedge i_clk, posedge i_areset)
-  begin
+  begin : reg_update
     if (i_areset == 1'b1) begin
-      state                   <= STATE_RESET;
-      delay_counter           <= 'b0; //this is just for a debug delay in not implemented state :)
-      busy                    <= 'b0;
-      dispatch_packet_discard <= 'b0;
+      state_reg                   <= STATE_RESET;
+      delay_counter_reg           <= 'b0; //this is just for a debug delay in not implemented state :)
+      busy_reg                    <= 'b0;
+      dispatch_packet_discard_reg <= 'b0;
     end else begin
-      dispatch_packet_discard <= 'b0;
-      case (state)
-        STATE_RESET:
-          begin
-            state               <= STATE_EMPTY;
-            delay_counter       <= 'b0;
-          end
-        STATE_EMPTY:
-          begin
-            if (i_dispatch_packet_available && i_dispatch_fifo_empty == 'b0) begin
-              state               <= STATE_COPY;
-              busy                <= 'b1;
-            end else begin
-              busy                <= 'b0;
-            end
-          end
-        STATE_COPY:
-          if (i_dispatch_fifo_empty) begin
-            state               <= STATE_TO_BE_IMPLEMENTED;
-          //end else if (addr == ~ 'b0) begin //not empty, but internal memory full
-          //  state               <= STATE_ERROR_OVERFLOW;
-          //TODO rx_buffer to signal overflow
-          end
-        STATE_TO_BE_IMPLEMENTED:
-          begin
-            if (delay_counter < 100) begin
-              delay_counter <= delay_counter + 1;
-              if (delay_counter == 0) begin
-                $display("%s:%0d TODO!!! NOT IMPLEMENTED. state = %0d", `__FILE__, `__LINE__, state);
-              end
-            end else begin
-              dispatch_packet_discard <= 'b1;
-              busy  <= 'b0;
-              state <= STATE_RESET;
-            end
-          end
-        default:
-          begin
-            $display("%s:%0d TODO!!! NOT IMPLEMENTED. state = %0d", `__FILE__, `__LINE__, state);
-            busy  <= 'b0;
-            state <= STATE_RESET;
-          end
-      endcase
+      if (state_we)
+        state_reg <= state_new;
+
+      if (delay_counter_we)
+        delay_counter_reg <= delay_counter_new;
+
+      if (busy_we)
+        busy_reg <= busy_new;
+
+      if (dispatch_packet_discard_we)
+        dispatch_packet_discard_reg <= dispatch_packet_discard_new;
     end
+  end
+
+  //----------------------------------------------------------------
+  // State and output
+  // Small internal FSM and related output signals.
+  //----------------------------------------------------------------
+  always @*
+  begin : state_and_output
+    dispatch_packet_discard_we    = 'b0;
+    dispatch_packet_discard_new   = 'b0;
+    state_we                      = 'b0;
+    state_new                     = 'b0;
+    busy_we                       = 'b0;
+    busy_new                      = 'b0;
+    case (state_reg)
+      STATE_RESET:
+        begin
+          dispatch_packet_discard_we  = 'b1;
+          dispatch_packet_discard_new = 'b0;
+          state_we                    = 'b1;
+          state_new                   = STATE_EMPTY;
+          busy_we                     = 'b1;
+          busy_new                    = 'b0;
+        end
+      STATE_EMPTY:
+        begin
+          if (i_dispatch_packet_available && i_dispatch_fifo_empty == 'b0) begin
+            state_we                = 'b1;
+            state_new               = STATE_COPY;
+            busy_we                 = 'b1;
+            busy_new                = 'b1;
+          end
+        end
+      STATE_COPY:
+        if (i_dispatch_fifo_empty) begin
+          state_we                = 'b1;
+          state_new               = STATE_TO_BE_IMPLEMENTED;
+          //TODO rx_buffer to signal overflow
+        end
+      STATE_TO_BE_IMPLEMENTED:
+        begin
+          if (debug_delay_continue == 'b0) begin
+            dispatch_packet_discard_we  = 'b1;
+            dispatch_packet_discard_new = 'b1;
+            busy_we                     = 'b1;
+            busy_new                    = 'b0;
+            state_we                    = 'b1;
+            state_new                   = STATE_RESET;
+          end
+        end
+      default:
+        begin
+          busy_we   = 'b1;
+          busy_new  = 'b0;
+          state_we  = 'b1;
+          state_new = STATE_RESET;
+        end
+    endcase
+  end
+
+  //----------------------------------------------------------------
+  // Debug Delay
+  // A small delay to simulate system processing.
+  // Will be removed when more of the processing is implemented.
+  //----------------------------------------------------------------
+  always @*
+  begin : debug_delay
+    delay_counter_we              = 'b0;
+    delay_counter_new             = 'b0;
+    case (state_reg)
+      STATE_RESET:
+        begin
+          delay_counter_we        = 'b1;
+          delay_counter_new       = 'b0;
+        end
+      STATE_TO_BE_IMPLEMENTED:
+        begin
+          if (debug_delay_continue) begin
+
+            delay_counter_we     = 'b1;
+            delay_counter_new    = delay_counter_reg + 1;
+
+            if (delay_counter_reg == 0) begin
+              $display("%s:%0d TODO!!! NOT IMPLEMENTED. state = %0d", `__FILE__, `__LINE__, state_reg);
+            end
+          end
+        end
+      default: ;
+    endcase
   end
 endmodule

@@ -300,14 +300,18 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
       `assert( o_dispatch_fifo_rd_en == 'b0 );
       #10
       `assert( o_dispatch_fifo_rd_en == 'b0 );
-      for ( i=0; i<100000 || o_dispatch_packet_read_discard == 'b1; i=i+1 ) begin
+      for ( i=0; i<100000 && o_dispatch_packet_read_discard == 'b1; i=i+1 ) begin
         #10 ;
       end
       `assert( o_dispatch_packet_read_discard == 'b0 );
       `assert( o_dispatch_fifo_rd_en == 'b0 );
-      for (i=0; i<100000 || o_busy == 'b1; i=i+1) begin
+      for (i=0; i<100000 && o_busy == 'b1; i=i+1) begin
         #10 ;
       end
+      `assert( o_busy == 'b0 );
+      `assert( o_dispatch_packet_read_discard == 'b1 );
+      `assert( o_dispatch_fifo_rd_en == 'b0 );
+      #10 ;
       `assert( o_busy == 'b0 );
       `assert( o_dispatch_packet_read_discard == 'b0 );
       `assert( o_dispatch_fifo_rd_en == 'b0 );
@@ -385,7 +389,7 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
     create_ntp4_req;
     send_ntp4_req;
 
-    #100000
+    #10
     send_nts_packet1;
 
     #100

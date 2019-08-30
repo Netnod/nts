@@ -135,7 +135,7 @@ module nts_engine #(
           end
         STATE_TO_BE_IMPLEMENTED:
           begin
-            if (delay_counter < 1000) begin
+            if (delay_counter < 100) begin
               delay_counter <= delay_counter + 1;
               if (delay_counter == 0) begin
                 $display("%s:%0d TODO!!! NOT IMPLEMENTED. state = %0d", `__FILE__, `__LINE__, state);

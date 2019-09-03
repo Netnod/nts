@@ -46,8 +46,14 @@ module nts_parser_ctrl #(
   input  wire [63:0]             i_access_port_rd_data
 );
 
-  localparam [3:0] OPCODE_GET_OFFSET_UDP_DATA = 4'b0000;
-  localparam [3:0] OPCODE_GET_LENGTH_UDP      = 4'b0001;
+  //----------------------------------------------------------------
+  // Internal constant and parameter definitions.
+  //----------------------------------------------------------------
+
+  localparam [3:0] OPCODE_GET_OFFSET_UDP_DATA = 4'b0;
+  localparam [3:0] OPCODE_GET_LENGTH_UDP      = 4'b1;
+  localparam [3:0] OPCODE_FIRST               = OPCODE_GET_OFFSET_UDP_DATA;
+  localparam [3:0] OPCODE_LAST                = OPCODE_GET_LENGTH_UDP;
 
   localparam STATE_IDLE                  = 4'h0;
   localparam STATE_COPY                  = 4'h1;
@@ -57,22 +63,93 @@ module nts_parser_ctrl #(
   localparam STATE_EXTENSIONS_EXTRACTED  = 4'h5;
   localparam STATE_ERROR_GENERAL         = 4'hf;
 
+  localparam NTP_EXTENSION_BITS          = 3;
+  localparam NTP_EXTENSION_FIELDS        = (1<<NTP_EXTENSION_BITS);
 
-  reg [ADDR_WIDTH+3-1:0] access_port_addr;
-  reg [2:0]              access_port_wordsize;
-  reg                    access_port_rd_en;
+  //----------------------------------------------------------------
+  // Registers including update variables and write enable.
+  //----------------------------------------------------------------
+
+  reg                         access_port_addr_we;
+  reg      [ADDR_WIDTH+3-1:0] access_port_addr_new;
+  reg      [ADDR_WIDTH+3-1:0] access_port_addr_reg;
+  reg                         access_port_rd_en_we;
+  reg                         access_port_rd_en_new;
+  reg                         access_port_rd_en_reg;
+  reg                         access_port_wordsize_we;
+  reg                   [2:0] access_port_wordsize_new;
+  reg                   [2:0] access_port_wordsize_reg;
+
+  reg                         state_we;
+  reg                   [3:0] state_new;
+  reg                   [3:0] state_reg;
+
+  reg                         word_counter_we;
+  reg        [ADDR_WIDTH-1:0] word_counter_new;
+  reg        [ADDR_WIDTH-1:0] word_counter_reg;
+
+  reg                         last_bytes_we;
+  reg                   [3:0] last_bytes_new;
+  reg                   [3:0] last_bytes_reg;
+
+  reg                         read_opcode_we;
+  reg                   [3:0] read_opcode_new;
+  reg                   [3:0] read_opcode_reg;
 
 
-  assign o_access_port_addr     = access_port_addr;
-  assign o_access_port_wordsize = access_port_wordsize;
-  assign o_access_port_rd_en    = access_port_rd_en;
+  reg                          memory_bound_we;
+  reg       [ADDR_WIDTH+3-1:0] memory_bound_new;
+  reg       [ADDR_WIDTH+3-1:0] memory_bound_reg;
 
-  reg  [3:0]            state;
-  reg  [ADDR_WIDTH-1:0] counter;
-  wire                  detect_ipv4;
-  wire                  detect_ipv4_bad;
-  wire [31:0]           read_data;
-  reg  [3:0]            read_opcode;
+  reg                          memory_address_we;
+  reg       [ADDR_WIDTH+3-1:0] memory_address_new;
+  reg       [ADDR_WIDTH+3-1:0] memory_address_reg;
+  reg       [ADDR_WIDTH+3-1:0] memory_address_next_reg;
+  reg                          memory_address_failure_reg;
+  reg                          memory_address_lastbyte_read_reg;
+
+  reg                          ipdecode_ntp_addr_we;
+  reg       [ADDR_WIDTH+3-1:0] ipdecode_ntp_addr_new;
+  reg       [ADDR_WIDTH+3-1:0] ipdecode_ntp_addr_reg;
+  reg                          ipdecode_udp_length_we;
+  reg                   [15:0] ipdecode_udp_length_new;
+  reg                   [15:0] ipdecode_udp_length_reg;
+
+  reg                          ntp_extension_counter_we;
+  reg [NTP_EXTENSION_BITS-1:0] ntp_extension_counter_new;
+  reg [NTP_EXTENSION_BITS-1:0] ntp_extension_counter_reg;
+
+  reg                          ntp_extension_reset;
+  reg                          ntp_extension_we;
+  reg                          ntp_extension_copied_new;
+  reg                          ntp_extension_copied_reg  [0:NTP_EXTENSION_FIELDS-1];
+  reg       [ADDR_WIDTH+3-1:0] ntp_extension_addr_new;
+  reg       [ADDR_WIDTH+3-1:0] ntp_extension_addr_reg    [0:NTP_EXTENSION_FIELDS-1];
+  reg                   [15:0] ntp_extension_tag_new;
+  reg                   [15:0] ntp_extension_tag_reg     [0:NTP_EXTENSION_FIELDS-1];
+  reg                   [15:0] ntp_extension_length_new;
+  reg                   [15:0] ntp_extension_length_reg  [0:NTP_EXTENSION_FIELDS-1];
+
+
+  //----------------------------------------------------------------
+  // Wires.
+  //----------------------------------------------------------------
+
+  wire        detect_ipv4;
+  wire        detect_ipv4_bad;
+  wire [31:0] ipdecode_read_data_wire;
+
+  //----------------------------------------------------------------
+  // Connectivity for ports etc.
+  //----------------------------------------------------------------
+
+  assign o_access_port_addr     = access_port_addr_reg;
+  assign o_access_port_rd_en    = access_port_rd_en_reg;
+  assign o_access_port_wordsize = access_port_wordsize_reg;
+
+  //----------------------------------------------------------------
+  // IP decoding core
+  //----------------------------------------------------------------
 
   nts_ip #(ADDR_WIDTH) ip_decoder (
     .i_areset(i_areset),
@@ -81,79 +158,15 @@ module nts_parser_ctrl #(
     .i_process(i_process_initial),
     .i_last_word_data_valid(i_last_word_data_valid),
     .i_data(i_data),
-    .i_read_opcode(read_opcode),
+    .i_read_opcode(read_opcode_reg),
     .o_detect_ipv4(detect_ipv4),
     .o_detect_ipv4_bad(detect_ipv4_bad),
-    .o_read_data(read_data)
+    .o_read_data(ipdecode_read_data_wire)
   );
 
-  reg               [3:0] last_bytes;
-  reg  [ADDR_WIDTH+3-1:0] memory_bound;
-  reg  [ADDR_WIDTH+3-1:0] ntp_addr;
-  reg  [15:0]             udp_length;
-
-  reg  [2:0]              ntp_extension_counter;
-  reg                     ntp_extension_copied      [0:7];
-  reg  [ADDR_WIDTH+3-1:0] ntp_extension_addr        [0:7];
-  reg  [15:0]             ntp_extension_tag         [0:7];
-  reg  [15:0]             ntp_extension_length      [0:7];
-
-  always @ (posedge i_clk, posedge i_areset)
-  begin
-    if (i_areset == 1'b1) begin
-      memory_bound <= 0;
-    end else begin : MEMORY_BOUNDS_CALC
-      reg [ADDR_WIDTH+3-1:0] bounds;
-      bounds        = 0;
-      bounds[3:0]   = last_bytes;
-      bounds        = bounds + { counter, 3'b000};
-      memory_bound <= bounds;
-    end
-  end
-
-  always @ (posedge i_clk, posedge i_areset)
-  begin
-    if (i_areset == 1'b1) begin : ASYNC_RESET
-      integer i;
-      for (i=0; i <= 7; i=i+1) begin
-        ntp_extension_copied      [i] <= 'b0;
-        ntp_extension_addr        [i] <= 'b0;
-        ntp_extension_tag         [i] <= 'b0;
-        ntp_extension_length      [i] <= 'b0;
-      end
-      access_port_rd_en               <= 'b0;
-      access_port_wordsize            <= 'b0;
-      access_port_addr                <= 'b0;
-    end else if (i_clear) begin : SYNC_RESET_FROM_TOP_MODULE
-      integer i;
-      for (i=0; i <= 7; i=i+1) begin
-        ntp_extension_copied      [i] <= 'b0;
-        ntp_extension_addr        [i] <= 'b0;
-        ntp_extension_tag         [i] <= 'b0;
-        ntp_extension_length      [i] <= 'b0;
-      end
-      access_port_rd_en               <= 'b0;
-      access_port_wordsize            <= 'b0;
-      access_port_addr                <= 'b0;
-    end else begin
-      access_port_rd_en        <= 'b0;
-      if (state == STATE_EXTRACT_EXT_FROM_RAM && ntp_extension_copied[ntp_extension_counter] == 'b0) begin
-        //$display("%s:%0d i_access_port_rd_dv=%0d i_access_port_wait=%0d", `__FILE__, `__LINE__, i_access_port_rd_dv, i_access_port_wait);
-        if (i_access_port_rd_dv) begin
-          ntp_extension_copied      [ntp_extension_counter] <= 'b1;
-          ntp_extension_addr        [ntp_extension_counter] <= ntp_addr;
-          ntp_extension_tag         [ntp_extension_counter] <= i_access_port_rd_data[31:16];
-          ntp_extension_length      [ntp_extension_counter] <= i_access_port_rd_data[15:0];
-          //$display("%s:%0d tag %0h, length %h", `__FILE__, `__LINE__, i_access_port_rd_data[31:16], i_access_port_rd_data[15:0]);
-        end else if (i_access_port_wait == 'b0) begin
-          //$display("%s:%0d ", `__FILE__, `__LINE__);
-          access_port_rd_en                <= 'b1;
-          access_port_wordsize             <= 2; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit
-          access_port_addr                 <= ntp_addr;
-        end
-      end
-    end
-  end
+  //----------------------------------------------------------------
+  // Functions and Tasks
+  //----------------------------------------------------------------
 
   function func_address_within_memory_bounds (
     input [ADDR_WIDTH+3-1:0] address,
@@ -161,10 +174,14 @@ module nts_parser_ctrl #(
   );
     reg [ADDR_WIDTH+4-1:0] acc;
     begin
-      acc               = {1'b0, address} + {1'b0, bytes} - 1;
-      if (acc[ADDR_WIDTH+4-1] == 'b1) func_address_within_memory_bounds  = 'b0;
-      else if (acc[ADDR_WIDTH+3-1:0] >= memory_bound) func_address_within_memory_bounds  = 'b0;
-      else func_address_within_memory_bounds  = 'b1;
+      acc = {1'b0, address} + {1'b0, bytes} - 1;
+
+      if (acc[ADDR_WIDTH+4-1] == 'b1)
+        func_address_within_memory_bounds  = 'b0;
+      else if (acc[ADDR_WIDTH+3-1:0] >= memory_bound_reg)
+        func_address_within_memory_bounds  = 'b0;
+      else
+        func_address_within_memory_bounds  = 'b1;
     end
   endfunction
 
@@ -185,10 +202,10 @@ module nts_parser_ctrl #(
         acc                                 = acc + {1'b0, ntp_extension_length_value};
         //$display("%s:%0d address_in=%h (%0d) length=%d (%0d) acc=%h (%0d) memory_bound=%h (%d)",`__FILE__,`__LINE__, address_in, address_in, ntp_extension_length_value, ntp_extension_length_value, acc, acc, memory_bound, memory_bound);
         if (acc[16:ADDR_WIDTH+4-1] == 'b0) begin
-          if (acc[ADDR_WIDTH+3-1:0] <= memory_bound) begin
+          if (acc[ADDR_WIDTH+3-1:0] <= memory_bound_reg) begin
             failure                           = 'b0;
             address_out                       = acc[ADDR_WIDTH+3-1:0];
-            if (acc[ADDR_WIDTH+3-1:0] == memory_bound) begin
+            if (acc[ADDR_WIDTH+3-1:0] == memory_bound_reg) begin
               lastbyteread                    = 'b1;
             end
           end
@@ -197,110 +214,435 @@ module nts_parser_ctrl #(
     end
   endtask
 
-  always @ (posedge i_clk, posedge i_areset)
-  begin
-    if (i_areset == 1'b1) begin
-      state                     <= STATE_IDLE;
-      read_opcode               <= OPCODE_GET_OFFSET_UDP_DATA;
-      counter                   <= 'b0;
-      ntp_extension_counter     <= 'b0;
-      last_bytes                <= 'b0;
+  //----------------------------------------------------------------
+  // Register Update
+  // Update functionality for all registers in the core.
+  // All registers are positive edge triggered with asynchronous
+  // active high reset.
+  //----------------------------------------------------------------
 
-    end else if (i_clear) begin
-      state                 <= STATE_IDLE;
+  always @ (posedge i_clk, posedge i_areset)
+  begin : reg_update
+    if (i_areset == 1'b1) begin
+      access_port_addr_reg      <= 'b0;
+      access_port_rd_en_reg     <= 'b0;
+      access_port_wordsize_reg  <= 'b0;
+      ipdecode_ntp_addr_reg     <= 'b0;
+      ipdecode_udp_length_reg   <= 'b0;
+      last_bytes_reg            <= 'b0;
+      memory_address_reg        <= 'b0;
+      memory_bound_reg          <= 'b0;
+      ntp_extension_counter_reg <= 'b0;
+      read_opcode_reg           <= OPCODE_FIRST;
+      state_reg                 <= 'b0;
+      word_counter_reg          <= 'b0;
+      begin : ntp_extension_reset_async
+        integer i;
+        for (i=0; i <= NTP_EXTENSION_FIELDS-1; i=i+1) begin
+          ntp_extension_copied_reg [i] <= 'b0;
+          ntp_extension_addr_reg   [i] <= 'b0;
+          ntp_extension_tag_reg    [i] <= 'b0;
+          ntp_extension_length_reg [i] <= 'b0;
+        end
+      end
     end else begin
-      //$display("%s:%0d debug: state %0d i_process_initial %0d", `__FILE__, `__LINE__, state, i_process_initial);
-      case (state)
-        STATE_IDLE:
+
+      if (access_port_addr_we)
+        access_port_addr_reg <= access_port_addr_new;
+
+      if (access_port_rd_en_we)
+        access_port_rd_en_reg <= access_port_rd_en_new;
+
+      if (access_port_wordsize_we)
+        access_port_wordsize_reg <= access_port_wordsize_new;
+
+      if (ipdecode_ntp_addr_we)
+        ipdecode_ntp_addr_reg <= ipdecode_ntp_addr_new;
+
+      if (ipdecode_udp_length_we)
+        ipdecode_udp_length_reg <= ipdecode_udp_length_new;
+
+      if (last_bytes_we)
+        last_bytes_reg <= last_bytes_new;
+
+      if (memory_address_we)
+        memory_address_reg <= memory_address_new;
+
+      if (memory_bound_we)
+        memory_bound_reg <= memory_bound_new;
+
+      if (ntp_extension_reset) begin : ntp_extension_reset_sync
+        integer i;
+        for (i=0; i <= NTP_EXTENSION_FIELDS-1; i=i+1) begin
+          ntp_extension_copied_reg [i] <= 'b0;
+        end
+      end else if (ntp_extension_we)
+        ntp_extension_copied_reg [ntp_extension_counter_reg] <= ntp_extension_copied_new;
+
+      if (ntp_extension_we) begin
+        $display("%s:%0d ntp_ext[%0d] = tag:%h,length:%h,addr:%h", `__FILE__, `__LINE__, ntp_extension_counter_reg, ntp_extension_tag_new, ntp_extension_length_new, ntp_extension_addr_new);
+        ntp_extension_addr_reg   [ntp_extension_counter_reg] <= ntp_extension_addr_new;
+        ntp_extension_tag_reg    [ntp_extension_counter_reg] <= ntp_extension_tag_new;
+        ntp_extension_length_reg [ntp_extension_counter_reg] <= ntp_extension_length_new;
+      end
+
+      if (ntp_extension_counter_we)
+        ntp_extension_counter_reg <= ntp_extension_counter_new;
+
+      if (read_opcode_we)
+        read_opcode_reg <= read_opcode_new;
+
+      if (state_we)
+        state_reg <= state_new;
+
+      if (word_counter_we)
+        word_counter_reg <= word_counter_new;
+    end
+  end
+
+  //----------------------------------------------------------------
+  // Memory bounds calculation
+  // Counts exact number of bytes recieved by parser
+  //----------------------------------------------------------------
+
+  always @*
+  begin : memory_bounds_calc
+    reg [ADDR_WIDTH+3-1:0] bounds;
+    memory_bound_we   = 'b0;
+    bounds            = 0;
+    bounds[3:0]       = last_bytes_reg;
+    bounds            = bounds + { word_counter_reg, 3'b000};
+    memory_bound_new  = bounds;
+    if (memory_bound_reg != bounds)
+      memory_bound_we = 'b1;
+  end
+
+  //----------------------------------------------------------------
+  // Word counter
+  // Counts number of words recieved by parser.
+  // Memory bounds calculation depends on this counter.
+  //----------------------------------------------------------------
+
+  always @*
+  begin : word_counter
+    word_counter_we  = 'b0;
+    word_counter_new = 'b0;
+    case (state_reg)
+      STATE_IDLE:
+        if (i_process_initial)
+          word_counter_we = 'b1;
+      STATE_COPY:
+        if (i_process_initial) begin
+          word_counter_we  = 'b1;
+          word_counter_new = word_counter_reg + 1;
+        end
+      default: ;
+    endcase
+  end
+
+  //----------------------------------------------------------------
+  // Last word data valid byte counter
+  // Counts number of bytes in last word recieved by parser.
+  // Memory bounds calculation depends on this counter.
+  //----------------------------------------------------------------
+
+  always @*
+  begin : convert_lwdv_to_byte_counter
+    last_bytes_we = 'b0;
+
+    case (i_last_word_data_valid)
+      8'b00000001: last_bytes_new = 1;
+      8'b00000011: last_bytes_new = 2;
+      8'b00000111: last_bytes_new = 3;
+      8'b00001111: last_bytes_new = 4;
+      8'b00011111: last_bytes_new = 5;
+      8'b00111111: last_bytes_new = 6;
+      8'b01111111: last_bytes_new = 7;
+      8'b11111111: last_bytes_new = 8;
+      default: last_bytes_new = 'b0; //illegal value
+    endcase
+
+    case (state_reg)
+      STATE_IDLE:
+        if (i_process_initial)
+          last_bytes_we = 'b1;
+      default: ;
+    endcase
+  end
+
+  //----------------------------------------------------------------
+  // IP decode opcode incrementor
+  // Requests different opcodes from the IP decode logic
+  //----------------------------------------------------------------
+
+  always @*
+  begin : opcode_incrementer
+    read_opcode_we  = 'b0;
+    read_opcode_new = OPCODE_FIRST;
+    case (state_reg)
+      STATE_IDLE:
+        if (i_process_initial)
+          read_opcode_we = 'b1;
+      STATE_EXTRACT_FROM_IP:
+        begin
+          read_opcode_we  = 'b1;
+          read_opcode_new = read_opcode_reg + 1;
+        end
+      default: ;
+    endcase
+  end
+
+  //----------------------------------------------------------------
+  // IP decode read-handler
+  // Writes to IP fields upon recieving values from IP decode.
+  //----------------------------------------------------------------
+
+  always @*
+  begin : ip_decode_read_handler
+    ipdecode_ntp_addr_we    = 'b0;
+    ipdecode_ntp_addr_new   = 'b0;
+    ipdecode_udp_length_we  = 'b0;
+    ipdecode_udp_length_new = 'b0;
+    if (state_reg == STATE_EXTRACT_FROM_IP) begin
+      case (read_opcode_reg)
+        OPCODE_GET_OFFSET_UDP_DATA:
           begin
-            read_opcode    <= OPCODE_GET_OFFSET_UDP_DATA;
-            counter         <= 'b0;
-            ntp_extension_counter <= 'b0;
-            if (i_process_initial) begin
-              state <= STATE_COPY;
-              case (i_last_word_data_valid)
-                8'b00000001: last_bytes <= 1;
-                8'b00000011: last_bytes <= 2;
-                8'b00000111: last_bytes <= 3;
-                8'b00001111: last_bytes <= 4;
-                8'b00011111: last_bytes <= 5;
-                8'b00111111: last_bytes <= 6;
-                8'b01111111: last_bytes <= 7;
-                8'b11111111: last_bytes <= 8;
-                default: state <= STATE_ERROR_GENERAL;
-              endcase
-            end
+            ipdecode_ntp_addr_we                    = 'b1;
+            ipdecode_ntp_addr_new[ADDR_WIDTH+3-1:3] = ipdecode_read_data_wire[ADDR_WIDTH+3-1:3] + 6;
+            ipdecode_ntp_addr_new[2:0]              = ipdecode_read_data_wire[2:0];
           end
-        STATE_COPY:
-          if (i_process_initial == 1'b0) begin
-            state       <= STATE_EXTRACT_FROM_IP;
-            read_opcode <= OPCODE_GET_OFFSET_UDP_DATA;
-          end else begin
-            counter     <= counter + 1;
-          end
-        STATE_EXTRACT_FROM_IP:
-          case (read_opcode)
-            OPCODE_GET_OFFSET_UDP_DATA:
-              begin
-               read_opcode                 <= OPCODE_GET_LENGTH_UDP;
-               ntp_addr[ADDR_WIDTH+3-1:3]  <= read_data[ADDR_WIDTH+3-1:3] + 6;
-               ntp_addr[2:0]               <= read_data[2:0];
-              end
-            OPCODE_GET_LENGTH_UDP:
-              begin
-                state                      <= STATE_LENGTH_CHECKS;
-                udp_length                 <= read_data[15:0];
-              end
-            default:
-              begin
-                state <= STATE_ERROR_GENERAL;
-                $display("%s:%0d warning: not implemented",`__FILE__,`__LINE__);
-              end
-          endcase
-        STATE_LENGTH_CHECKS:
+        OPCODE_GET_LENGTH_UDP:
           begin
-            if (udp_length < ( 8 /* UDP Header */ + 6*8 /* Minimum NTP Payload */ + 8 /* Smallest NTP extension */ ))
-              state           <= STATE_ERROR_GENERAL;
-            else if (udp_length > 65507 /* IPv4 maximum UDP packet size */)
-              state           <= STATE_ERROR_GENERAL;
-            else if (udp_length[1:0] != 0) /* NTP packets are 7*8 + M(4+4n), always 4 byte aligned */
-              state           <= STATE_ERROR_GENERAL;
-            else if (func_address_within_memory_bounds (ntp_addr, 4) == 'b0)
-              state           <= STATE_ERROR_GENERAL;
-            else
-              state           <= STATE_EXTRACT_EXT_FROM_RAM;
-          end
-        STATE_EXTRACT_EXT_FROM_RAM:
-           if (ntp_extension_copied[ntp_extension_counter] == 'b1) begin : CALC_NEXT_ADDR
-             reg                    failure;
-             reg                    lastbyteread;
-             reg [ADDR_WIDTH+3-1:0] next_address;
-             //$display("%s:%0d copied, ok? tag: %h len: %h (%0d)",`__FILE__,`__LINE__, ntp_extension_tag[ntp_extension_counter], ntp_extension_length[ntp_extension_counter],ntp_extension_length[ntp_extension_counter]);
-             task_incremment_address_for_nts_extension(ntp_addr, ntp_extension_length[ntp_extension_counter], next_address, failure, lastbyteread);
-             //$display("%s:%0d ntp_addr %h, next_addr %h, failure: %0d",`__FILE__,`__LINE__, ntp_addr, next_address, failure);
-             if (failure == 'b1) begin
-               state <= STATE_ERROR_GENERAL;
-             end else if (lastbyteread == 1'b1) begin
-               state <= STATE_EXTENSIONS_EXTRACTED;
-             end else begin
-               if (ntp_extension_counter==7)
-                 state <= STATE_ERROR_GENERAL;
-               else begin
-                 ntp_extension_counter <= ntp_extension_counter +1;
-                 ntp_addr <= next_address;
-               end
-             end
-           end
-        STATE_ERROR_GENERAL:
-          begin
-            state  <= STATE_IDLE;
-            $display("%s:%0d warning: error",`__FILE__,`__LINE__);
+            ipdecode_udp_length_we  = 'b1;
+            ipdecode_udp_length_new = ipdecode_read_data_wire[15:0];
           end
         default:
-          begin
-            state <= STATE_IDLE;
-            $display("%s:%0d warning: state %0d not implemented",`__FILE__,`__LINE__, state);
+          $display("%s:%0d warning: opcode %0d not implemented",`__FILE__,`__LINE__, read_opcode_reg);
+      endcase
+    end
+  end
+
+  //----------------------------------------------------------------
+  // NTP Extension field control
+  // Writes to NTP Extension fields upon i_access_port receving
+  // values from Rx Buffer.
+  //----------------------------------------------------------------
+
+  always @*
+  begin : ntp_extension_field_control
+
+    ntp_extension_we           = 'b0;
+    ntp_extension_reset        = 'b0;
+    ntp_extension_addr_new     = 'b0;
+    ntp_extension_copied_new   = 'b0;
+    ntp_extension_length_new   = 'b0;
+    ntp_extension_tag_new      = 'b0;
+
+    if (i_clear)
+      ntp_extension_reset      = 'b1;
+
+    if (state_reg == STATE_EXTRACT_EXT_FROM_RAM && ntp_extension_copied_reg[ntp_extension_counter_reg] == 'b0 && i_access_port_rd_dv) begin
+      ntp_extension_we         = 'b1;
+      ntp_extension_addr_new   = memory_address_reg;
+      ntp_extension_copied_new = 'b1;
+      ntp_extension_length_new = i_access_port_rd_data[15:0];
+      ntp_extension_tag_new    = i_access_port_rd_data[31:16];
+    end
+  end
+
+  always @*
+  begin
+    access_port_rd_en_we       = 'b0;
+    access_port_rd_en_new      = 'b0;
+    access_port_wordsize_we    = 'b0;
+    access_port_wordsize_new   = 'b0;
+    access_port_addr_we        = 'b0;
+    access_port_addr_new       = 'b0;
+
+    if (i_clear) begin : SYNC_RESET_FROM_TOP_MODULE
+      access_port_addr_we      = 'b1; //write zeros
+      access_port_rd_en_we     = 'b1;
+      access_port_wordsize_we  = 'b1;
+
+    end else begin
+      if (access_port_rd_en_reg == 'b1)
+        access_port_rd_en_we  = 'b1; //reset read signal if high
+
+      if (state_reg == STATE_EXTRACT_EXT_FROM_RAM && ntp_extension_copied_reg[ntp_extension_counter_reg] == 'b0) begin
+        //$display("%s:%0d i_access_port_rd_dv=%0d i_access_port_wait=%0d", `__FILE__, `__LINE__, i_access_port_rd_dv, i_access_port_wait);
+        if (i_access_port_rd_dv) begin
+          ;
+        end else if (i_access_port_wait == 'b0) begin
+          access_port_addr_we      = 'b1;
+          access_port_addr_new     = memory_address_reg;
+          access_port_rd_en_we     = 'b1;
+          access_port_rd_en_new    = 'b1;
+          access_port_wordsize_we  = 'b1; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit
+          access_port_wordsize_new = 2; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit
+        end
+      end
+    end
+  end
+
+  //----------------------------------------------------------------
+  // Memory Address calculator
+  // Updates memory address reg.
+  //   Initilize to NTP Extension start calulcated by IP decode.
+  //   Increments by NTP Extension length
+  //   Until all bytes consumed.
+  //----------------------------------------------------------------
+
+  always @*
+  begin : memory_address_calculator
+    memory_address_we    = 'b0;
+    memory_address_new   = 'b0;
+
+    if (state_reg == STATE_LENGTH_CHECKS) begin
+      memory_address_we  = 'b1;
+      memory_address_new = ipdecode_ntp_addr_reg;
+    end
+
+    if (state_reg == STATE_EXTRACT_EXT_FROM_RAM) begin
+      task_incremment_address_for_nts_extension(
+           memory_address_reg, ntp_extension_length_reg[ntp_extension_counter_reg], /* IN */
+           memory_address_next_reg, memory_address_failure_reg, memory_address_lastbyte_read_reg /*OUT*/);
+
+      if (ntp_extension_copied_reg[ntp_extension_counter_reg] && memory_address_failure_reg == 'b0 && memory_address_lastbyte_read_reg == 'b0 && ntp_extension_counter_reg!=NTP_EXTENSION_FIELDS-1) begin
+        memory_address_we  = 'b1;
+        memory_address_new = memory_address_next_reg;
+      end
+
+    end else begin
+      memory_address_next_reg = 0;
+      memory_address_failure_reg = 1;
+      memory_address_lastbyte_read_reg = 1;
+    end
+  end
+
+  //----------------------------------------------------------------
+  // NTP Extension counter control
+  // Increments 0, 1, ..., NTP_EXTENSION_FIELDS-1
+  //   for each NTP Extension read
+  //----------------------------------------------------------------
+
+  always @*
+  begin : ntp_extension_counter_control
+    ntp_extension_counter_we  = 'b0;
+    ntp_extension_counter_new = 'b0;
+    case (state_reg)
+      STATE_IDLE:
+        if (i_process_initial) begin
+          ntp_extension_counter_we  = 'b1;
+          ntp_extension_counter_new = 'b0;
+        end
+      STATE_EXTRACT_EXT_FROM_RAM:
+        if (ntp_extension_copied_reg[ntp_extension_counter_reg] && memory_address_failure_reg == 'b0 && memory_address_lastbyte_read_reg == 'b0 && ntp_extension_counter_reg!=NTP_EXTENSION_FIELDS-1) begin
+          ntp_extension_counter_we  = 'b1;
+          ntp_extension_counter_new = ntp_extension_counter_reg + 1;
+        end
+      default: ;
+    endcase
+  end
+
+
+  //----------------------------------------------------------------
+  // Finite State Machine
+  // Overall functionallitty control
+  //----------------------------------------------------------------
+
+  always @*
+  begin : FSM
+    state_we   = 'b0;
+    state_new  = STATE_IDLE;
+
+    if (i_clear)
+      state_we  = 'b1;
+
+    else case (state_reg)
+      STATE_IDLE:
+          if (i_process_initial) begin
+            state_we  = 'b1;
+            state_new = STATE_COPY;
+            case (i_last_word_data_valid)
+              8'b00000001: ;
+              8'b00000011: ;
+              8'b00000111: ;
+              8'b00001111: ;
+              8'b00011111: ;
+              8'b00111111: ;
+              8'b01111111: ;
+              8'b11111111: ;
+              default: state_new = STATE_ERROR_GENERAL;
+            endcase
           end
+       STATE_COPY:
+         if (i_process_initial == 1'b0) begin
+          state_we  = 'b1;
+          state_new = STATE_EXTRACT_FROM_IP;
+        end
+      STATE_EXTRACT_FROM_IP:
+        if (read_opcode_reg == OPCODE_LAST) begin
+          state_we  = 'b1;
+          state_new = STATE_LENGTH_CHECKS;
+        end
+      STATE_LENGTH_CHECKS:
+        begin
+          state_we = 'b1;
+          if (ipdecode_udp_length_reg < ( 8 /* UDP Header */ + 6*8 /* Minimum NTP Payload */ + 8 /* Smallest NTP extension */ ))
+            state_new = STATE_ERROR_GENERAL;
+          else if (ipdecode_udp_length_reg > 65507 /* IPv4 maximum UDP packet size */)
+            state_new  = STATE_ERROR_GENERAL;
+          else if (ipdecode_udp_length_reg[1:0] != 0) /* NTP packets are 7*8 + M(4+4n), always 4 byte aligned */
+            state_new  = STATE_ERROR_GENERAL;
+          else if (func_address_within_memory_bounds (ipdecode_ntp_addr_reg, 4) == 'b0)
+            state_new  = STATE_ERROR_GENERAL;
+          else
+            state_new  = STATE_EXTRACT_EXT_FROM_RAM;
+        end
+      STATE_EXTRACT_EXT_FROM_RAM:
+        if (ntp_extension_copied_reg[ntp_extension_counter_reg] == 'b1) begin
+          if (memory_address_failure_reg == 'b1) begin
+            state_we  = 'b1;
+            state_new = STATE_ERROR_GENERAL;
+          end else if (memory_address_lastbyte_read_reg == 1'b1) begin
+            state_we  = 'b1;
+            state_new = STATE_EXTENSIONS_EXTRACTED;
+          end if (ntp_extension_counter_reg==NTP_EXTENSION_FIELDS-1) begin
+            state_we  = 'b1;
+            state_new = STATE_ERROR_GENERAL;
+          end
+        end
+      STATE_ERROR_GENERAL:
+        begin
+          state_we  = 'b1;
+          state_new = STATE_IDLE;
+        end
+      default:
+        begin
+          state_we  = 'b1;
+          state_new = STATE_IDLE;
+        end
+    endcase
+  end
+
+  //----------------------------------------------------------------
+  // Debug messages
+  // Only emits messages that are useful for running local debug
+  //----------------------------------------------------------------
+
+  always @ (posedge i_clk, posedge i_areset)
+  begin : debug_messages
+    if (i_areset == 1'b1) begin
+      ;
+    end else begin
+      case (state_reg)
+        STATE_IDLE: ;
+        STATE_COPY: ;
+        STATE_EXTRACT_FROM_IP: ;
+        STATE_LENGTH_CHECKS: ;
+        STATE_EXTRACT_EXT_FROM_RAM: ;
+        STATE_ERROR_GENERAL: $display("%s:%0d warning: error",`__FILE__,`__LINE__);
+        default: $display("%s:%0d warning: state %0d not implemented",`__FILE__,`__LINE__, state_reg);
       endcase
     end
   end

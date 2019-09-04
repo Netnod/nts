@@ -29,21 +29,22 @@
 //
 
 module nts_rx_buffer #(
-  parameter ADDR_WIDTH = 10
+  parameter ADDR_WIDTH = 10,
+  parameter ACCESS_PORT_WIDTH = 64
 ) (
-  input  wire                    i_areset, // async reset
-  input  wire                    i_clk,
-  input  wire                    i_clear,
-  input  wire                    i_dispatch_packet_available,
-  input  wire                    i_dispatch_fifo_empty,
-  output wire                    o_dispatch_fifo_rd_en,
-  input  wire [63:0]             i_dispatch_fifo_rd_data,
-  output wire                    o_access_port_wait,
-  input  wire [ADDR_WIDTH+3-1:0] i_access_port_addr,
-  input  wire [2:0]              i_access_port_wordsize,
-  input  wire                    i_access_port_rd_en,
-  output wire                    o_access_port_rd_dv,
-  output wire [63:0]             o_access_port_rd_data
+  input  wire                         i_areset, // async reset
+  input  wire                         i_clk,
+  input  wire                         i_clear,
+  input  wire                         i_dispatch_packet_available,
+  input  wire                         i_dispatch_fifo_empty,
+  output wire                         o_dispatch_fifo_rd_en,
+  input  wire                  [63:0] i_dispatch_fifo_rd_data,
+  output wire                         o_access_port_wait,
+  input  wire      [ADDR_WIDTH+3-1:0] i_access_port_addr,
+  input  wire                   [2:0] i_access_port_wordsize,
+  input  wire                         i_access_port_rd_en,
+  output wire                         o_access_port_rd_dv,
+  output wire [ACCESS_PORT_WIDTH-1:0] o_access_port_rd_data
 );
 
   //----------------------------------------------------------------
@@ -78,25 +79,27 @@ module nts_rx_buffer #(
   reg  [ADDR_WIDTH-1:0]   fifo_addr_reg;
 
   //---- internal registers for handling access port
-  reg                     access_ws_we;
-  reg  [2:0]              access_ws_new;
-  reg  [2:0]              access_ws_reg;
-
-  reg                     access_out_we;
-  reg  [63:0]             access_out_new;
-  reg  [63:0]             access_out_reg;
-
-  reg                     access_wait_we;
-  reg                     access_wait_new;
-  reg                     access_wait_reg;
-
-  reg                     access_dv_we;
-  reg                     access_dv_new;
-  reg                     access_dv_reg;
-
-  reg                     access_addr_lo_we;
-  reg  [2:0]              access_addr_lo_new;
-  reg  [2:0]              access_addr_lo_reg;
+  reg                         access_addr_lo_we;
+  reg                   [2:0] access_addr_lo_new;
+  reg                   [2:0] access_addr_lo_reg;
+  reg                         access_dv_we;
+  reg                         access_dv_new;
+  reg                         access_dv_reg;
+  reg                         access_out_we;
+  reg [ACCESS_PORT_WIDTH-1:0] access_out_new;
+  reg [ACCESS_PORT_WIDTH-1:0] access_out_reg;
+  reg                         access_wait_we;
+  reg                         access_wait_new;
+  reg                         access_wait_reg;
+  reg                         access_ws_we;
+  reg                         access_ws8bit_new;
+  reg                         access_ws8bit_reg;
+  reg                         access_ws16bit_new;
+  reg                         access_ws16bit_reg;
+  reg                         access_ws32bit_new;
+  reg                         access_ws32bit_reg;
+  reg                         access_ws64bit_new;
+  reg                         access_ws64bit_reg;
 
   // ---- internal registers, wires for handling memory access
   reg                     ram_wr_en_we;
@@ -139,6 +142,35 @@ module nts_rx_buffer #(
   );
 
   //----------------------------------------------------------------
+  // Task copy_from_ram_to_accessout
+  // Copies bits from RAM (ram_rd_data) to access_out_new
+  // Avoids accessing beyond ACCESS_PORT_WIDTH bits, i.e. this task
+  // avoids lint and optimization warnings upon 64bit mode present
+  // when design is restricted to 32bit or 16 bit support.
+  //----------------------------------------------------------------
+  task copy_from_ram_to_accessout;
+    inout [ACCESS_PORT_WIDTH-1:0] dst;
+    input                 integer dst_start;
+    input                  [63:0] src;
+    input                 integer src_start;
+    input                 integer bits;
+    begin : copy_from_ram_to_accessout_locals
+      integer i;
+      //$display("%s:%0d copy_from_ram_to_accessout_locals(dst, %0d, src, %0d, %0d)", `__FILE__, `__LINE__, dst_start, src_start, bits);
+      for (i = 0; i < bits; i=i+1) begin : copy_from_ram_to_accessout_loop_locals
+        integer ram_offset;
+        integer access_out_offset;
+        ram_offset = src_start + i;
+        access_out_offset = dst_start + i;
+        if (access_out_offset < ACCESS_PORT_WIDTH) begin
+          dst[access_out_offset] = src[ram_offset];
+        end
+      end
+    end
+  endtask
+
+
+  //----------------------------------------------------------------
   // Register Update
   // Update functionality for all registers in the core.
   // All registers are positive edge triggered with asynchronous
@@ -152,7 +184,10 @@ module nts_rx_buffer #(
       access_dv_reg            <= 'b0;
       access_out_reg           <= 'b0;
       access_wait_reg          <= 'b0;
-      access_ws_reg            <= 'b0;
+      access_ws8bit_reg        <= 'b0;
+      access_ws16bit_reg       <= 'b0;
+      access_ws32bit_reg       <= 'b0;
+      access_ws64bit_reg       <= 'b0;
       dispatch_fifo_rd_en_reg  <= 'b0;
       fifo_addr_reg            <= 'b0;
       memctrl_reg              <= 'b0;
@@ -166,8 +201,12 @@ module nts_rx_buffer #(
       if (access_wait_we)
         access_wait_reg        <= access_wait_new;
 
-      if (access_ws_we)
-        access_ws_reg          <= access_ws_new;
+      if (access_ws_we) begin
+        access_ws8bit_reg      <= access_ws8bit_new;
+        access_ws16bit_reg     <= access_ws16bit_new;
+        access_ws32bit_reg     <= access_ws32bit_new;
+        access_ws64bit_reg     <= access_ws64bit_new;
+      end
 
       if (access_addr_lo_we)
         access_addr_lo_reg     <= access_addr_lo_new;
@@ -275,34 +314,12 @@ module nts_rx_buffer #(
         begin
           memctrl_we            = 'b1;
           memctrl_new           = MEMORY_CTRL_IDLE;
-          case (access_ws_reg)
-            0: ;
-            1:
-              case (access_addr_lo_reg)
-                7: memctrl_new  = MEMORY_CTRL_ERROR;
-                default ;
-              endcase
-            2:
-              case (access_addr_lo_reg)
-                5: memctrl_new  = MEMORY_CTRL_ERROR;
-                6: memctrl_new  = MEMORY_CTRL_ERROR;
-                7: memctrl_new  = MEMORY_CTRL_ERROR;
-                default: ;
-              endcase
-            3:
-              case (access_addr_lo_reg)
-                1: memctrl_new  = MEMORY_CTRL_ERROR;
-                2: memctrl_new  = MEMORY_CTRL_ERROR;
-                3: memctrl_new  = MEMORY_CTRL_ERROR;
-                4: memctrl_new  = MEMORY_CTRL_ERROR;
-                5: memctrl_new  = MEMORY_CTRL_ERROR;
-                6: memctrl_new  = MEMORY_CTRL_ERROR;
-                7: memctrl_new  = MEMORY_CTRL_ERROR;
-                default: ;
-              endcase
-            default:
-              memctrl_new       = MEMORY_CTRL_ERROR;
-          endcase
+          if (access_ws16bit_reg && access_addr_lo_reg >= 7)
+            memctrl_new  = MEMORY_CTRL_ERROR;
+          else if (access_ws32bit_reg && access_addr_lo_reg >= 5)
+            memctrl_new  = MEMORY_CTRL_ERROR;
+          else if (access_ws64bit_reg && access_addr_lo_reg >= 1)
+            memctrl_new  = MEMORY_CTRL_ERROR;
         end
       MEMORY_CTRL_READ_1ST_DLY:
         begin
@@ -313,70 +330,37 @@ module nts_rx_buffer #(
         begin
           memctrl_we            = 'b1;
           memctrl_new           = MEMORY_CTRL_READ_2ND;
-          case (access_ws_reg)
-            0: memctrl_new      = MEMORY_CTRL_ERROR;
-            1:
-              case (access_addr_lo_reg)
-                0: memctrl_new  = MEMORY_CTRL_ERROR;
-                1: memctrl_new  = MEMORY_CTRL_ERROR;
-                2: memctrl_new  = MEMORY_CTRL_ERROR;
-                3: memctrl_new  = MEMORY_CTRL_ERROR;
-                4: memctrl_new  = MEMORY_CTRL_ERROR;
-                5: memctrl_new  = MEMORY_CTRL_ERROR;
-                6: memctrl_new  = MEMORY_CTRL_ERROR;
-                default: ;
-             endcase
-            2:
-              case (access_addr_lo_reg)
-                0: memctrl_new  = MEMORY_CTRL_ERROR;
-                1: memctrl_new  = MEMORY_CTRL_ERROR;
-                2: memctrl_new  = MEMORY_CTRL_ERROR;
-                3: memctrl_new  = MEMORY_CTRL_ERROR;
-                4: memctrl_new  = MEMORY_CTRL_ERROR;
-                default: ;
-              endcase
-            3:
-              case (access_addr_lo_reg)
-                0: memctrl_new  = MEMORY_CTRL_ERROR;
-                default ;
-              endcase
-            default:
-               memctrl_new      = MEMORY_CTRL_ERROR;
-          endcase
+
+          if (access_ws8bit_reg)
+            memctrl_new         = MEMORY_CTRL_ERROR;
+
+          else if (access_ws16bit_reg && access_addr_lo_reg < 7)
+            memctrl_new         = MEMORY_CTRL_ERROR;
+
+          else if (access_ws32bit_reg && access_addr_lo_reg < 5)
+            memctrl_new         = MEMORY_CTRL_ERROR;
+
+          else if (access_ws64bit_reg && access_addr_lo_reg == 0)
+            memctrl_new         = MEMORY_CTRL_ERROR;
+
         end
       MEMORY_CTRL_READ_2ND:
         begin
           memctrl_we            = 'b1;
           memctrl_new           = MEMORY_CTRL_IDLE;
-          case (access_ws_reg)
-            1:
-              case (access_addr_lo_reg)
-                0: memctrl_new  = MEMORY_CTRL_ERROR;
-                1: memctrl_new  = MEMORY_CTRL_ERROR;
-                2: memctrl_new  = MEMORY_CTRL_ERROR;
-                3: memctrl_new  = MEMORY_CTRL_ERROR;
-                4: memctrl_new  = MEMORY_CTRL_ERROR;
-                5: memctrl_new  = MEMORY_CTRL_ERROR;
-                6: memctrl_new  = MEMORY_CTRL_ERROR;
-                default: ;
-              endcase
-            2:
-              case (access_addr_lo_reg)
-                0: memctrl_new  = MEMORY_CTRL_ERROR;
-                1: memctrl_new  = MEMORY_CTRL_ERROR;
-                2: memctrl_new  = MEMORY_CTRL_ERROR;
-                3: memctrl_new  = MEMORY_CTRL_ERROR;
-                4: memctrl_new  = MEMORY_CTRL_ERROR;
-                default: ;
-              endcase
-            3:
-              case (access_addr_lo_reg)
-                0: memctrl_new  = MEMORY_CTRL_ERROR;
-                default: ;
-              endcase
-            default:
-              memctrl_new       = MEMORY_CTRL_ERROR;
-          endcase
+
+          if (access_ws8bit_reg)
+            memctrl_new         = MEMORY_CTRL_ERROR;
+
+          else if (access_ws16bit_reg && access_addr_lo_reg < 7)
+            memctrl_new         = MEMORY_CTRL_ERROR;
+
+          else if (access_ws32bit_reg && access_addr_lo_reg < 5)
+            memctrl_new         = MEMORY_CTRL_ERROR;
+
+          else if (access_ws64bit_reg && access_addr_lo_reg == 0)
+            memctrl_new         = MEMORY_CTRL_ERROR;
+
         end
       MEMORY_CTRL_ERROR:
         begin
@@ -474,11 +458,11 @@ module nts_rx_buffer #(
 
   //----------------------------------------------------------------
   // Access port
-  // Allows unaligned reads
+  // Allows naligned reads
   //----------------------------------------------------------------
 
   always @*
-  begin : access_port_control
+  begin : acess_port_control
     access_addr_lo_we             = 'b0;
     access_addr_lo_new            = 'b0;
     access_dv_we                  = 'b0;
@@ -488,7 +472,10 @@ module nts_rx_buffer #(
     access_wait_we                = 'b0;
     access_wait_new               = 'b0;
     access_ws_we                  = 'b0;
-    access_ws_new                 = 'b0;
+    access_ws8bit_new             = 'b0;
+    access_ws16bit_new            = 'b0;
+    access_ws32bit_new            = 'b0;
+    access_ws64bit_new            = 'b0;
     case (memctrl_reg)
       MEMORY_CTRL_IDLE:
         begin
@@ -503,9 +490,15 @@ module nts_rx_buffer #(
             access_ws_we          = 'b1;
             access_addr_lo_we     = 'b1;
 
-            access_ws_new         = i_access_port_wordsize;
             access_wait_new       = 'b1;
             access_addr_lo_new    = i_access_port_addr[2:0];
+            case (i_access_port_wordsize)
+              0: access_ws8bit_new  = 'b1;
+              1: access_ws16bit_new = 'b1;
+              2: access_ws32bit_new = 'b1;
+              3: access_ws64bit_new = 'b1;
+              default: ;
+            endcase
           end
         end
       MEMORY_CTRL_READ_SIMPLE:
@@ -513,123 +506,106 @@ module nts_rx_buffer #(
           access_dv_we            = 'b1;
           access_dv_new           = 'b1;
           access_out_we           = 'b1;
+          access_out_new          = 'b0;
           access_wait_we          = 'b1;
           access_wait_new         = 'b0;
-          case (access_ws_reg)
-            0:
+          if (access_ws8bit_reg)
               case (access_addr_lo_reg)
-                0: access_out_new = { 56'b0, ram_rd_data[63:56] };
-                1: access_out_new = { 56'b0, ram_rd_data[55:48] };
-                2: access_out_new = { 56'b0, ram_rd_data[47:40] };
-                3: access_out_new = { 56'b0, ram_rd_data[39:32] };
-                4: access_out_new = { 56'b0, ram_rd_data[31:24] };
-                5: access_out_new = { 56'b0, ram_rd_data[23:16] };
-                6: access_out_new = { 56'b0, ram_rd_data[15:8] };
-                7: access_out_new = { 56'b0, ram_rd_data[7:0] };
-                default:
-                  access_out_we   = 'b0;
+                0: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 56, 8);
+                1: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 48, 8);
+                2: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 40, 8);
+                3: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 32, 8);
+                4: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 24, 8);
+                5: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 16, 8);
+                6: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 8, 8);
+                7: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 0, 8);
+                default: ;
               endcase
-            1:
+          else if (access_ws16bit_reg)
               case (access_addr_lo_reg)
-                0: access_out_new = { 48'b0, ram_rd_data[63:48] };
-                1: access_out_new = { 48'b0, ram_rd_data[55:40] };
-                2: access_out_new = { 48'b0, ram_rd_data[47:32] };
-                3: access_out_new = { 48'b0, ram_rd_data[39:24] };
-                4: access_out_new = { 48'b0, ram_rd_data[31:16] };
-                5: access_out_new = { 48'b0, ram_rd_data[23:8] };
-                6: access_out_new = { 48'b0, ram_rd_data[15:0] };
-                default:
-                  access_out_we   = 'b0;
+                0: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 48, 16);
+                1: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 40, 16);
+                2: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 32, 16);
+                3: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 24, 16);
+                4: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 16, 16);
+                5: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 8, 16);
+                6: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 0, 16);
+                default: ;
               endcase
-            2:
-              case (access_addr_lo_reg)
-                0: access_out_new = { 32'b0, ram_rd_data[63:32] };
-                1: access_out_new = { 32'b0, ram_rd_data[55:24] };
-                2: access_out_new = { 32'b0, ram_rd_data[47:16] };
-                3: access_out_new = { 32'b0, ram_rd_data[39:8] };
-                4: access_out_new = { 32'b0, ram_rd_data[31:0] };
-                default:
-                  access_out_we   = 'b0;
-              endcase
-            3:
-              case (access_addr_lo_reg)
-                0: access_out_new = ram_rd_data[63:0];
-                default:
-                  access_out_we   = 'b0;
-              endcase
-            default:
-              access_out_we       = 'b0;
-          endcase
+          else if (access_ws32bit_reg)
+            case (access_addr_lo_reg)
+              0: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 32, 32);
+              1: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 24, 32);
+              2: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 16, 32);
+              3: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 8, 32);
+              4: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 0, 32);
+              default: ;
+            endcase
+          else if (access_ws64bit_reg)
+            case (access_addr_lo_reg)
+              0: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 0, 64);
+              default: ;
+            endcase
         end
       MEMORY_CTRL_READ_1ST:
         begin
           access_out_we           = 'b1;
-          case (access_ws_reg)
-            1:
-              case (access_addr_lo_reg)
-                7: access_out_new = { 48'b0, ram_rd_data[7:0], 8'b0 };
-                default:
-                  access_out_we   = 'b0;
-              endcase
-            2:
-              case (access_addr_lo_reg)
-                5: access_out_new = { 32'b0, ram_rd_data[23:0], 8'b0 };
-                6: access_out_new = { 32'b0, ram_rd_data[15:0], 16'b0 };
-                7: access_out_new = { 32'b0, ram_rd_data[7:0], 24'b0 };
-                default:
-                   access_out_we  = 'b0;
-              endcase
-            3:
-              case (access_addr_lo_reg)
-                1: access_out_new = { ram_rd_data[55:0], 8'b0 };
-                2: access_out_new = { ram_rd_data[47:0], 16'b0 };
-                3: access_out_new = { ram_rd_data[39:0], 24'b0 };
-                4: access_out_new = { ram_rd_data[31:0], 32'b0 };
-                5: access_out_new = { ram_rd_data[23:0], 40'b0 };
-                6: access_out_new = { ram_rd_data[15:0], 48'b0 };
-                7: access_out_new = { ram_rd_data[7:0], 56'b0 };
-              endcase
-            default:
-              access_out_we       = 'b0;
-          endcase
+          access_out_new          = 0;
+          if (access_ws16bit_reg)
+            case (access_addr_lo_reg)
+              7: copy_from_ram_to_accessout(access_out_new, 8, ram_rd_data, 0, 8);
+              default: ;
+            endcase
+          else if (access_ws32bit_reg)
+            case (access_addr_lo_reg)
+              5: copy_from_ram_to_accessout(access_out_new, 8, ram_rd_data, 0, 24);
+              6: copy_from_ram_to_accessout(access_out_new, 16, ram_rd_data, 0, 16);
+              7: copy_from_ram_to_accessout(access_out_new, 24, ram_rd_data, 0, 8);
+              default: ;
+            endcase
+          else if (access_ws64bit_reg)
+            case (access_addr_lo_reg)
+              1: copy_from_ram_to_accessout(access_out_new, 8, ram_rd_data, 0, 56);
+              2: copy_from_ram_to_accessout(access_out_new, 16, ram_rd_data, 0, 48);
+              3: copy_from_ram_to_accessout(access_out_new, 24, ram_rd_data, 0, 40);
+              4: copy_from_ram_to_accessout(access_out_new, 32, ram_rd_data, 0, 32);
+              5: copy_from_ram_to_accessout(access_out_new, 40, ram_rd_data, 0, 24);
+              6: copy_from_ram_to_accessout(access_out_new, 48, ram_rd_data, 0, 16);
+              7: copy_from_ram_to_accessout(access_out_new, 56, ram_rd_data, 0, 8);
+              default: ;
+            endcase
         end
       MEMORY_CTRL_READ_2ND:
         begin
           access_dv_we            = 'b1;
           access_dv_new           = 'b1;
           access_out_we           = 'b1;
+          access_out_new          = access_out_reg;
           access_wait_we          = 'b1;
           access_wait_new         = 'b0;
-          case (access_ws_reg)
-            1:
-             case (access_addr_lo_reg)
-               7: access_out_new = { 48'b0, access_out_reg[15:8], ram_rd_data[63:56] };
-               default:
-                 access_out_we   = 'b0;
-             endcase
-            2:
-              case (access_addr_lo_reg)
-                5: access_out_new = { 32'b0, access_out_reg[31:8], ram_rd_data[63:56] };
-                6: access_out_new = { 32'b0, access_out_reg[31:16], ram_rd_data[63:48] };
-                7: access_out_new = { 32'b0, access_out_reg[31:24], ram_rd_data[63:40] };
-                default:
-                  access_out_we   = 'b0;
-              endcase
-            3:
-              case (access_addr_lo_reg)
-                1: access_out_new = { access_out_reg[63:8], ram_rd_data[63:56] };
-                2: access_out_new = { access_out_reg[63:16], ram_rd_data[63:48] };
-                3: access_out_new = { access_out_reg[63:24], ram_rd_data[63:40] };
-                4: access_out_new = { access_out_reg[63:32], ram_rd_data[63:32] };
-                5: access_out_new = { access_out_reg[63:40], ram_rd_data[63:24] };
-                6: access_out_new = { access_out_reg[63:48], ram_rd_data[63:16] };
-                7: access_out_new = { access_out_reg[63:56], ram_rd_data[63:8] };
-                default:
-                  access_out_we   = 'b0;
-              endcase
-            default:
-              access_out_we       = 'b0;
-          endcase
+          if ( access_ws16bit_reg)
+            case (access_addr_lo_reg)
+              7: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 56, 8);
+              default: ;
+            endcase
+          else if (access_ws32bit_reg)
+            case (access_addr_lo_reg)
+              5: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 56, 8);
+              6: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 48, 16);
+              7: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 40, 24);
+              default: ;
+            endcase
+          else if (access_ws64bit_reg)
+            case (access_addr_lo_reg)
+              1: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 56, 8);
+              2: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 48, 16);
+              3: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 40, 24);
+              4: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 32, 32);
+              5: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 24, 40);
+              6: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 16, 48);
+              7: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 8, 56);
+              default: ;
+            endcase
         end
       default ;
     endcase

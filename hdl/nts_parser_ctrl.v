@@ -29,31 +29,34 @@
 //
 
 module nts_parser_ctrl #(
-  parameter ADDR_WIDTH = 10
+  parameter ADDR_WIDTH = 10,
+  parameter ACCESS_PORT_WIDTH = 64
 ) (
   input  wire                    i_areset, // async reset
   input  wire                    i_clk,
   input  wire                    i_clear,
   input  wire                    i_process_initial,
-  input  wire  [7:0]             i_last_word_data_valid,
-  input  wire [63:0]             i_data,
+  input  wire              [7:0] i_last_word_data_valid,
+  input  wire             [63:0] i_data,
 
-  input  wire                    i_access_port_wait,
-  output wire [ADDR_WIDTH+3-1:0] o_access_port_addr,
-  output wire [2:0]              o_access_port_wordsize,
-  output wire                    o_access_port_rd_en,
-  input  wire                    i_access_port_rd_dv,
-  input  wire [63:0]             i_access_port_rd_data
+  input  wire                         i_access_port_wait,
+  output wire      [ADDR_WIDTH+3-1:0] o_access_port_addr,
+  output wire                   [2:0] o_access_port_wordsize,
+  output wire                         o_access_port_rd_en,
+  input  wire                         i_access_port_rd_dv,
+  input  wire [ACCESS_PORT_WIDTH-1:0] i_access_port_rd_data
 );
 
   //----------------------------------------------------------------
   // Internal constant and parameter definitions.
   //----------------------------------------------------------------
 
-  localparam [3:0] OPCODE_GET_OFFSET_UDP_DATA = 4'b0;
-  localparam [3:0] OPCODE_GET_LENGTH_UDP      = 4'b1;
-  localparam [3:0] OPCODE_FIRST               = OPCODE_GET_OFFSET_UDP_DATA;
-  localparam [3:0] OPCODE_LAST                = OPCODE_GET_LENGTH_UDP;
+  localparam IP_OPCODE_WIDTH = 1;
+
+  localparam [IP_OPCODE_WIDTH-1:0] OPCODE_GET_OFFSET_UDP_DATA = 'b0;
+  localparam [IP_OPCODE_WIDTH-1:0] OPCODE_GET_LENGTH_UDP      = 'b1;
+  localparam [IP_OPCODE_WIDTH-1:0] OPCODE_FIRST               = OPCODE_GET_OFFSET_UDP_DATA;
+  localparam [IP_OPCODE_WIDTH-1:0] OPCODE_LAST                = OPCODE_GET_LENGTH_UDP;
 
   localparam STATE_IDLE                  = 4'h0;
   localparam STATE_COPY                  = 4'h1;
@@ -65,6 +68,7 @@ module nts_parser_ctrl #(
 
   localparam NTP_EXTENSION_BITS          = 3;
   localparam NTP_EXTENSION_FIELDS        = (1<<NTP_EXTENSION_BITS);
+
 
   //----------------------------------------------------------------
   // Registers including update variables and write enable.
@@ -93,8 +97,8 @@ module nts_parser_ctrl #(
   reg                   [3:0] last_bytes_reg;
 
   reg                         read_opcode_we;
-  reg                   [3:0] read_opcode_new;
-  reg                   [3:0] read_opcode_reg;
+  reg   [IP_OPCODE_WIDTH-1:0] read_opcode_new;
+  reg   [IP_OPCODE_WIDTH-1:0] read_opcode_reg;
 
 
   reg                          memory_bound_we;
@@ -151,7 +155,10 @@ module nts_parser_ctrl #(
   // IP decoding core
   //----------------------------------------------------------------
 
-  nts_ip #(ADDR_WIDTH) ip_decoder (
+  nts_ip #(
+    .ADDR_WIDTH(ADDR_WIDTH),
+    .IP_OPCODE_WIDTH(IP_OPCODE_WIDTH)
+  ) ip_decoder (
     .i_areset(i_areset),
     .i_clk(i_clk),
     .i_clear(i_clear),
@@ -507,12 +514,14 @@ module nts_parser_ctrl #(
            memory_address_reg, ntp_extension_length_reg[ntp_extension_counter_reg], /* IN */
            memory_address_next_reg, memory_address_failure_reg, memory_address_lastbyte_read_reg /*OUT*/);
 
+      //$display("%s:%0d memory_address_reg=%h ntp_extension_copied_reg[ntp_extension_counter_reg]=%h ntp_extension_length_reg[ntp_extension_counter_reg]=%h memory_address_failure_reg=%h ntp_extension_counter_reg=%h",`__FILE__,`__LINE__, memory_address_reg, ntp_extension_copied_reg[ntp_extension_counter_reg], ntp_extension_length_reg[ntp_extension_counter_reg], memory_address_failure_reg, ntp_extension_counter_reg);
       if (ntp_extension_copied_reg[ntp_extension_counter_reg] && memory_address_failure_reg == 'b0 && memory_address_lastbyte_read_reg == 'b0 && ntp_extension_counter_reg!=NTP_EXTENSION_FIELDS-1) begin
         memory_address_we  = 'b1;
         memory_address_new = memory_address_next_reg;
       end
 
     end else begin
+      memory_address_we  = 'b1;
       memory_address_next_reg = 0;
       memory_address_failure_reg = 1;
       memory_address_lastbyte_read_reg = 1;
@@ -604,12 +613,14 @@ module nts_parser_ctrl #(
           if (memory_address_failure_reg == 'b1) begin
             state_we  = 'b1;
             state_new = STATE_ERROR_GENERAL;
+            $display("%s:%0d memory_address_failure_reg %h",`__FILE__,`__LINE__, memory_address_failure_reg);
           end else if (memory_address_lastbyte_read_reg == 1'b1) begin
             state_we  = 'b1;
             state_new = STATE_EXTENSIONS_EXTRACTED;
           end if (ntp_extension_counter_reg==NTP_EXTENSION_FIELDS-1) begin
             state_we  = 'b1;
             state_new = STATE_ERROR_GENERAL;
+            $display("%s:%0d ",`__FILE__,`__LINE__);
           end
         end
       STATE_ERROR_GENERAL:

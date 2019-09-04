@@ -46,6 +46,8 @@ module nts_engine #(
   // Internal constant and parameter definitions.
   //----------------------------------------------------------------
 
+  localparam ACCESS_PORT_WIDTH       = 32;
+
   localparam STATE_RESET             = 4'h0;
   localparam STATE_EMPTY             = 4'h1;
   localparam STATE_COPY              = 4'h2;
@@ -78,14 +80,14 @@ module nts_engine #(
   // Wires.
   //----------------------------------------------------------------
 
-  wire                    dispatch_fifo_rd_en;
-  wire                    access_port_wait;
-  wire [ADDR_WIDTH+3-1:0] access_port_addr;
-  wire [2:0]              access_port_wordsize;
-  wire                    access_port_rd_en;
-  wire                    access_port_rd_dv;
-  wire [63:0]             access_port_rd_data;
-  wire                    debug_delay_continue;
+  wire                         dispatch_fifo_rd_en;
+  wire                         access_port_wait;
+  wire      [ADDR_WIDTH+3-1:0] access_port_addr;
+  wire                   [2:0] access_port_wordsize;
+  wire                         access_port_rd_en;
+  wire                         access_port_rd_dv;
+  wire [ACCESS_PORT_WIDTH-1:0] access_port_rd_data;
+  wire                         debug_delay_continue;
 
   //----------------------------------------------------------------
   // Concurrent connectivity for ports etc.
@@ -101,7 +103,10 @@ module nts_engine #(
   // Receive buffer instantiation.
   //----------------------------------------------------------------
 
-  nts_rx_buffer #(ADDR_WIDTH) buffer (
+  nts_rx_buffer #(
+    .ADDR_WIDTH(ADDR_WIDTH),
+    .ACCESS_PORT_WIDTH(ACCESS_PORT_WIDTH)
+  ) buffer (
      .i_areset(i_areset),
      .i_clk(i_clk),
 
@@ -124,7 +129,10 @@ module nts_engine #(
   // Parser Ctrl instantiation.
   //----------------------------------------------------------------
 
-  nts_parser_ctrl #(ADDR_WIDTH) parser (
+  nts_parser_ctrl #(
+    .ADDR_WIDTH(ADDR_WIDTH),
+    .ACCESS_PORT_WIDTH(ACCESS_PORT_WIDTH)
+  ) parser (
    .i_areset(i_areset),
    .i_clk(i_clk),
 

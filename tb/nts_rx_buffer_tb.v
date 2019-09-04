@@ -77,7 +77,6 @@ module nts_rx_buffer_testbench;
       #10
       while(access_port_wait) begin
         `assert(access_port_rd_dv == 'b0);
-        //$display("%s:%0d %h.", `__FILE__, `__LINE__, access_port_rd_data);
         #10 ;
       end
       `assert(access_port_rd_dv == 'b1);
@@ -132,6 +131,12 @@ module nts_rx_buffer_testbench;
         `assert(access_port_rd_data == 64'h1deac0fef00d0123);
         read('b01_011, 3);
         `assert(access_port_rd_data == 64'heac0fef00d012345);
+        read('b01_100, 3);
+        `assert(access_port_rd_data == 64'hc0fef00d01234567);
+        read('b01_101, 3);
+        `assert(access_port_rd_data == 64'hfef00d0123456789);
+        read('b01_110, 3);
+        `assert(access_port_rd_data == 64'hf00d0123456789ab);
         read('b01_111, 3);
         `assert(access_port_rd_data == 64'h0d0123456789abcd);
 
@@ -140,6 +145,12 @@ module nts_rx_buffer_testbench;
         `assert(access_port_rd_data == 64'hde);
         read('b00_001, 0);
         `assert(access_port_rd_data == 64'had);
+        read('b01_010, 0);
+        `assert(access_port_rd_data == 64'h1d);
+        read('b01_011, 0);
+        `assert(access_port_rd_data == 64'hea);
+        read('b01_110, 0);
+        `assert(access_port_rd_data == 64'hf0);
         read('b10_111, 0);
         `assert(access_port_rd_data == 64'hef);
 
@@ -147,12 +158,26 @@ module nts_rx_buffer_testbench;
         #100
         read('b01_000, 1);
         `assert(access_port_rd_data == 64'habad);
+        read('b00_001, 1);
+        `assert(access_port_rd_data == 64'hadbe);
+        read('b01_010, 1);
+        `assert(access_port_rd_data == 64'h1dea);
+        read('b01_011, 1);
+        `assert(access_port_rd_data == 64'heac0);
+        read('b01_110, 1);
+        `assert(access_port_rd_data == 64'hf00d);
         read('b01_111, 1);
         `assert(access_port_rd_data == 64'h0d01);
 
         #100
         read('b01_000, 2);
         `assert(access_port_rd_data == 64'habad1dea);
+        read('b00_001, 2);
+        `assert(access_port_rd_data == 64'hadbeef00);
+        read('b01_010, 2);
+        `assert(access_port_rd_data == 64'h1deac0fe);
+        read('b01_011, 2);
+        `assert(access_port_rd_data == 64'heac0fef0);
         read('b01_100, 2);
         `assert(access_port_rd_data == 64'hc0fef00d);
         read('b01_101, 2);

@@ -29,22 +29,23 @@
 //
 
 module nts_ip #(
-  parameter ADDR_WIDTH = 10
+  parameter ADDR_WIDTH = 10,
+  parameter IP_OPCODE_WIDTH = 4
 ) (
-  input  wire                  i_areset, // async reset
-  input  wire                  i_clk,
-  input  wire                  i_clear,
-  input  wire                  i_process,
-  input  wire  [7:0]           i_last_word_data_valid,
-  input  wire [63:0]           i_data,
-  input  wire  [3:0]           i_read_opcode,
-  output wire                  o_detect_ipv4,
-  output wire                  o_detect_ipv4_bad,
-  output wire [31:0]           o_read_data
+  input  wire                       i_areset, // async reset
+  input  wire                       i_clk,
+  input  wire                       i_clear,
+  input  wire                       i_process,
+  input  wire                 [7:0] i_last_word_data_valid,
+  input  wire                [63:0] i_data,
+  input  wire [IP_OPCODE_WIDTH-1:0] i_read_opcode,
+  output wire                       o_detect_ipv4,
+  output wire                       o_detect_ipv4_bad,
+  output wire                [31:0] o_read_data
 );
 
-  localparam [3:0] OPCODE_GET_OFFSET_UDP_DATA = 4'b0000;
-  localparam [3:0] OPCODE_GET_LENGTH_UDP      = 4'b0001;
+  localparam [IP_OPCODE_WIDTH-1:0] OPCODE_GET_OFFSET_UDP_DATA = 'b0;
+  localparam [IP_OPCODE_WIDTH-1:0] OPCODE_GET_LENGTH_UDP      = 'b1;
 
   reg             [63:0] previous_i_data; //we receive i_data one cycle before process signal
   reg   [ADDR_WIDTH-1:0] addr;

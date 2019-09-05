@@ -77,8 +77,8 @@ module nts_engine #(
   reg       dispatch_packet_discard_reg;
 
   reg       delay_counter_we; //temporary debug register for simularing work in unimplemented states
-  reg [7:0] delay_counter_new; //temporary debug register for simularing work in unimplemented states
-  reg [7:0] delay_counter_reg; //temporary debug register for simularing work in unimplemented states
+  reg [6:0] delay_counter_new; //temporary debug register for simularing work in unimplemented states
+  reg [6:0] delay_counter_reg; //temporary debug register for simularing work in unimplemented states
 
   //----------------------------------------------------------------
   // Wires.

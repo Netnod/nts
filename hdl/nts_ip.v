@@ -47,7 +47,9 @@ module nts_ip #(
   localparam [IP_OPCODE_WIDTH-1:0] OPCODE_GET_OFFSET_UDP_DATA = 'b0;
   localparam [IP_OPCODE_WIDTH-1:0] OPCODE_GET_LENGTH_UDP      = 'b1;
 
-  reg             [63:0] previous_i_data; //we receive i_data one cycle before process signal
+  reg             [31:0] previous_i_data; //We receive i_data one cycle before process signal
+                                          //We currently only use 32 bit LSB, so remove MSB for
+                                          //now just to make synthesis warnings go away
   reg   [ADDR_WIDTH-1:0] addr;
   reg             [15:0] ethernet_protocol;
   reg              [3:0] ip_version;
@@ -89,7 +91,7 @@ module nts_ip #(
       offset_udp_data   <= 'b0;
       previous_i_data   <= 'b0;
     end else begin
-      previous_i_data   <= i_data;
+      previous_i_data   <= i_data[31:0];
       if (i_clear) begin
          addr              <= 'b0;
          ethernet_protocol <= 'b0;

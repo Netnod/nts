@@ -39,7 +39,11 @@ module nts_engine #(
   input  wire [7:0]            i_dispatch_data_valid,
   input  wire                  i_dispatch_fifo_empty,
   output wire                  o_dispatch_fifo_rd_en,
-  input  wire [63:0]           i_dispatch_fifo_rd_data
+  input  wire [63:0]           i_dispatch_fifo_rd_data,
+  output wire                  o_detect_unique_identifier,
+  output wire                  o_detect_nts_cookie,
+  output wire                  o_detect_nts_cookie_placeholder,
+  output wire                  o_detect_nts_authenticator
 );
 
   //----------------------------------------------------------------
@@ -88,16 +92,25 @@ module nts_engine #(
   wire                         access_port_rd_dv;
   wire [ACCESS_PORT_WIDTH-1:0] access_port_rd_data;
   wire                         debug_delay_continue;
+  wire                         detect_unique_identifier;
+  wire                         detect_nts_cookie;
+  wire                         detect_nts_cookie_placeholder;
+  wire                         detect_nts_authenticator;
 
   //----------------------------------------------------------------
   // Concurrent connectivity for ports etc.
   //----------------------------------------------------------------
 
-  assign o_dispatch_packet_read_discard = dispatch_packet_discard_reg;
-  assign o_dispatch_fifo_rd_en          = dispatch_fifo_rd_en;
-  assign o_busy                         = busy_reg;
+  assign debug_delay_continue            = state_reg == STATE_TO_BE_IMPLEMENTED && (delay_counter_reg < 100);
 
-  assign debug_delay_continue           = state_reg == STATE_TO_BE_IMPLEMENTED && (delay_counter_reg < 100);
+  assign o_dispatch_packet_read_discard  = dispatch_packet_discard_reg;
+  assign o_dispatch_fifo_rd_en           = dispatch_fifo_rd_en;
+  assign o_busy                          = busy_reg;
+
+  assign o_detect_unique_identifier      = detect_unique_identifier;
+  assign o_detect_nts_cookie             = detect_nts_cookie;
+  assign o_detect_nts_cookie_placeholder = detect_nts_cookie_placeholder;
+  assign o_detect_nts_authenticator      = detect_nts_authenticator;
 
   //----------------------------------------------------------------
   // Receive buffer instantiation.
@@ -147,7 +160,12 @@ module nts_engine #(
    .o_access_port_wordsize(access_port_wordsize),
    .o_access_port_rd_en(access_port_rd_en),
    .i_access_port_rd_dv(access_port_rd_dv),
-   .i_access_port_rd_data(access_port_rd_data)
+   .i_access_port_rd_data(access_port_rd_data),
+
+   .o_detect_unique_identifier(detect_unique_identifier),
+   .o_detect_nts_cookie(detect_nts_cookie),
+   .o_detect_nts_cookie_placeholder(detect_nts_cookie_placeholder),
+   .o_detect_nts_authenticator(detect_nts_authenticator)
   );
 
   //----------------------------------------------------------------

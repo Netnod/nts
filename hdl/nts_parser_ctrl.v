@@ -44,7 +44,12 @@ module nts_parser_ctrl #(
   output wire                   [2:0] o_access_port_wordsize,
   output wire                         o_access_port_rd_en,
   input  wire                         i_access_port_rd_dv,
-  input  wire [ACCESS_PORT_WIDTH-1:0] i_access_port_rd_data
+  input  wire [ACCESS_PORT_WIDTH-1:0] i_access_port_rd_data,
+
+  output wire o_detect_unique_identifier,
+  output wire o_detect_nts_cookie,
+  output wire o_detect_nts_cookie_placeholder,
+  output wire o_detect_nts_authenticator
 );
 
   //----------------------------------------------------------------
@@ -57,6 +62,11 @@ module nts_parser_ctrl #(
   localparam [IP_OPCODE_WIDTH-1:0] OPCODE_GET_LENGTH_UDP      = 'b1;
   localparam [IP_OPCODE_WIDTH-1:0] OPCODE_FIRST               = OPCODE_GET_OFFSET_UDP_DATA;
   localparam [IP_OPCODE_WIDTH-1:0] OPCODE_LAST                = OPCODE_GET_LENGTH_UDP;
+
+  localparam [15:0] TAG_UNIQUE_IDENTIFIER      = 'h0104;
+  localparam [15:0] TAG_NTS_COOKIE             = 'h0204;
+  localparam [15:0] TAG_NTS_COOKIE_PLACEHOLDER = 'h0304;
+  localparam [15:0] TAG_NTS_AUTHENTICATOR      = 'h0404;
 
   localparam STATE_IDLE                  = 4'h0;
   localparam STATE_COPY                  = 4'h1;
@@ -134,6 +144,10 @@ module nts_parser_ctrl #(
   reg                   [15:0] ntp_extension_length_new;
   reg                   [15:0] ntp_extension_length_reg  [0:NTP_EXTENSION_FIELDS-1];
 
+  reg                          detect_unique_identifier_reg;
+  reg                          detect_nts_cookie_reg;
+  reg                          detect_nts_cookie_placeholder_reg;
+  reg                          detect_nts_authenticator_reg;
 
   //----------------------------------------------------------------
   // Wires.
@@ -150,6 +164,11 @@ module nts_parser_ctrl #(
   assign o_access_port_addr     = access_port_addr_reg;
   assign o_access_port_rd_en    = access_port_rd_en_reg;
   assign o_access_port_wordsize = access_port_wordsize_reg;
+
+  assign o_detect_unique_identifier      = detect_unique_identifier_reg;
+  assign o_detect_nts_cookie             = detect_nts_cookie_reg;
+  assign o_detect_nts_cookie_placeholder = detect_nts_cookie_placeholder_reg;
+  assign o_detect_nts_authenticator      = detect_nts_authenticator_reg;
 
   //----------------------------------------------------------------
   // IP decoding core
@@ -634,6 +653,36 @@ module nts_parser_ctrl #(
           state_new = STATE_IDLE;
         end
     endcase
+  end
+
+  //----------------------------------------------------------------
+  // Output detection signals
+  // Supports debugging/simulations and prevents reg optimizations
+  //----------------------------------------------------------------
+
+  always @*
+  begin : output_detection_signals
+    integer i;
+    detect_unique_identifier_reg      = 'b0;
+    detect_nts_cookie_reg             = 'b0;
+    detect_nts_cookie_placeholder_reg = 'b0;
+    detect_nts_authenticator_reg      = 'b0;
+    for (i = 0; i < NTP_EXTENSION_FIELDS; i = i + 1) begin
+      if (ntp_extension_copied_reg[i]) begin
+
+        if (ntp_extension_tag_reg[i]==TAG_UNIQUE_IDENTIFIER)
+          detect_unique_identifier_reg       = 'b1;
+
+        if (ntp_extension_tag_reg[i]==TAG_NTS_COOKIE)
+           detect_nts_cookie_reg             = 'b1;
+
+        if (ntp_extension_tag_reg[i]==TAG_NTS_COOKIE_PLACEHOLDER)
+           detect_nts_cookie_placeholder_reg = 'b1;
+
+        if (ntp_extension_tag_reg[i]==TAG_NTS_AUTHENTICATOR)
+           detect_nts_authenticator_reg      = 'b1;
+      end
+    end
   end
 
   //----------------------------------------------------------------

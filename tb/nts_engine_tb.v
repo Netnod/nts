@@ -101,6 +101,11 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
   wire                 o_dispatch_fifo_rd_en;
   reg [63:0]           i_dispatch_fifo_rd_data;
 
+  wire                 detect_unique_identifier;
+  wire                 detect_nts_cookie;
+  wire                 detect_nts_cookie_placeholder;
+  wire                 detect_nts_authenticator;
+
   localparam integer ETHHEADER_BITS  = 112;
   localparam integer IPV4HEADER_BITS = 160;
   localparam integer UDPHEADER_BITS  = 64;
@@ -216,7 +221,8 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
 
   task send_packet (
     input [65535:0] source,
-    input    [31:0] length
+    input    [31:0] length,
+    output    [3:0] detect_bits
   );
     integer i;
     integer packet_ptr;
@@ -224,6 +230,7 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
     reg [63:0] packet [0:99];
     begin
       if (verbose_output > 0) $display("%s:%0d Send packet!", `__FILE__, `__LINE__);
+      detect_bits = 'b0;
       `assert( (0==(length%8)) ); // byte aligned required
       for (i=0; i<100; i=i+1) begin
         packet[i] = 64'habad_1dea_f00d_cafe;
@@ -311,6 +318,7 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
       `assert( o_busy == 'b0 );
       `assert( o_dispatch_packet_read_discard == 'b1 );
       `assert( o_dispatch_fifo_rd_en == 'b0 );
+      detect_bits = {detect_unique_identifier, detect_nts_cookie, detect_nts_cookie_placeholder, detect_nts_authenticator};
       #10 ;
       `assert( o_busy == 'b0 );
       `assert( o_dispatch_packet_read_discard == 'b0 );
@@ -320,8 +328,10 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
   endtask
 
   task send_ntp4_req;
-    begin
-      send_packet({64816'b0, packet_eth_ipv4_udp_ntp}, ETHIPV4NTP_BITS);
+    begin : sent_ntp4_req_locals
+      reg [3:0] detect_bits;
+      send_packet({64816'b0, packet_eth_ipv4_udp_ntp}, ETHIPV4NTP_BITS, detect_bits);
+      `assert(detect_bits == 0);
     end
   endtask
 
@@ -337,25 +347,34 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
  reg [ETHIPV4_NTS_TESTPACKETS_BITS-1:0] nts_packet4 = { 64'hfe5400a6ab8d5254, 64'h00ab4ff908004500, 64'h02a0af1140004011, 64'h13c1c0a87a28c0a8, 64'h7a01007bb673028c, 64'h7818240400e60000, 64'h0c8a000000411f0e, 64'h83bce10908460b93, 64'h9a210caa0df97388, 64'h0014e1090a23473e, 64'h79d6e1090a234745, 64'hd670010400247876, 64'h7a8dcc0bed79d3f9, 64'h15e7a1687462bdf2, 64'h4551a72b8811f4f0, 64'hfff60a3f5f3a0404, 64'h0230001002184c98, 64'h841d4c4d6650413e, 64'h7e6ef3c02a95158c, 64'h0ca6c0697eeda65d, 64'hc43b2010d501be10, 64'hb7885861057daa1f, 64'h9846198e2c11859e, 64'h866b46cddd1b8d0b, 64'hf9bc6f8f73a90738, 64'h945544c7a2d2669a, 64'h57358ab0087dde93, 64'hc5c847fb0e79541e, 64'hc4478eb0d5debe06, 64'h8ac4658057b92a8d, 64'h72b6261555250a80, 64'hd105e7c74ecfdc35, 64'h5c7293b31b2b2870, 64'h36fd2d996d596c38, 64'h18ee16f05c99f2a2, 64'h0e45407c0f3c41d9, 64'hb66df99fbe66d55a, 64'h1ae2e29e65e07049, 64'hfa815c28caf9386f, 64'h60b027da6144de90, 64'h776ffe871328cf73, 64'h736686d6174e9b93, 64'h6a55a02306669324, 64'hac32815ac873ac09, 64'h2e5660dfec376fab, 64'h6022f75c9522a73a, 64'h1d09b2851f1a299a, 64'hcf1277f1cfd0a08c, 64'h8156dd8371978808, 64'hb10f8b9d61e84293, 64'h5e91439e49b9996e, 64'h35e6afeb90f4864b, 64'h7928370f80e027e6, 64'h4f571594f9135bed, 64'hdeb870fd1917db87, 64'hb1bf664e3e0a4709, 64'h92c6332942b3f11f, 64'h63ea4c2078090c78, 64'hc38cef99aa1f05ff, 64'h097b6b9375c5e115, 64'hd4f19ae5aebf69ff, 64'h47f6c3c356d17698, 64'hf576bc08f2240b7b, 64'h2a33357fb904c22b, 64'hf9782c961c3b5687, 64'h7f644b7e17c1ebbe, 64'h8905b533dc0ecd1a, 64'h2bd8d511c9ea52cc, 64'hb12738a0975c340c, 64'h32eab2f2244d05cf, 64'h18befe2b80a28c9d, 64'h2af727b6bda67acb, 64'h7ecc5e52fe073433, 64'h1292419d903e7415, 64'h9f978ecda5d867f3, 64'h17cf1c90d0202c69, 64'h9504bc5443cd2760, 64'h833578e8b5d1f9eb, 64'h29b53819409917e5, 64'h6a6477a032be781f, 64'hed5c4624b074b7e9, 64'h85c4ddb63f4c78e4, 64'h32f033202e284282, 64'ha121e52d7ab1a8ee, 64'hf832119af7c40023, 48'hbd782703fba3 };
 
   task send_nts_packet1;
-    begin
-      send_packet({60048'b0, nts_packet1}, ETHIPV4_NTS_TESTPACKETS_BITS);
+    begin : sendt_nts_packet1_locals
+      reg [3:0] detect_bits;
+      send_packet({60048'b0, nts_packet1}, ETHIPV4_NTS_TESTPACKETS_BITS, detect_bits);
+      `assert(detect_bits == 'b1001);
     end
   endtask
 
   task send_nts_packet2;
-    begin
-      send_packet({60048'b0, nts_packet2}, ETHIPV4_NTS_TESTPACKETS_BITS);
+    begin : send_nts_packet2_locals
+      reg [3:0] detect_bits;
+      send_packet({60048'b0, nts_packet2}, ETHIPV4_NTS_TESTPACKETS_BITS, detect_bits);
+      `assert(detect_bits == 'b1001);
     end
   endtask
 
   task send_nts_packet3;
-    begin
-      send_packet({60048'b0, nts_packet3}, ETHIPV4_NTS_TESTPACKETS_BITS);
+    begin : send_nts_packet3_locals
+      reg [3:0] detect_bits;
+      send_packet({60048'b0, nts_packet3}, ETHIPV4_NTS_TESTPACKETS_BITS, detect_bits);
+      `assert(detect_bits == 'b1001);
     end
   endtask
+
   task send_nts_packet4;
-    begin
-      send_packet({60048'b0, nts_packet4}, ETHIPV4_NTS_TESTPACKETS_BITS);
+    begin : send_nts_packet4_locals
+      reg [3:0] detect_bits;
+      send_packet({60048'b0, nts_packet4}, ETHIPV4_NTS_TESTPACKETS_BITS, detect_bits);
+      `assert(detect_bits == 'b1001);
     end
   endtask
 
@@ -368,7 +387,11 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
     .i_dispatch_data_valid(i_dispatch_data_valid),
     .i_dispatch_fifo_empty(i_dispatch_fifo_empty),
     .o_dispatch_fifo_rd_en(o_dispatch_fifo_rd_en),
-    .i_dispatch_fifo_rd_data(i_dispatch_fifo_rd_data)
+    .i_dispatch_fifo_rd_data(i_dispatch_fifo_rd_data),
+    .o_detect_unique_identifier(detect_unique_identifier),
+    .o_detect_nts_cookie(detect_nts_cookie),
+    .o_detect_nts_cookie_placeholder(detect_nts_cookie_placeholder),
+    .o_detect_nts_authenticator(detect_nts_authenticator)
   );
 
   initial begin

@@ -106,6 +106,13 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
   wire                 detect_nts_cookie_placeholder;
   wire                 detect_nts_authenticator;
 
+  reg                  i_keymem_api_cs;
+  reg                  i_keymem_api_we;
+  reg          [7 : 0] i_keymem_api_address;
+  reg         [31 : 0] i_keymem_api_write_data;
+  wire        [31 : 0] o_keymem_api_read_data;
+
+
   localparam integer ETHHEADER_BITS  = 112;
   localparam integer IPV4HEADER_BITS = 160;
   localparam integer UDPHEADER_BITS  = 64;
@@ -381,13 +388,22 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
   nts_engine dut (
     .i_areset(i_areset),
     .i_clk(i_clk),
+
     .o_busy(o_busy),
+
     .i_dispatch_packet_available(i_dispatch_packet_available),
     .o_dispatch_packet_read_discard(o_dispatch_packet_read_discard),
     .i_dispatch_data_valid(i_dispatch_data_valid),
     .i_dispatch_fifo_empty(i_dispatch_fifo_empty),
     .o_dispatch_fifo_rd_en(o_dispatch_fifo_rd_en),
     .i_dispatch_fifo_rd_data(i_dispatch_fifo_rd_data),
+
+    .i_keymem_api_cs(i_keymem_api_cs),
+    .i_keymem_api_we(i_keymem_api_we),
+    .i_keymem_api_address(i_keymem_api_address),
+    .i_keymem_api_write_data(i_keymem_api_write_data),
+    .o_keymem_api_read_data(o_keymem_api_read_data),
+
     .o_detect_unique_identifier(detect_unique_identifier),
     .o_detect_nts_cookie(detect_nts_cookie),
     .o_detect_nts_cookie_placeholder(detect_nts_cookie_placeholder),
@@ -402,6 +418,10 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
     i_dispatch_data_valid       = 'b0;
     i_dispatch_fifo_empty       = 'b1;
     i_dispatch_fifo_rd_data     = 'b0;
+    i_keymem_api_cs             = 'b0;
+    i_keymem_api_we             = 'b0;
+    i_keymem_api_address        = 'b0;
+    i_keymem_api_write_data     = 'b0;
 
     #10
     i_areset = 0;

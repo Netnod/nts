@@ -34,12 +34,20 @@ module nts_engine #(
   input  wire                  i_areset, // async reset
   input  wire                  i_clk,
   output wire                  o_busy,
+
   input  wire                  i_dispatch_packet_available,
   output wire                  o_dispatch_packet_read_discard,
   input  wire [7:0]            i_dispatch_data_valid,
   input  wire                  i_dispatch_fifo_empty,
   output wire                  o_dispatch_fifo_rd_en,
   input  wire [63:0]           i_dispatch_fifo_rd_data,
+
+  input wire                   i_keymem_api_cs,
+  input wire                   i_keymem_api_we,
+  input wire           [7 : 0] i_keymem_api_address,
+  input wire          [31 : 0] i_keymem_api_write_data,
+  output wire         [31 : 0] o_keymem_api_read_data,
+
   output wire                  o_detect_unique_identifier,
   output wire                  o_detect_nts_cookie,
   output wire                  o_detect_nts_cookie_placeholder,
@@ -96,6 +104,16 @@ module nts_engine #(
   wire                         detect_nts_cookie;
   wire                         detect_nts_cookie_placeholder;
   wire                         detect_nts_authenticator;
+  wire                [31 : 0] keymem_api_read_data;
+  wire                         keymem_internal_get_current_key;
+  wire                         keymem_internal_get_key_with_id;
+  wire                [31 : 0] keymem_internal_server_key_id;
+  wire                 [3 : 0] keymem_internal_key_word;
+  wire                         keymem_internal_key_valid;
+  wire                         keymem_internal_key_length;
+  wire                [31 : 0] keymem_internal_key_id;
+  wire                [31 : 0] keymem_internal_key_data;
+  wire                         keymem_internal_ready;
 
   //----------------------------------------------------------------
   // Concurrent connectivity for ports etc.
@@ -103,9 +121,16 @@ module nts_engine #(
 
   assign debug_delay_continue            = state_reg == STATE_TO_BE_IMPLEMENTED && (delay_counter_reg < 100);
 
+  assign keymem_internal_get_current_key = 'b0;
+  assign keymem_internal_get_key_with_id = 'b0;
+  assign keymem_internal_server_key_id   = 'b0;
+  assign keymem_internal_key_word        = 'b0;
+
   assign o_dispatch_packet_read_discard  = dispatch_packet_discard_reg;
   assign o_dispatch_fifo_rd_en           = dispatch_fifo_rd_en;
   assign o_busy                          = busy_reg;
+
+  assign o_keymem_api_read_data          = keymem_api_read_data;
 
   assign o_detect_unique_identifier      = detect_unique_identifier;
   assign o_detect_nts_cookie             = detect_nts_cookie;
@@ -166,6 +191,27 @@ module nts_engine #(
    .o_detect_nts_cookie(detect_nts_cookie),
    .o_detect_nts_cookie_placeholder(detect_nts_cookie_placeholder),
    .o_detect_nts_authenticator(detect_nts_authenticator)
+  );
+
+  keymem keymem (
+    .clk(i_clk),
+    .areset(i_areset),
+    // API access
+    .cs(i_keymem_api_cs),
+    .we(i_keymem_api_we),
+    .address(i_keymem_api_address),
+    .write_data(i_keymem_api_write_data),
+    .read_data(keymem_api_read_data),
+    // Client access
+    .get_current_key(keymem_internal_get_current_key),
+    .get_key_with_id(keymem_internal_get_key_with_id),
+    .server_key_id(keymem_internal_server_key_id),
+    .key_word(keymem_internal_key_word),
+    .key_valid(keymem_internal_key_valid),
+    .key_length(keymem_internal_key_length),
+    .key_id(keymem_internal_key_id),
+    .key_data(keymem_internal_key_data),
+    .ready(keymem_internal_ready)
   );
 
   //----------------------------------------------------------------

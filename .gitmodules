@@ -1,0 +1,4 @@
+[submodule "sub/keymem"]
+	path = sub/keymem
+	url = https://gitlab.netnod.se/tid-och-takt/keymem.git
+        ignore = dirty

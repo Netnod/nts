@@ -56,12 +56,12 @@ module nts_parser_ctrl #(
   // Internal constant and parameter definitions.
   //----------------------------------------------------------------
 
-  localparam IP_OPCODE_WIDTH = 1;
+//  localparam IP_OPCODE_WIDTH = 1;
 
-  localparam [IP_OPCODE_WIDTH-1:0] OPCODE_GET_OFFSET_UDP_DATA = 'b0;
-  localparam [IP_OPCODE_WIDTH-1:0] OPCODE_GET_LENGTH_UDP      = 'b1;
-  localparam [IP_OPCODE_WIDTH-1:0] OPCODE_FIRST               = OPCODE_GET_OFFSET_UDP_DATA;
-  localparam [IP_OPCODE_WIDTH-1:0] OPCODE_LAST                = OPCODE_GET_LENGTH_UDP;
+//  localparam [IP_OPCODE_WIDTH-1:0] OPCODE_GET_OFFSET_UDP_DATA = 'b0;
+//  localparam [IP_OPCODE_WIDTH-1:0] OPCODE_GET_LENGTH_UDP      = 'b1;
+//  localparam [IP_OPCODE_WIDTH-1:0] OPCODE_FIRST               = OPCODE_GET_OFFSET_UDP_DATA;
+//  localparam [IP_OPCODE_WIDTH-1:0] OPCODE_LAST                = OPCODE_GET_LENGTH_UDP;
 
   localparam [15:0] TAG_UNIQUE_IDENTIFIER      = 'h0104;
   localparam [15:0] TAG_NTS_COOKIE             = 'h0204;
@@ -70,7 +70,7 @@ module nts_parser_ctrl #(
 
   localparam STATE_IDLE                  = 4'h0;
   localparam STATE_COPY                  = 4'h1;
-  localparam STATE_EXTRACT_FROM_IP       = 4'h2;
+//  localparam STATE_EXTRACT_FROM_IP       = 4'h2;
   localparam STATE_LENGTH_CHECKS         = 4'h3;
   localparam STATE_EXTRACT_EXT_FROM_RAM  = 4'h4;
   localparam STATE_EXTENSIONS_EXTRACTED  = 4'h5;
@@ -79,6 +79,11 @@ module nts_parser_ctrl #(
   localparam NTP_EXTENSION_BITS          = 4;
   localparam NTP_EXTENSION_FIELDS        = (1<<NTP_EXTENSION_BITS);
 
+  localparam [15:0] E_TYPE_IPV4 =  16'h08_00;
+  localparam [15:0] E_TYPE_IPV6 =  16'h86_DD;
+
+  localparam [3:0] IP_V4        =  4'h4;
+  localparam [3:0] IP_V6        =  4'h6;
 
   //----------------------------------------------------------------
   // Registers including update variables and write enable.
@@ -106,9 +111,9 @@ module nts_parser_ctrl #(
   reg                   [3:0] last_bytes_new;
   reg                   [3:0] last_bytes_reg;
 
-  reg                         read_opcode_we;
-  reg   [IP_OPCODE_WIDTH-1:0] read_opcode_new;
-  reg   [IP_OPCODE_WIDTH-1:0] read_opcode_reg;
+//  reg                         read_opcode_we;
+//  reg   [IP_OPCODE_WIDTH-1:0] read_opcode_new;
+//  reg   [IP_OPCODE_WIDTH-1:0] read_opcode_reg;
 
 
   reg                          memory_bound_we;
@@ -122,9 +127,20 @@ module nts_parser_ctrl #(
   reg                          memory_address_failure_reg;
   reg                          memory_address_lastbyte_read_reg;
 
-  reg                          ipdecode_ntp_addr_we;
-  reg       [ADDR_WIDTH+3-1:0] ipdecode_ntp_addr_new;
-  reg       [ADDR_WIDTH+3-1:0] ipdecode_ntp_addr_reg;
+  reg                   [47:0] previous_i_data_reg; //We receive i_data one cycle before process signal
+  reg                          ipdecode_ethernet_protocol_we;
+  reg                   [15:0] ipdecode_ethernet_protocol_new;
+  reg                   [15:0] ipdecode_ethernet_protocol_reg;
+  reg                          ipdecode_ip_version_we;
+  reg                    [3:0] ipdecode_ip_version_new;
+  reg                    [3:0] ipdecode_ip_version_reg;
+  reg                          ipdecode_ip4_ihl_we;
+  reg                    [3:0] ipdecode_ip4_ihl_new;
+  reg                    [3:0] ipdecode_ip4_ihl_reg;
+
+  reg                          ipdecode_offset_ntp_ext_we;
+  reg       [ADDR_WIDTH+3-1:0] ipdecode_offset_ntp_ext_new;
+  reg       [ADDR_WIDTH+3-1:0] ipdecode_offset_ntp_ext_reg;
   reg                          ipdecode_udp_length_we;
   reg                   [15:0] ipdecode_udp_length_new;
   reg                   [15:0] ipdecode_udp_length_reg;
@@ -149,17 +165,24 @@ module nts_parser_ctrl #(
   reg                          detect_nts_cookie_placeholder_reg;
   reg                          detect_nts_authenticator_reg;
 
+
   //----------------------------------------------------------------
   // Wires.
   //----------------------------------------------------------------
 
   wire        detect_ipv4;
   wire        detect_ipv4_bad;
-  wire [31:0] ipdecode_read_data_wire;
+//  wire [31:0] ipdecode_read_data_wire;
+  wire        detect_ipv6;
 
   //----------------------------------------------------------------
   // Connectivity for ports etc.
   //----------------------------------------------------------------
+
+  assign detect_ipv4     = (ipdecode_ethernet_protocol_reg == E_TYPE_IPV4) && (ipdecode_ip_version_reg == IP_V4);
+  assign detect_ipv4_bad = detect_ipv4 && ipdecode_ip4_ihl_reg != 5;
+
+  assign detect_ipv6     = (ipdecode_ethernet_protocol_reg == E_TYPE_IPV6) && (ipdecode_ip_version_reg == IP_V6);
 
   assign o_access_port_addr     = access_port_addr_reg;
   assign o_access_port_rd_en    = access_port_rd_en_reg;
@@ -169,26 +192,6 @@ module nts_parser_ctrl #(
   assign o_detect_nts_cookie             = detect_nts_cookie_reg;
   assign o_detect_nts_cookie_placeholder = detect_nts_cookie_placeholder_reg;
   assign o_detect_nts_authenticator      = detect_nts_authenticator_reg;
-
-  //----------------------------------------------------------------
-  // IP decoding core
-  //----------------------------------------------------------------
-
-  nts_ip #(
-    .ADDR_WIDTH(ADDR_WIDTH),
-    .IP_OPCODE_WIDTH(IP_OPCODE_WIDTH)
-  ) ip_decoder (
-    .i_areset(i_areset),
-    .i_clk(i_clk),
-    .i_clear(i_clear),
-    .i_process(i_process_initial),
-    .i_last_word_data_valid(i_last_word_data_valid),
-    .i_data(i_data),
-    .i_read_opcode(read_opcode_reg),
-    .o_detect_ipv4(detect_ipv4),
-    .o_detect_ipv4_bad(detect_ipv4_bad),
-    .o_read_data(ipdecode_read_data_wire)
-  );
 
   //----------------------------------------------------------------
   // Functions and Tasks
@@ -253,13 +256,14 @@ module nts_parser_ctrl #(
       access_port_addr_reg      <= 'b0;
       access_port_rd_en_reg     <= 'b0;
       access_port_wordsize_reg  <= 'b0;
-      ipdecode_ntp_addr_reg     <= 'b0;
+      ipdecode_offset_ntp_ext_reg     <= 'b0;
       ipdecode_udp_length_reg   <= 'b0;
       last_bytes_reg            <= 'b0;
       memory_address_reg        <= 'b0;
       memory_bound_reg          <= 'b0;
       ntp_extension_counter_reg <= 'b0;
-      read_opcode_reg           <= OPCODE_FIRST;
+      previous_i_data_reg       <= 'b0;
+//      read_opcode_reg           <= OPCODE_FIRST;
       state_reg                 <= 'b0;
       word_counter_reg          <= 'b0;
       begin : ntp_extension_reset_async
@@ -272,6 +276,7 @@ module nts_parser_ctrl #(
         end
       end
     end else begin
+      previous_i_data_reg  <= i_data[47:0];
 
       if (access_port_addr_we)
         access_port_addr_reg <= access_port_addr_new;
@@ -282,8 +287,17 @@ module nts_parser_ctrl #(
       if (access_port_wordsize_we)
         access_port_wordsize_reg <= access_port_wordsize_new;
 
-      if (ipdecode_ntp_addr_we)
-        ipdecode_ntp_addr_reg <= ipdecode_ntp_addr_new;
+      if (ipdecode_ethernet_protocol_we)
+        ipdecode_ethernet_protocol_reg <= ipdecode_ethernet_protocol_new;
+
+      if (ipdecode_ip_version_we)
+        ipdecode_ip_version_reg <= ipdecode_ip_version_new;
+
+      if (ipdecode_ip4_ihl_we)
+        ipdecode_ip4_ihl_reg <= ipdecode_ip4_ihl_new;
+
+      if (ipdecode_offset_ntp_ext_we)
+        ipdecode_offset_ntp_ext_reg <= ipdecode_offset_ntp_ext_new;
 
       if (ipdecode_udp_length_we)
         ipdecode_udp_length_reg <= ipdecode_udp_length_new;
@@ -314,9 +328,6 @@ module nts_parser_ctrl #(
 
       if (ntp_extension_counter_we)
         ntp_extension_counter_reg <= ntp_extension_counter_new;
-
-      if (read_opcode_we)
-        read_opcode_reg <= read_opcode_new;
 
       if (state_we)
         state_reg <= state_new;
@@ -397,58 +408,6 @@ module nts_parser_ctrl #(
   end
 
   //----------------------------------------------------------------
-  // IP decode opcode incrementor
-  // Requests different opcodes from the IP decode logic
-  //----------------------------------------------------------------
-
-  always @*
-  begin : opcode_incrementer
-    read_opcode_we  = 'b0;
-    read_opcode_new = OPCODE_FIRST;
-    case (state_reg)
-      STATE_IDLE:
-        if (i_process_initial)
-          read_opcode_we = 'b1;
-      STATE_EXTRACT_FROM_IP:
-        begin
-          read_opcode_we  = 'b1;
-          read_opcode_new = read_opcode_reg + 1;
-        end
-      default: ;
-    endcase
-  end
-
-  //----------------------------------------------------------------
-  // IP decode read-handler
-  // Writes to IP fields upon recieving values from IP decode.
-  //----------------------------------------------------------------
-
-  always @*
-  begin : ip_decode_read_handler
-    ipdecode_ntp_addr_we    = 'b0;
-    ipdecode_ntp_addr_new   = 'b0;
-    ipdecode_udp_length_we  = 'b0;
-    ipdecode_udp_length_new = 'b0;
-    if (state_reg == STATE_EXTRACT_FROM_IP) begin
-      case (read_opcode_reg)
-        OPCODE_GET_OFFSET_UDP_DATA:
-          begin
-            ipdecode_ntp_addr_we                    = 'b1;
-            ipdecode_ntp_addr_new[ADDR_WIDTH+3-1:3] = ipdecode_read_data_wire[ADDR_WIDTH+3-1:3] + 6;
-            ipdecode_ntp_addr_new[2:0]              = ipdecode_read_data_wire[2:0];
-          end
-        OPCODE_GET_LENGTH_UDP:
-          begin
-            ipdecode_udp_length_we  = 'b1;
-            ipdecode_udp_length_new = ipdecode_read_data_wire[15:0];
-          end
-        default:
-          $display("%s:%0d warning: opcode %0d not implemented",`__FILE__,`__LINE__, read_opcode_reg);
-      endcase
-    end
-  end
-
-  //----------------------------------------------------------------
   // NTP Extension field control
   // Writes to NTP Extension fields upon i_access_port receving
   // values from Rx Buffer.
@@ -525,7 +484,7 @@ module nts_parser_ctrl #(
 
     if (state_reg == STATE_LENGTH_CHECKS) begin
       memory_address_we  = 'b1;
-      memory_address_new = ipdecode_ntp_addr_reg;
+      memory_address_new = ipdecode_offset_ntp_ext_reg;
     end
 
     if (state_reg == STATE_EXTRACT_EXT_FROM_RAM) begin
@@ -533,7 +492,6 @@ module nts_parser_ctrl #(
            memory_address_reg, ntp_extension_length_reg[ntp_extension_counter_reg], /* IN */
            memory_address_next_reg, memory_address_failure_reg, memory_address_lastbyte_read_reg /*OUT*/);
 
-      //$display("%s:%0d memory_address_reg=%h ntp_extension_copied_reg[ntp_extension_counter_reg]=%h ntp_extension_length_reg[ntp_extension_counter_reg]=%h memory_address_failure_reg=%h ntp_extension_counter_reg=%h",`__FILE__,`__LINE__, memory_address_reg, ntp_extension_copied_reg[ntp_extension_counter_reg], ntp_extension_length_reg[ntp_extension_counter_reg], memory_address_failure_reg, ntp_extension_counter_reg);
       if (ntp_extension_copied_reg[ntp_extension_counter_reg] && memory_address_failure_reg == 'b0 && memory_address_lastbyte_read_reg == 'b0 && ntp_extension_counter_reg!=NTP_EXTENSION_FIELDS-1) begin
         memory_address_we  = 'b1;
         memory_address_new = memory_address_next_reg;
@@ -572,7 +530,6 @@ module nts_parser_ctrl #(
     endcase
   end
 
-
   //----------------------------------------------------------------
   // Finite State Machine
   // Overall functionallitty control
@@ -606,11 +563,6 @@ module nts_parser_ctrl #(
        STATE_COPY:
          if (i_process_initial == 1'b0) begin
           state_we  = 'b1;
-          state_new = STATE_EXTRACT_FROM_IP;
-        end
-      STATE_EXTRACT_FROM_IP:
-        if (read_opcode_reg == OPCODE_LAST) begin
-          state_we  = 'b1;
           state_new = STATE_LENGTH_CHECKS;
         end
       STATE_LENGTH_CHECKS:
@@ -622,7 +574,7 @@ module nts_parser_ctrl #(
             state_new  = STATE_ERROR_GENERAL;
           else if (ipdecode_udp_length_reg[1:0] != 0) /* NTP packets are 7*8 + M(4+4n), always 4 byte aligned */
             state_new  = STATE_ERROR_GENERAL;
-          else if (func_address_within_memory_bounds (ipdecode_ntp_addr_reg, 4) == 'b0)
+          else if (func_address_within_memory_bounds (ipdecode_offset_ntp_ext_reg, 4) == 'b0)
             state_new  = STATE_ERROR_GENERAL;
           else
             state_new  = STATE_EXTRACT_EXT_FROM_RAM;
@@ -653,6 +605,61 @@ module nts_parser_ctrl #(
           state_new = STATE_IDLE;
         end
     endcase
+  end
+
+  //----------------------------------------------------------------
+  // IP Decode
+  //----------------------------------------------------------------
+
+  always @*
+  begin
+    ipdecode_ethernet_protocol_we  = 'b0;
+    ipdecode_ethernet_protocol_new = 'b0;
+    ipdecode_ip_version_we         = 'b0;
+    ipdecode_ip_version_new        = 'b0;
+    ipdecode_ip4_ihl_we            = 'b0;
+    ipdecode_ip4_ihl_new           = 'b0;
+    ipdecode_offset_ntp_ext_we     = 'b0;
+    ipdecode_offset_ntp_ext_new    = 'b0;
+    ipdecode_udp_length_we         = 'b0;
+    ipdecode_udp_length_new        = 'b0;
+
+    if (i_clear) begin
+      ipdecode_ethernet_protocol_we  = 'b1;
+      ipdecode_ip_version_we         = 'b1;
+      ipdecode_ip4_ihl_we            = 'b1;
+      ipdecode_offset_ntp_ext_we     = 'b1;
+      ipdecode_udp_length_we         = 'b1;
+
+    end else if (i_process_initial) begin
+
+      if (word_counter_reg == 0) begin
+        ipdecode_ethernet_protocol_we  = 'b1;
+        ipdecode_ethernet_protocol_new = previous_i_data_reg[31:16];
+        ipdecode_ip_version_we         = 'b1;
+        ipdecode_ip_version_new        = previous_i_data_reg[15:12];
+        ipdecode_ip4_ihl_we            = 'b1;
+        ipdecode_ip4_ihl_new           = previous_i_data_reg[11:8];
+
+      end else if (detect_ipv4 && ipdecode_ip4_ihl_reg == 5) begin
+        ipdecode_offset_ntp_ext_we                    = 'b1;
+        ipdecode_offset_ntp_ext_new[ADDR_WIDTH+3-1:3] = 5+6;
+        ipdecode_offset_ntp_ext_new[2:0]              = 2;
+
+        if (word_counter_reg == 3) begin
+          ipdecode_udp_length_we   = 'b1;
+          ipdecode_udp_length_new  = previous_i_data_reg[15:0];
+        end
+      end else if (detect_ipv6) begin
+        ipdecode_offset_ntp_ext_we                    = 'b1;
+        ipdecode_offset_ntp_ext_new[ADDR_WIDTH+3-1:3] = 7+6;
+        ipdecode_offset_ntp_ext_new[2:0]              = 6;
+        if (word_counter_reg == 6) begin
+          ipdecode_udp_length_we   = 'b1;
+          ipdecode_udp_length_new  = previous_i_data_reg[47:32];
+        end
+      end
+    end
   end
 
   //----------------------------------------------------------------
@@ -698,7 +705,6 @@ module nts_parser_ctrl #(
       case (state_reg)
         STATE_IDLE: ;
         STATE_COPY: ;
-        STATE_EXTRACT_FROM_IP: ;
         STATE_LENGTH_CHECKS: ;
         STATE_EXTRACT_EXT_FROM_RAM: ;
         STATE_ERROR_GENERAL: $display("%s:%0d warning: error",`__FILE__,`__LINE__);

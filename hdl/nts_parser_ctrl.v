@@ -76,7 +76,7 @@ module nts_parser_ctrl #(
   localparam STATE_EXTENSIONS_EXTRACTED  = 4'h5;
   localparam STATE_ERROR_GENERAL         = 4'hf;
 
-  localparam NTP_EXTENSION_BITS          = 3;
+  localparam NTP_EXTENSION_BITS          = 4;
   localparam NTP_EXTENSION_FIELDS        = (1<<NTP_EXTENSION_BITS);
 
 

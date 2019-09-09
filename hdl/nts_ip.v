@@ -44,77 +44,9 @@ module nts_ip #(
   output wire                [31:0] o_read_data
 );
 
-  localparam [IP_OPCODE_WIDTH-1:0] OPCODE_GET_OFFSET_UDP_DATA = 'b0;
-  localparam [IP_OPCODE_WIDTH-1:0] OPCODE_GET_LENGTH_UDP      = 'b1;
-
-  reg             [31:0] previous_i_data; //We receive i_data one cycle before process signal
-                                          //We currently only use 32 bit LSB, so remove MSB for
-                                          //now just to make synthesis warnings go away
-  reg   [ADDR_WIDTH-1:0] addr;
-  reg             [15:0] ethernet_protocol;
-  reg              [3:0] ip_version;
-  reg              [3:0] ip4_ihl;
-  reg             [15:0] udp_length;
-  reg [ADDR_WIDTH+3-1:0] offset_udp_data;
-  reg             [31:0] read_data;
-  wire                   detect_ipv4;
-  wire                   detect_ipv4_bad;
-
-  localparam  [15:0] E_TYPE_IPV4     =  16'h08_00;
-  localparam   [3:0] IP_V4           =  4'h4;
-
-  assign detect_ipv4     = (ethernet_protocol == E_TYPE_IPV4) && (ip_version == IP_V4);
-  assign detect_ipv4_bad = detect_ipv4 && ip4_ihl != 5;
-
-  assign o_detect_ipv4     = detect_ipv4;
-  assign o_detect_ipv4_bad = detect_ipv4_bad;
-  assign o_read_data       = read_data;
-
-  always @*
-  begin
-    read_data = 32'b0;
-    case (i_read_opcode)
-      OPCODE_GET_OFFSET_UDP_DATA: read_data[ADDR_WIDTH+3-1:0] = offset_udp_data;
-      OPCODE_GET_LENGTH_UDP:      read_data[15:0]             = udp_length;
-    default: ;
-    endcase
-  end
-
-  always @ (posedge i_clk, posedge i_areset)
-  begin
-    if (i_areset == 1'b1) begin
-      addr              <= 'b0;
-      ethernet_protocol <= 'b0;
-      ip_version        <= 'b0;
-      ip4_ihl           <= 'b0;
-      udp_length        <= 'b0;
-      offset_udp_data   <= 'b0;
-      previous_i_data   <= 'b0;
-    end else begin
-      previous_i_data   <= i_data[31:0];
-      if (i_clear) begin
-         addr              <= 'b0;
-         ethernet_protocol <= 'b0;
-         ip_version        <= 'b0;
-         ip4_ihl           <= 'b0;
-         udp_length        <= 'b0;
-         offset_udp_data   <= 'b0;
-      end else if (i_process) begin
-        addr               <= addr+1;
-        //0: 2c768aadf786902b [63:16] e_dst [15:0] e_src
-        //1: 3431273408004500 [63:32] e_src [31:16] eth_proto [15:12] ip_version
-        //2: 004c000040004011
-        //3: 1573c0a80101a0b1
-
-        if (addr == 1) begin
-          ethernet_protocol <= previous_i_data[31:16];
-          ip_version        <= previous_i_data[15:12];
-          ip4_ihl           <= previous_i_data[11:8];
-        end else if (detect_ipv4 && ip4_ihl == 5) begin
-          offset_udp_data[ADDR_WIDTH+3-1:3] <= 5;
-          offset_udp_data[2:0]              <= 2;
-
 /*
+  IPV4. IHL=5 supported
+
     0                   1                   2                   3
     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -131,23 +63,30 @@ module nts_ip #(
    |                    Options                    |    Padding    |
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 */
-          if (addr == 2) begin
-            //$display("%s:%0d ip_total_length    %0d", `__FILE__, `__LINE__, i_data[63:48]);
-            //$display("%s:%0d ip_id              %0h", `__FILE__, `__LINE__, i_data[47:32]);
-            //$display("%s:%0d ip_flags           %0h", `__FILE__, `__LINE__, i_data[31:29]);
-            //$display("%s:%0d ip_fragment_offset %0d", `__FILE__, `__LINE__, i_data[28:16]);
-            //$display("%s:%0d ip_ttl             %0d", `__FILE__, `__LINE__, i_data[15:8]);
-            //$display("%s:%0d ip_protocol        %0d", `__FILE__, `__LINE__, i_data[7:0]);
-          end else if (addr == 3) begin
-            //$display("%s:%0d ip_checksum        %0h", `__FILE__, `__LINE__, i_data[63:48]);
-            //$display("%s:%0d ip_source          %0h", `__FILE__, `__LINE__, i_data[47:16]);
-            //$display("%s:%0d ip_dst (part1)     %0h", `__FILE__, `__LINE__, i_data[15:0]);
-          end else if (addr == 4) begin
-            //ihl=5 => 160 bits. 160/64
-	    //16 bits of IPv4 header in addr=1
-            //64 bits of IPv4 header in addr=2
-            //64 bits of IPv4 header in addr=3
-            //16 bits of IPv4 header remaining
+/*
+   IPV6
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |Version| Traffic Class |           Flow Label                  |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |         Payload Length        |  Next Header  |   Hop Limit   |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                                                               |
+   +                                                               +
+   |                                                               |
+   +                         Source Address                        +
+   |                                                               |
+   +                                                               +
+   |                                                               |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                                                               |
+   +                                                               +
+   |                                                               |
+   +                      Destination Address                      +
+   |                                                               |
+   +                                                               +
+   |                                                               |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+*/
 /*
                  0      7 8     15 16    23 24    31
                  +--------+--------+--------+--------+
@@ -160,67 +99,111 @@ module nts_ip #(
                  |
                  |          data octets ...
                  +---------------- ...
-
 */
-            //$display("%s:%0d ip_dst (part2)     %0h", `__FILE__, `__LINE__, i_data[63:48]);
-            //$display("%s:%0d udp_src            %0h", `__FILE__, `__LINE__, i_data[47:32]);
-            //$display("%s:%0d udp_dst            %0h", `__FILE__, `__LINE__, i_data[31:16]);
+
+  //----------------------------------------------------------------
+  // Internal constant and parameter definitions.
+  //----------------------------------------------------------------
+
+  localparam [IP_OPCODE_WIDTH-1:0] OPCODE_GET_OFFSET_UDP_DATA = 'b0;
+  localparam [IP_OPCODE_WIDTH-1:0] OPCODE_GET_LENGTH_UDP      = 'b1;
+
+  localparam [15:0] E_TYPE_IPV4 =  16'h08_00;
+  localparam [15:0] E_TYPE_IPV6 =  16'h86_DD;
+
+  localparam [3:0] IP_V4        =  4'h4;
+  localparam [3:0] IP_V6        =  4'h6;
+
+  //----------------------------------------------------------------
+  // Registers including update variables and write enable.
+  //----------------------------------------------------------------
+
+  reg             [48:0] previous_i_data; //We receive i_data one cycle before process signal
+  reg   [ADDR_WIDTH-1:0] addr;
+  reg             [15:0] ethernet_protocol;
+  reg              [3:0] ip_version;
+  reg              [3:0] ip4_ihl;
+  reg             [15:0] udp_length;
+  reg [ADDR_WIDTH+3-1:0] offset_udp_data;
+  reg             [31:0] read_data;
+
+  //----------------------------------------------------------------
+  // Wires.
+  //----------------------------------------------------------------
+
+  wire                   detect_ipv4;
+  wire                   detect_ipv4_bad;
+  wire                   detect_ipv6;
+
+  //----------------------------------------------------------------
+  // Concurrent connectivity for ports etc.
+  //----------------------------------------------------------------
+
+  assign detect_ipv4     = (ethernet_protocol == E_TYPE_IPV4) && (ip_version == IP_V4);
+  assign detect_ipv4_bad = detect_ipv4 && ip4_ihl != 5;
+
+  assign detect_ipv6     = (ethernet_protocol == E_TYPE_IPV6) && (ip_version == IP_V6);
+
+  assign o_detect_ipv4     = detect_ipv4;
+  assign o_detect_ipv4_bad = detect_ipv4_bad;
+  assign o_read_data       = read_data;
+
+  //----------------------------------------------------------------
+  // Parser Ctrl communication interface
+  //----------------------------------------------------------------
+
+  always @*
+  begin : communication_with_parser_ctrl
+    read_data = 32'b0;
+    case (i_read_opcode)
+      OPCODE_GET_OFFSET_UDP_DATA: read_data[ADDR_WIDTH+3-1:0] = offset_udp_data;
+      OPCODE_GET_LENGTH_UDP:      read_data[15:0]             = udp_length;
+    default: ;
+    endcase
+  end
+
+  //----------------------------------------------------------------
+  // Register updates
+  //----------------------------------------------------------------
+
+  always @ (posedge i_clk, posedge i_areset)
+  begin : reg_updates
+    if (i_areset == 1'b1) begin
+      addr              <= 'b0;
+      ethernet_protocol <= 'b0;
+      ip_version        <= 'b0;
+      ip4_ihl           <= 'b0;
+      udp_length        <= 'b0;
+      offset_udp_data   <= 'b0;
+      previous_i_data   <= 'b0;
+    end else begin
+      previous_i_data   <= i_data[48:0];
+      if (i_clear) begin
+         addr              <= 'b0;
+         ethernet_protocol <= 'b0;
+         ip_version        <= 'b0;
+         ip4_ihl           <= 'b0;
+         udp_length        <= 'b0;
+         offset_udp_data   <= 'b0;
+      end else if (i_process) begin
+        addr               <= addr+1;
+
+        if (addr == 1) begin
+          ethernet_protocol <= previous_i_data[31:16];
+          ip_version        <= previous_i_data[15:12];
+          ip4_ihl           <= previous_i_data[11:8];
+        end else if (detect_ipv4 && ip4_ihl == 5) begin
+          offset_udp_data[ADDR_WIDTH+3-1:3] <= 5;
+          offset_udp_data[2:0]              <= 2;
+
+          if (addr == 4) begin
             udp_length   <= previous_i_data[15:0];
-            //$display("%s:%0d udp_length         %0d", `__FILE__, `__LINE__, i_data[15:0]);
-          end else if (addr == 5) begin
-            //$display("%s:%0d udp_checksum       %h", `__FILE__, `__LINE__, i_data[63:48]);
-            //$display("%s:%0d ntp first row      %h", `__FILE__, `__LINE__, i_data[47:16]);
-            //$display("%s:%0d ntp root delay msb %h", `__FILE__, `__LINE__, i_data[15:0]);
-/*
-      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-      |LI | VN  |Mode |    Stratum     |     Poll      |  Precision   |
-      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-      |                         Root Delay                            |
-*/
-
-          end else if (addr == 6) begin
-            //$display("%s:%0d ntp root delay lsb %h", `__FILE__, `__LINE__, i_data[63:48]);
-            //$display("%s:%0d ntp root disper.   %h", `__FILE__, `__LINE__, i_data[47:16]);
-            //$display("%s:%0d ntp reference msb  %h", `__FILE__, `__LINE__, i_data[15:0]);
-/*
-      |                         Root Delay                            |
-      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-      |                         Root Dispersion                       |
-      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-      |                          Reference ID                         |
-*/
-          end else if (addr == 7) begin
-            //$display("%s:%0d ntp reference lsb  %h", `__FILE__, `__LINE__, i_data[63:48]);
-            //$display("%s:%0d ntp reftimstmp msb %h", `__FILE__, `__LINE__, i_data[47:0]);
-/*
-      |                          Reference ID                         |
-      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-      |                                                               |
-      +                     Reference Timestamp (64)                  +
-      |                                                               |
-*/
-
-          end else if (addr == 8) begin
-            //$display("%s:%0d ntp reftimstmp lsb %h", `__FILE__, `__LINE__, i_data[63:48]);
-            //$display("%s:%0d ntp origimstmp msb %h", `__FILE__, `__LINE__, i_data[47:0]);
-/*
-      |                                                               |
-      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-      |                                                               |
-      +                      Origin Timestamp (64)                    +
-*/
-          end else if (addr == 9) begin
-            //$display("%s:%0d ntp origimstmp lsb  %h", `__FILE__, `__LINE__, i_data[63:48]);
-/*
-      +                      Receive Timestamp (64)                   +
-*/
-          end else if (addr == 10) begin
-            //$display("%s:%0d ntp rec.mstmp lsb  %h", `__FILE__, `__LINE__, i_data[63:48]);
-
-          end else if (addr == 11) begin
-            //$display("%s:%0d ntp trans.mstmp lsb  %h", `__FILE__, `__LINE__, i_data[63:48]);
-            //$display("%s:%0d debug: %h", `__FILE__, `__LINE__, i_data[47:32]);
-            //$display("%s:%0d debug: %h", `__FILE__, `__LINE__, i_data[31:16]);
+          end
+        end else if (detect_ipv6) begin
+          offset_udp_data[ADDR_WIDTH+3-1:3] <= 7;
+          offset_udp_data[2:0]              <= 6;
+          if (addr == 7) begin
+            udp_length   <= previous_i_data[47:32];
           end
         end
       end

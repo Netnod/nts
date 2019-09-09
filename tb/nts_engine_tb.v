@@ -317,10 +317,10 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
     $display("%s:%0d Send NTS IPv6 requests", `__FILE__, `__LINE__);
 
     send_packet({59888'b0, nts_packet_ipv6_request1}, ETHIPV6_NTS_TESTPACKETS_BITS, detect_bits);
-    //`assert(detect_bits == 'b1111);
+    `assert(detect_bits == 'b1111);
 
     send_packet({59888'b0, nts_packet_ipv6_request2}, ETHIPV6_NTS_TESTPACKETS_BITS, detect_bits);
-    //`assert(detect_bits == 'b1111);
+    `assert(detect_bits == 'b1111);
 
     //----------------------------------------------------------------
     // IPv6 Responses
@@ -329,10 +329,10 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
     $display("%s:%0d Send NTS IPv6 responses", `__FILE__, `__LINE__);
 
     send_packet({59888'b0, nts_packet_ipv6_request1}, ETHIPV6_NTS_TESTPACKETS_BITS, detect_bits);
-    //`assert(detect_bits == 'b1111);
+    `assert(detect_bits == 'b1111);
 
     send_packet({59888'b0, nts_packet_ipv6_request2}, ETHIPV6_NTS_TESTPACKETS_BITS, detect_bits);
-    //`assert(detect_bits == 'b1111);
+    `assert(detect_bits == 'b1111);
 
 
     #100 ;

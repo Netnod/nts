@@ -42,11 +42,10 @@ module nts_engine #(
   output wire                  o_dispatch_fifo_rd_en,
   input  wire [63:0]           i_dispatch_fifo_rd_data,
 
-  input wire                   i_keymem_api_cs,
-  input wire                   i_keymem_api_we,
-  input wire           [7 : 0] i_keymem_api_address,
-  input wire          [31 : 0] i_keymem_api_write_data,
-  output wire         [31 : 0] o_keymem_api_read_data,
+  input  wire                  i_spi_sclk,
+  input  wire                  i_spi_mosi,
+  output wire                  o_spi_miso,
+  input  wire                  i_spi_ss,
 
   output wire                  o_detect_unique_identifier,
   output wire                  o_detect_nts_cookie,
@@ -57,6 +56,8 @@ module nts_engine #(
   //----------------------------------------------------------------
   // Internal constant and parameter definitions.
   //----------------------------------------------------------------
+
+  localparam API_SLAVE_BITS          = 1;
 
   localparam ACCESS_PORT_WIDTH       = 32;
 
@@ -93,18 +94,30 @@ module nts_engine #(
   //----------------------------------------------------------------
 
   wire                         dispatch_fifo_rd_en;
+
   wire                         access_port_wait;
   wire      [ADDR_WIDTH+3-1:0] access_port_addr;
   wire                   [2:0] access_port_wordsize;
   wire                         access_port_rd_en;
   wire                         access_port_rd_dv;
   wire [ACCESS_PORT_WIDTH-1:0] access_port_rd_data;
+
   wire                         debug_delay_continue;
+
   wire                         detect_unique_identifier;
   wire                         detect_nts_cookie;
   wire                         detect_nts_cookie_placeholder;
   wire                         detect_nts_authenticator;
+
+  wire      [(2**API_SLAVE_BITS)-1:0] api_cs;
+  wire                                api_we;
+  wire                        [7 : 0] api_address;
+  wire                       [31 : 0] api_write_data;
+  wire [32*(2**API_SLAVE_BITS)-1 : 0] api_read_data;
+
+  wire                         keymem_api_cs;
   wire                [31 : 0] keymem_api_read_data;
+
   wire                         keymem_internal_get_current_key;
   wire                         keymem_internal_get_key_with_id;
   wire                [31 : 0] keymem_internal_server_key_id;
@@ -115,12 +128,18 @@ module nts_engine #(
   wire                [31 : 0] keymem_internal_key_data;
   wire                         keymem_internal_ready;
 
+
   //----------------------------------------------------------------
   // Concurrent connectivity for ports etc.
   //----------------------------------------------------------------
 
-  assign debug_delay_continue            = state_reg == STATE_TO_BE_IMPLEMENTED && (delay_counter_reg < 100);
+  assign keymem_api_cs           = api_cs[1];
 
+  assign api_read_data[63:32] = keymem_api_read_data;
+  assign api_read_data[31:0] = 0;
+
+  assign debug_delay_continue            = state_reg == STATE_TO_BE_IMPLEMENTED && (delay_counter_reg < 100);
+  
   assign keymem_internal_get_current_key = 'b0;
   assign keymem_internal_get_key_with_id = 'b0;
   assign keymem_internal_server_key_id   = 'b0;
@@ -130,12 +149,30 @@ module nts_engine #(
   assign o_dispatch_fifo_rd_en           = dispatch_fifo_rd_en;
   assign o_busy                          = busy_reg;
 
-  assign o_keymem_api_read_data          = keymem_api_read_data;
+  //assign o_keymem_api_read_data          = keymem_api_read_data;
 
   assign o_detect_unique_identifier      = detect_unique_identifier;
   assign o_detect_nts_cookie             = detect_nts_cookie;
   assign o_detect_nts_cookie_placeholder = detect_nts_cookie_placeholder;
   assign o_detect_nts_authenticator      = detect_nts_authenticator;
+
+  //----------------------------------------------------------------
+  // API instantiation.
+  //----------------------------------------------------------------
+
+  nts_api #(.CPHA(1), .CPOL(0), .API_SLAVE_BITS(API_SLAVE_BITS)) dut (
+    .i_areset(i_areset),
+    .i_clk(i_clk),
+    .i_spi_sclk(i_spi_sclk),
+    .i_spi_mosi(i_spi_mosi),
+    .o_spi_miso(o_spi_miso),
+    .i_spi_ss(i_spi_ss),
+    .o_api_cs(api_cs),
+    .o_api_we(api_we),
+    .o_api_address(api_address),
+    .o_api_write_data(api_write_data),
+    .i_api_read_data(api_read_data)
+  );
 
   //----------------------------------------------------------------
   // Receive buffer instantiation.
@@ -197,10 +234,10 @@ module nts_engine #(
     .clk(i_clk),
     .areset(i_areset),
     // API access
-    .cs(i_keymem_api_cs),
-    .we(i_keymem_api_we),
-    .address(i_keymem_api_address),
-    .write_data(i_keymem_api_write_data),
+    .cs(keymem_api_cs),
+    .we(api_we),
+    .address(api_address),
+    .write_data(api_write_data),
     .read_data(keymem_api_read_data),
     // Client access
     .get_current_key(keymem_internal_get_current_key),

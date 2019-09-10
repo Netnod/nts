@@ -78,6 +78,9 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
   reg                  i_keymem_api_we;
   reg          [7 : 0] i_keymem_api_address;
   reg         [31 : 0] i_keymem_api_write_data;
+  reg                  i_spi_sclk;
+  reg                  i_spi_mosi;
+  reg                  i_spi_ss;
 
   reg          [3 : 0] detect_bits;
 
@@ -95,7 +98,7 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
   wire                 o_dispatch_fifo_rd_en;
   wire                 o_dispatch_packet_read_discard;
 
-  wire        [31 : 0] o_keymem_api_read_data;
+  wire                 o_spi_miso;
 
   //----------------------------------------------------------------
   // Test bench macros
@@ -232,11 +235,10 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
     .o_dispatch_fifo_rd_en(o_dispatch_fifo_rd_en),
     .i_dispatch_fifo_rd_data(i_dispatch_fifo_rd_data),
 
-    .i_keymem_api_cs(i_keymem_api_cs),
-    .i_keymem_api_we(i_keymem_api_we),
-    .i_keymem_api_address(i_keymem_api_address),
-    .i_keymem_api_write_data(i_keymem_api_write_data),
-    .o_keymem_api_read_data(o_keymem_api_read_data),
+    .i_spi_sclk(i_spi_sclk),
+    .i_spi_mosi(i_spi_mosi),
+    .o_spi_miso(o_spi_miso),
+    .i_spi_ss(i_spi_ss),
 
     .o_detect_unique_identifier(detect_unique_identifier),
     .o_detect_nts_cookie(detect_nts_cookie),
@@ -256,10 +258,8 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
     i_dispatch_data_valid       = 'b0;
     i_dispatch_fifo_empty       = 'b1;
     i_dispatch_fifo_rd_data     = 'b0;
-    i_keymem_api_cs             = 'b0;
-    i_keymem_api_we             = 'b0;
-    i_keymem_api_address        = 'b0;
-    i_keymem_api_write_data     = 'b0;
+    i_spi_sclk                  = 'b0;
+    i_spi_ss                    = 'b1;
 
     #10
     i_areset = 0;
@@ -342,5 +342,8 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
   end
   always begin
     #5 i_clk = ~i_clk;
+  end
+  always begin
+    #101 i_spi_sclk = ~i_spi_sclk;
   end
 endmodule

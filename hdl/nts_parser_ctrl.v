@@ -32,12 +32,13 @@ module nts_parser_ctrl #(
   parameter ADDR_WIDTH = 10,
   parameter ACCESS_PORT_WIDTH = 64
 ) (
-  input  wire                    i_areset, // async reset
-  input  wire                    i_clk,
-  input  wire                    i_clear,
-  input  wire                    i_process_initial,
-  input  wire              [7:0] i_last_word_data_valid,
-  input  wire             [63:0] i_data,
+  input  wire                         i_areset, // async reset
+  input  wire                         i_clk,
+
+  input  wire                         i_clear,
+  input  wire                         i_process_initial,
+  input  wire                   [7:0] i_last_word_data_valid,
+  input  wire                  [63:0] i_data,
 
   input  wire                         i_access_port_wait,
   output wire      [ADDR_WIDTH+3-1:0] o_access_port_addr,
@@ -46,10 +47,17 @@ module nts_parser_ctrl #(
   input  wire                         i_access_port_rd_dv,
   input  wire [ACCESS_PORT_WIDTH-1:0] i_access_port_rd_data,
 
-  output wire o_detect_unique_identifier,
-  output wire o_detect_nts_cookie,
-  output wire o_detect_nts_cookie_placeholder,
-  output wire o_detect_nts_authenticator
+  output wire                   [3:0] o_keymem_key_word,
+  output wire                         o_keymem_get_key_with_id,
+  output wire                  [31:0] o_keymem_server_id,
+  input  wire                         i_keymem_key_length,
+  input  wire                         i_keymem_key_valid,
+  input  wire                         i_keymem_ready,
+
+  output wire                         o_detect_unique_identifier,
+  output wire                         o_detect_nts_cookie,
+  output wire                         o_detect_nts_cookie_placeholder,
+  output wire                         o_detect_nts_authenticator
 );
 
   //----------------------------------------------------------------
@@ -61,12 +69,16 @@ module nts_parser_ctrl #(
   localparam [15:0] TAG_NTS_COOKIE_PLACEHOLDER = 'h0304;
   localparam [15:0] TAG_NTS_AUTHENTICATOR      = 'h0404;
 
-  localparam STATE_IDLE                  = 4'h0;
-  localparam STATE_COPY                  = 4'h1;
-  localparam STATE_LENGTH_CHECKS         = 4'h3;
-  localparam STATE_EXTRACT_EXT_FROM_RAM  = 4'h4;
-  localparam STATE_EXTENSIONS_EXTRACTED  = 4'h5;
-  localparam STATE_ERROR_GENERAL         = 4'hf;
+  localparam STATE_IDLE                     = 4'h0;
+  localparam STATE_COPY                     = 4'h1;
+  localparam STATE_LENGTH_CHECKS            = 4'h3;
+  localparam STATE_EXTRACT_EXT_FROM_RAM     = 4'h4;
+  localparam STATE_EXTENSIONS_EXTRACTED     = 4'h5;
+  localparam STATE_EXTRACT_COOKIE_FROM_RAM  = 4'h6;
+  localparam STATE_VERIFY_KEY_FROM_COOKIE1  = 4'h7;
+  localparam STATE_VERIFY_KEY_FROM_COOKIE2  = 4'h8;
+  localparam STATE_ERROR_UNIMPLEMENTED      = 4'he;
+  localparam STATE_ERROR_GENERAL            = 4'hf;
 
   localparam NTP_EXTENSION_BITS          = 4;
   localparam NTP_EXTENSION_FIELDS        = (1<<NTP_EXTENSION_BITS);
@@ -90,6 +102,10 @@ module nts_parser_ctrl #(
   reg                         access_port_wordsize_we;
   reg                   [2:0] access_port_wordsize_new;
   reg                   [2:0] access_port_wordsize_reg;
+
+  reg                         cookie_server_id_we;
+  reg                  [31:0] cookie_server_id_new;
+  reg                  [31:0] cookie_server_id_reg;
 
   reg                         state_we;
   reg                   [3:0] state_new;
@@ -129,6 +145,16 @@ module nts_parser_ctrl #(
   reg                   [15:0] ipdecode_udp_length_new;
   reg                   [15:0] ipdecode_udp_length_reg;
 
+  reg                          keymem_key_word_we;
+  reg                    [3:0] keymem_key_word_new;
+  reg                    [3:0] keymem_key_word_reg;
+  reg                          keymem_get_key_with_id_we;
+  reg                          keymem_get_key_with_id_new;
+  reg                          keymem_get_key_with_id_reg;
+  reg                          keymem_server_id_we;
+  reg                   [31:0] keymem_server_id_new;
+  reg                   [31:0] keymem_server_id_reg;
+
   reg                          ntp_extension_counter_we;
   reg [NTP_EXTENSION_BITS-1:0] ntp_extension_counter_new;
   reg [NTP_EXTENSION_BITS-1:0] ntp_extension_counter_reg;
@@ -149,6 +175,7 @@ module nts_parser_ctrl #(
   reg                          detect_nts_cookie_placeholder_reg;
   reg                          detect_nts_authenticator_reg;
 
+  reg [NTP_EXTENSION_BITS-1:0] detect_nts_cookie_index_reg;
 
   //----------------------------------------------------------------
   // Wires.
@@ -175,6 +202,10 @@ module nts_parser_ctrl #(
   assign o_access_port_addr     = access_port_addr_reg;
   assign o_access_port_rd_en    = access_port_rd_en_reg;
   assign o_access_port_wordsize = access_port_wordsize_reg;
+
+  assign o_keymem_key_word        = keymem_key_word_reg;
+  assign o_keymem_get_key_with_id = keymem_get_key_with_id_reg;
+  assign o_keymem_server_id       = keymem_server_id_reg;
 
   assign o_detect_unique_identifier      = detect_unique_identifier_reg;
   assign o_detect_nts_cookie             = detect_nts_cookie_reg;
@@ -241,17 +272,23 @@ module nts_parser_ctrl #(
   always @ (posedge i_clk, posedge i_areset)
   begin : reg_update
     if (i_areset == 1'b1) begin
-      access_port_addr_reg      <= 'b0;
-      access_port_rd_en_reg     <= 'b0;
-      access_port_wordsize_reg  <= 'b0;
-      ipdecode_udp_length_reg   <= 'b0;
-      last_bytes_reg            <= 'b0;
-      memory_address_reg        <= 'b0;
-      memory_bound_reg          <= 'b0;
-      ntp_extension_counter_reg <= 'b0;
-      previous_i_data_reg       <= 'b0;
-      state_reg                 <= 'b0;
-      word_counter_reg          <= 'b0;
+      access_port_addr_reg       <= 'b0;
+      access_port_rd_en_reg      <= 'b0;
+      access_port_wordsize_reg   <= 'b0;
+      cookie_server_id_reg       <= 'b0;
+      ipdecode_ip_version_reg    <= 'b0;
+      ipdecode_ip4_ihl_reg       <= 'b0;
+      ipdecode_udp_length_reg    <= 'b0;
+      keymem_key_word_reg        <= 'b0;
+      keymem_get_key_with_id_reg <= 'b0;
+      keymem_server_id_reg       <= 'b0;
+      last_bytes_reg             <= 'b0;
+      memory_address_reg         <= 'b0;
+      memory_bound_reg           <= 'b0;
+      ntp_extension_counter_reg  <= 'b0;
+      previous_i_data_reg        <= 'b0;
+      state_reg                  <= 'b0;
+      word_counter_reg           <= 'b0;
       begin : ntp_extension_reset_async
         integer i;
         for (i=0; i <= NTP_EXTENSION_FIELDS-1; i=i+1) begin
@@ -273,6 +310,9 @@ module nts_parser_ctrl #(
       if (access_port_wordsize_we)
         access_port_wordsize_reg <= access_port_wordsize_new;
 
+      if (cookie_server_id_we)
+        cookie_server_id_reg <= cookie_server_id_new;
+
       if (ipdecode_ethernet_protocol_we)
         ipdecode_ethernet_protocol_reg <= ipdecode_ethernet_protocol_new;
 
@@ -284,6 +324,15 @@ module nts_parser_ctrl #(
 
       if (ipdecode_udp_length_we)
         ipdecode_udp_length_reg <= ipdecode_udp_length_new;
+
+      if (keymem_key_word_we)
+        keymem_key_word_reg <= keymem_key_word_new;
+
+      if (keymem_get_key_with_id_we)
+        keymem_get_key_with_id_reg <= keymem_get_key_with_id_new;
+
+      if (keymem_server_id_we)
+        keymem_server_id_reg <= keymem_server_id_new;
 
       if (last_bytes_we)
         last_bytes_reg <= last_bytes_new;
@@ -448,6 +497,96 @@ module nts_parser_ctrl #(
           access_port_wordsize_we  = 'b1; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit
           access_port_wordsize_new = 2; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit
         end
+      end else if (state_reg == STATE_EXTENSIONS_EXTRACTED && detect_nts_cookie_reg && ntp_extension_length_reg[detect_nts_cookie_index_reg] >= 8)  begin
+        ;
+      end else if (state_reg == STATE_EXTRACT_COOKIE_FROM_RAM) begin
+        //TODO add support for multiple cookies
+        if (i_access_port_rd_dv) begin
+          $display("%s:%0d i_access_port_rd_data=%h",`__FILE__, `__LINE__, i_access_port_rd_data);
+          ;
+        end else if (i_access_port_wait == 'b0) begin
+          access_port_addr_we      = 'b1;
+          access_port_addr_new     = ntp_extension_addr_reg[detect_nts_cookie_index_reg] + 4;
+          access_port_rd_en_we     = 'b1;
+          access_port_rd_en_new    = 'b1;
+          access_port_wordsize_we  = 'b1; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit
+          access_port_wordsize_new = 2; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit
+        end
+      end
+    end
+  end
+
+  always @*
+  begin
+   $display("%s:%0d keymem_get_key_with_id_we = %h", `__FILE__, `__LINE__, keymem_get_key_with_id_we);
+  end
+
+  always @*
+  begin
+    keymem_key_word_we         = 'b0;
+    keymem_key_word_new        = 'b0;
+
+    keymem_get_key_with_id_we  = 'b1;
+    keymem_get_key_with_id_new = 'b0;
+
+    keymem_server_id_we        = 'b0;
+    keymem_server_id_new       = 'b0;
+
+    case (state_reg)
+      STATE_EXTRACT_COOKIE_FROM_RAM:
+        begin
+          keymem_key_word_we         = 'b1;
+          //keymem_get_key_with_id_we  = 'b1;
+          keymem_server_id_we        = 'b1;
+        end
+      STATE_VERIFY_KEY_FROM_COOKIE1:
+        //$display("%s:%0d STATE_VERIFY_KEY_FROM_COOKIE1 i_keymem_key_valid=%h i_keymem_ready=%h keymem_key_word_reg=%h", `__FILE__, `__LINE__, i_keymem_key_valid, i_keymem_ready, keymem_key_word_reg);
+        if (i_keymem_ready == 'b1) begin
+          keymem_key_word_we         = 'b1;
+          keymem_key_word_new        = 'b0;
+          //keymem_get_key_with_id_we  = 'b1;
+          keymem_get_key_with_id_new = 'b1;
+          keymem_server_id_we        = 'b1;
+          keymem_server_id_new       = cookie_server_id_reg;
+        end
+        //$display("%s:%0d STATE_VERIFY_KEY_FROM_COOKIE1 keymem_server_id_we = %h keymem_server_id_new = %h coookie_server_id_reg = %h", `__FILE__, `__LINE__, keymem_server_id_we, keymem_server_id_new, cookie_server_id_reg);
+      STATE_VERIFY_KEY_FROM_COOKIE2:
+        begin
+          //$display("%s:%0d STATE_VERIFY_KEY_FROM_COOKIE2 i_keymem_key_valid=%h i_keymem_ready=%h keymem_key_word_reg=%h keymem_server_id_reg=%h", `__FILE__, `__LINE__, i_keymem_key_valid, i_keymem_ready, keymem_key_word_reg, keymem_server_id_reg);
+          keymem_get_key_with_id_we  = 'b1;
+          keymem_get_key_with_id_new = 'b0;
+          if (i_keymem_ready && keymem_get_key_with_id_reg == 'b0) begin
+            if (i_keymem_key_valid == 'b0) begin
+               ; // reset, zero all output
+               $display("%s:%0d STATE_VERIFY_KEY_FROM_COOKIE2", `__FILE__, `__LINE__);
+            end else if (keymem_key_word_reg == 'b1111) begin
+              keymem_get_key_with_id_we  = 'b1;
+              ; // reset, zero all output
+              $display("%s:%0d STATE_VERIFY_KEY_FROM_COOKIE2", `__FILE__, `__LINE__);
+            end else begin
+              // Yay! We read a key word
+              keymem_key_word_we         = 'b1;
+              keymem_key_word_new        = keymem_key_word_reg + 1;
+              keymem_get_key_with_id_we  = 'b1;
+              keymem_get_key_with_id_new = 'b1;
+              $display("%s:%0d STATE_VERIFY_KEY_FROM_COOKIE2 keymem_key_word_reg = %h keymem_key_word_new = %h", `__FILE__, `__LINE__, keymem_key_word_reg, keymem_key_word_new);
+            end
+          end
+        end
+      default: ;
+    endcase
+    //$display("%s:%0d keymem_key_word we=%h new=%h keymem_server_id we=%h new=%h", `__FILE__, `__LINE__, keymem_key_word_we, keymem_key_word_new, keymem_server_id_we, keymem_server_id_new);
+  end
+
+  always @*
+  begin
+    cookie_server_id_we  = 'b0;
+    cookie_server_id_new = 'b0;
+    if (state_reg == STATE_EXTRACT_COOKIE_FROM_RAM) begin
+      if (i_access_port_rd_dv) begin
+        cookie_server_id_we  = 'b1;
+        cookie_server_id_new = i_access_port_rd_data[31:0];
+        $display("%s:%0d cookie_server_id we=%h new=%h", `__FILE__, `__LINE__, cookie_server_id_we, i_access_port_rd_data[31:0]);
       end
     end
   end
@@ -571,10 +710,51 @@ module nts_parser_ctrl #(
           end else if (memory_address_lastbyte_read_reg == 1'b1) begin
             state_we  = 'b1;
             state_new = STATE_EXTENSIONS_EXTRACTED;
-          end if (ntp_extension_counter_reg==NTP_EXTENSION_FIELDS-1) begin
+          end else if (ntp_extension_counter_reg==NTP_EXTENSION_FIELDS-1) begin
             state_we  = 'b1;
             state_new = STATE_ERROR_GENERAL;
             $display("%s:%0d ",`__FILE__,`__LINE__);
+          end
+        end
+      STATE_EXTENSIONS_EXTRACTED:
+        if (detect_nts_cookie_reg) begin
+          //TODO add support for multiple cookies
+          if (ntp_extension_length_reg[detect_nts_cookie_index_reg] >= 8) begin
+            state_we  = 'b1;
+            state_new = STATE_EXTRACT_COOKIE_FROM_RAM;
+          end else begin
+            state_we  = 'b1;
+            state_new = STATE_ERROR_GENERAL;
+          end
+        end else begin
+          state_we  = 'b1;
+          state_new = STATE_ERROR_GENERAL;
+        end
+      STATE_EXTRACT_COOKIE_FROM_RAM:
+        if (i_access_port_rd_dv) begin
+          state_we  = 'b1;
+          state_new = STATE_VERIFY_KEY_FROM_COOKIE1;
+        end
+      STATE_VERIFY_KEY_FROM_COOKIE1:
+        begin
+          if (i_keymem_ready) begin
+            state_we  = 'b1;
+            state_new = STATE_VERIFY_KEY_FROM_COOKIE2;
+          end else begin
+            state_we  = 'b1;
+            state_new = STATE_ERROR_UNIMPLEMENTED;
+          end
+        end
+      STATE_VERIFY_KEY_FROM_COOKIE2:
+        if (i_keymem_ready && keymem_get_key_with_id_reg == 'b0 ) begin
+          //$display("keymem_key_word_reg=%h", keymem_key_word_reg);
+          if (i_keymem_key_valid == 'b0) begin
+            //$display("xxx");
+            state_we  = 'b1;
+            state_new = STATE_ERROR_GENERAL;
+          end else if (keymem_key_word_reg == 'b1111) begin
+            state_we  = 'b1;
+            state_new = STATE_ERROR_UNIMPLEMENTED;
           end
         end
       STATE_ERROR_GENERAL:
@@ -612,7 +792,7 @@ module nts_parser_ctrl #(
       ipdecode_udp_length_we         = 'b1;
 
     end else if (i_process_initial) begin
-
+//      $display("%s:%0d %h %h", `__FILE__, `__LINE__, i_data, previous_i_data_reg);
       if (word_counter_reg == 0) begin
         ipdecode_ethernet_protocol_we  = 'b1;
         ipdecode_ethernet_protocol_new = previous_i_data_reg[31:16];
@@ -620,6 +800,7 @@ module nts_parser_ctrl #(
         ipdecode_ip_version_new        = previous_i_data_reg[15:12];
         ipdecode_ip4_ihl_we            = 'b1;
         ipdecode_ip4_ihl_new           = previous_i_data_reg[11:8];
+//        $display("%s:%0d %h %h %h %h", `__FILE__, `__LINE__, ipdecode_ethernet_protocol_new, ipdecode_ip_version_new, ipdecode_ip4_ihl_new, previous_i_data_reg);
 
       end else if (detect_ipv4 && ipdecode_ip4_ihl_reg == 5) begin
         if (word_counter_reg == 3) begin
@@ -643,24 +824,30 @@ module nts_parser_ctrl #(
   always @*
   begin : output_detection_signals
     integer i;
+
+    detect_nts_cookie_index_reg       = 'b0;
+
     detect_unique_identifier_reg      = 'b0;
     detect_nts_cookie_reg             = 'b0;
     detect_nts_cookie_placeholder_reg = 'b0;
     detect_nts_authenticator_reg      = 'b0;
+
     for (i = 0; i < NTP_EXTENSION_FIELDS; i = i + 1) begin
       if (ntp_extension_copied_reg[i]) begin
 
         if (ntp_extension_tag_reg[i]==TAG_UNIQUE_IDENTIFIER)
-          detect_unique_identifier_reg       = 'b1;
+          detect_unique_identifier_reg      = 'b1;
 
-        if (ntp_extension_tag_reg[i]==TAG_NTS_COOKIE)
-           detect_nts_cookie_reg             = 'b1;
+        if (ntp_extension_tag_reg[i]==TAG_NTS_COOKIE) begin
+          detect_nts_cookie_reg             = 'b1;
+          detect_nts_cookie_index_reg       = i [NTP_EXTENSION_BITS-1:0];
+        end
 
         if (ntp_extension_tag_reg[i]==TAG_NTS_COOKIE_PLACEHOLDER)
-           detect_nts_cookie_placeholder_reg = 'b1;
+          detect_nts_cookie_placeholder_reg = 'b1;
 
         if (ntp_extension_tag_reg[i]==TAG_NTS_AUTHENTICATOR)
-           detect_nts_authenticator_reg      = 'b1;
+          detect_nts_authenticator_reg      = 'b1;
       end
     end
   end
@@ -677,11 +864,15 @@ module nts_parser_ctrl #(
     end else begin
       case (state_reg)
         STATE_IDLE: ;
-        STATE_COPY: ;
-        STATE_LENGTH_CHECKS: ;
-        STATE_EXTRACT_EXT_FROM_RAM: ;
-        STATE_ERROR_GENERAL: $display("%s:%0d warning: error",`__FILE__,`__LINE__);
-        default: $display("%s:%0d warning: state %0d not implemented",`__FILE__,`__LINE__, state_reg);
+        STATE_COPY: ; //$display("%s:%0d STATE_COPY", `__FILE__, `__LINE__);
+        STATE_LENGTH_CHECKS: ; //$display("%s:%0d STATE_LENGTH_CHECKS", `__FILE__, `__LINE__);
+        STATE_EXTRACT_EXT_FROM_RAM: ; //$display("%s:%0d STATE_EXTRACT_EXT_FROM_RAM", `__FILE__, `__LINE__);
+        STATE_EXTRACT_COOKIE_FROM_RAM: $display("%s:%0d STATE_EXTRACT_COOKIE_FROM_RAM", `__FILE__, `__LINE__);
+        STATE_EXTENSIONS_EXTRACTED: $display("%s:%0d STATE_EXTENSIONS_EXTRACTED", `__FILE__, `__LINE__);
+        STATE_VERIFY_KEY_FROM_COOKIE1: $display("%s:%0d STATE_VERIFY_KEY_FROM_COOKIE1", `__FILE__, `__LINE__);
+        STATE_VERIFY_KEY_FROM_COOKIE2: $display("%s:%0d STATE_VERIFY_KEY_FROM_COOKIE2", `__FILE__, `__LINE__);
+        STATE_ERROR_GENERAL: $display("%s:%0d warning: error", `__FILE__, `__LINE__);
+        default: $display("%s:%0d warning: state %0d not implemented", `__FILE__, `__LINE__, state_reg);
       endcase
     end
   end

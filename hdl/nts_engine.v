@@ -141,9 +141,6 @@ module nts_engine #(
   assign debug_delay_continue            = state_reg == STATE_TO_BE_IMPLEMENTED && (delay_counter_reg < 100);
   
   assign keymem_internal_get_current_key = 'b0;
-  assign keymem_internal_get_key_with_id = 'b0;
-  assign keymem_internal_server_key_id   = 'b0;
-  assign keymem_internal_key_word        = 'b0;
 
   assign o_dispatch_packet_read_discard  = dispatch_packet_discard_reg;
   assign o_dispatch_fifo_rd_en           = dispatch_fifo_rd_en;
@@ -223,6 +220,13 @@ module nts_engine #(
    .o_access_port_rd_en(access_port_rd_en),
    .i_access_port_rd_dv(access_port_rd_dv),
    .i_access_port_rd_data(access_port_rd_data),
+
+   .o_keymem_key_word(keymem_internal_key_word),
+   .o_keymem_get_key_with_id(keymem_internal_get_key_with_id),
+   .o_keymem_server_id(keymem_internal_server_key_id),
+   .i_keymem_key_length(keymem_internal_key_length),
+   .i_keymem_key_valid(keymem_internal_key_valid),
+   .i_keymem_ready(keymem_internal_ready),
 
    .o_detect_unique_identifier(detect_unique_identifier),
    .o_detect_nts_cookie(detect_nts_cookie),
@@ -343,6 +347,7 @@ module nts_engine #(
   // A small delay to simulate system processing.
   // Will be removed when more of the processing is implemented.
   //----------------------------------------------------------------
+
   always @*
   begin : debug_delay
     delay_counter_we              = 'b0;

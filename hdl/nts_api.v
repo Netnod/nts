@@ -157,6 +157,7 @@ module nts_api #(
 
   always @*
   begin
+    spi_miso_new = 'b0;
     spi_tx_new = 'b0;
     spi_tx_counter_new = 'b0;
     if (i_spi_ss == 0) begin

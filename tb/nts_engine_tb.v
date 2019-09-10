@@ -74,10 +74,6 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
   reg                  i_dispatch_fifo_empty;
   reg [63:0]           i_dispatch_fifo_rd_data;
 
-  reg                  i_keymem_api_cs;
-  reg                  i_keymem_api_we;
-  reg          [7 : 0] i_keymem_api_address;
-  reg         [31 : 0] i_keymem_api_write_data;
   reg                  i_spi_sclk;
   reg                  i_spi_mosi;
   reg                  i_spi_ss;
@@ -328,11 +324,11 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
 
     $display("%s:%0d Send NTS IPv6 responses", `__FILE__, `__LINE__);
 
-    send_packet({59888'b0, nts_packet_ipv6_request1}, ETHIPV6_NTS_TESTPACKETS_BITS, detect_bits);
-    `assert(detect_bits == 'b1111);
+    send_packet({59888'b0, nts_packet_ipv6_response1}, ETHIPV6_NTS_TESTPACKETS_BITS, detect_bits);
+    `assert(detect_bits == 'b1001);
 
-    send_packet({59888'b0, nts_packet_ipv6_request2}, ETHIPV6_NTS_TESTPACKETS_BITS, detect_bits);
-    `assert(detect_bits == 'b1111);
+    send_packet({59888'b0, nts_packet_ipv6_response2}, ETHIPV6_NTS_TESTPACKETS_BITS, detect_bits);
+    `assert(detect_bits == 'b1001);
 
 
     #100 ;

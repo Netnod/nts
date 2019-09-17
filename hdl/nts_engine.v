@@ -42,6 +42,13 @@ module nts_engine #(
   output wire                  o_dispatch_fifo_rd_en,
   input  wire [63:0]           i_dispatch_fifo_rd_data,
 
+  output wire                  o_dispatch_tx_packet_available,
+  input  wire                  i_dispatch_tx_packet_read,
+  output wire                  o_dispatch_tx_fifo_empty,
+  input  wire                  i_dispatch_tx_fifo_rd_en,
+  output wire [63:0]           o_dispatch_tx_fifo_rd_data,
+  output wire  [3:0]           o_dispatch_tx_bytes_last_word,
+
   input  wire                  i_spi_sclk,
   input  wire                  i_spi_mosi,
   output wire                  o_spi_miso,
@@ -128,6 +135,13 @@ module nts_engine #(
   wire                [31 : 0] keymem_internal_key_data;
   wire                         keymem_internal_ready;
 
+  wire                         parser_txbuf_clear;
+  wire                         parser_txbuf_write_en;
+  wire                  [63:0] parser_txbuf_write_data;
+  wire                         parser_txbuf_ipv4_done;
+  wire                         parser_txbuf_ipv6_done;
+  wire                         txbuf_parser_full;
+
 
   //----------------------------------------------------------------
   // Concurrent connectivity for ports etc.
@@ -139,8 +153,14 @@ module nts_engine #(
   assign api_read_data[31:0] = 0;
 
   assign debug_delay_continue            = state_reg == STATE_TO_BE_IMPLEMENTED && (delay_counter_reg < 100);
-  
+
   assign keymem_internal_get_current_key = 'b0;
+
+  assign parser_txbuf_clear       = 'b0; //TODO implement
+  assign parser_txbuf_write_en    = 'b0; //TODO implement
+  assign parser_txbuf_write_data  = 'b0; //TODO implement
+  assign parser_txbuf_ipv4_done   = 'b0; //TODO implement
+  assign parser_txbuf_ipv6_done   = 'b0; //TODO implement
 
   assign o_dispatch_packet_read_discard  = dispatch_packet_discard_reg;
   assign o_dispatch_fifo_rd_en           = dispatch_fifo_rd_en;
@@ -178,7 +198,7 @@ module nts_engine #(
   nts_rx_buffer #(
     .ADDR_WIDTH(ADDR_WIDTH),
     .ACCESS_PORT_WIDTH(ACCESS_PORT_WIDTH)
-  ) buffer (
+  ) rx_buffer (
      .i_areset(i_areset),
      .i_clk(i_clk),
 
@@ -195,6 +215,34 @@ module nts_engine #(
      .i_access_port_rd_en(access_port_rd_en),
      .o_access_port_rd_dv(access_port_rd_dv),
      .o_access_port_rd_data(access_port_rd_data)
+  );
+
+  //----------------------------------------------------------------
+  // Transmit Vuffer instantiation.
+  //----------------------------------------------------------------
+
+  nts_tx_buffer #(
+    .ADDR_WIDTH(ADDR_WIDTH)
+  ) tx_buffer (
+    .i_areset(i_areset), // async reset
+    .i_clk(i_clk),
+
+    .o_dispatch_tx_packet_available(o_dispatch_tx_packet_available),
+    .i_dispatch_tx_packet_read(i_dispatch_tx_packet_read),
+    .o_dispatch_tx_fifo_empty(o_dispatch_tx_fifo_empty),
+    .i_dispatch_tx_fifo_rd_en(i_dispatch_tx_fifo_rd_en),
+    .o_dispatch_tx_fifo_rd_data(o_dispatch_tx_fifo_rd_data),
+    .o_dispatch_tx_bytes_last_word(o_dispatch_tx_bytes_last_word),
+
+    .i_parser_clear(parser_txbuf_clear),
+    .i_parser_w_en(parser_txbuf_write_en),
+    .i_parser_w_data(parser_txbuf_write_data),
+
+    .i_parser_ipv4_done(parser_txbuf_ipv4_done),
+    .i_parser_ipv6_done(parser_txbuf_ipv6_done),
+
+    .o_parser_current_memory_full(txbuf_parser_full),
+    .o_parser_current_empty(txbuf_parser_full)
   );
 
   //----------------------------------------------------------------

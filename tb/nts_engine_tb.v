@@ -69,10 +69,15 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
 
   reg                  i_areset;
   reg                  i_clk;
+
   reg                  i_dispatch_packet_available;
   reg [7:0]            i_dispatch_data_valid;
   reg                  i_dispatch_fifo_empty;
   reg [63:0]           i_dispatch_fifo_rd_data;
+
+  reg                  i_dispatch_tx_packet_read;
+  reg                  i_dispatch_tx_fifo_rd_en;
+
 
   reg                  i_spi_sclk;
   reg                  i_spi_mosi;
@@ -93,6 +98,11 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
 
   wire                 o_dispatch_fifo_rd_en;
   wire                 o_dispatch_packet_read_discard;
+
+  wire                 o_dispatch_tx_packet_available;
+  wire                 o_dispatch_tx_fifo_empty;
+  wire [63:0]          o_dispatch_tx_fifo_rd_data;
+  wire  [3:0]          o_dispatch_tx_bytes_last_word;
 
   wire                 o_spi_miso;
 
@@ -230,6 +240,13 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
     .i_dispatch_fifo_empty(i_dispatch_fifo_empty),
     .o_dispatch_fifo_rd_en(o_dispatch_fifo_rd_en),
     .i_dispatch_fifo_rd_data(i_dispatch_fifo_rd_data),
+
+    .o_dispatch_tx_packet_available(o_dispatch_tx_packet_available),
+    .i_dispatch_tx_packet_read(i_dispatch_tx_packet_read),
+    .o_dispatch_tx_fifo_empty(o_dispatch_tx_fifo_empty),
+    .i_dispatch_tx_fifo_rd_en(i_dispatch_tx_fifo_rd_en),
+    .o_dispatch_tx_fifo_rd_data(o_dispatch_tx_fifo_rd_data),
+    .o_dispatch_tx_bytes_last_word(o_dispatch_tx_bytes_last_word),
 
     .i_spi_sclk(i_spi_sclk),
     .i_spi_mosi(i_spi_mosi),

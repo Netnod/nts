@@ -78,10 +78,10 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
   reg                  i_dispatch_tx_packet_read;
   reg                  i_dispatch_tx_fifo_rd_en;
 
-
-  reg                  i_spi_sclk;
-  reg                  i_spi_mosi;
-  reg                  i_spi_ss;
+  reg                  i_api_cs;
+  reg                  i_api_we;
+  reg [11:0]           i_api_address;
+  reg [31:0]           i_api_write_data;
 
   reg          [3 : 0] detect_bits;
 
@@ -96,6 +96,8 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
 
   wire                 o_busy;
 
+  wire [31:0]          o_api_read_data;
+
   wire                 o_dispatch_fifo_rd_en;
   wire                 o_dispatch_packet_read_discard;
 
@@ -103,8 +105,6 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
   wire                 o_dispatch_tx_fifo_empty;
   wire [63:0]          o_dispatch_tx_fifo_rd_data;
   wire  [3:0]          o_dispatch_tx_bytes_last_word;
-
-  wire                 o_spi_miso;
 
   //----------------------------------------------------------------
   // Test bench macros
@@ -248,16 +248,40 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
     .o_dispatch_tx_fifo_rd_data(o_dispatch_tx_fifo_rd_data),
     .o_dispatch_tx_bytes_last_word(o_dispatch_tx_bytes_last_word),
 
-    .i_spi_sclk(i_spi_sclk),
-    .i_spi_mosi(i_spi_mosi),
-    .o_spi_miso(o_spi_miso),
-    .i_spi_ss(i_spi_ss),
+    .i_api_cs(i_api_cs),
+    .i_api_we(i_api_we),
+    .i_api_address(i_api_address),
+    .i_api_write_data(i_api_write_data),
+    .o_api_read_data(o_api_read_data),
 
     .o_detect_unique_identifier(detect_unique_identifier),
     .o_detect_nts_cookie(detect_nts_cookie),
     .o_detect_nts_cookie_placeholder(detect_nts_cookie_placeholder),
     .o_detect_nts_authenticator(detect_nts_authenticator)
   );
+
+  //----------------------------------------------------------------
+  // Task for simplifying updating API signals
+  //----------------------------------------------------------------
+
+  task api_set;
+    input         i_cs;
+    input         i_we;
+    input  [11:0] i_addr;
+    input  [31:0] i_data;
+    output        o_cs;
+    output        o_we;
+    output [11:0] o_addr;
+    output  [31:0] o_data;
+  begin
+    o_cs   = i_cs;
+    o_we   = i_we;
+    o_addr = i_addr;
+    o_data = i_data;
+    //if (verbose > 0)
+    //  $display("%s:%0d cs=%h we=%h addr=%h data=%h", `__FILE__, `__LINE__, i_cs, i_we, i_addr, i_data);
+  end
+  endtask
 
   //----------------------------------------------------------------
   // Test bench code
@@ -271,14 +295,26 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
     i_dispatch_data_valid       = 'b0;
     i_dispatch_fifo_empty       = 'b1;
     i_dispatch_fifo_rd_data     = 'b0;
-    i_spi_sclk                  = 'b0;
-    i_spi_ss                    = 'b1;
+
+    i_api_cs         = 0;
+    i_api_we         = 0;
+    i_api_address    = 0;
+    i_api_write_data = 0;
+
 
     #10
     i_areset = 0;
     `assert( o_busy == 'b0 );
     `assert( o_dispatch_packet_read_discard == 'b0 );
     `assert( o_dispatch_fifo_rd_en == 'b0 );
+
+    // Verify success accessing keymem over API interface
+    #10 ;
+    api_set(1, 0, 'h080, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+    #10 `assert( o_api_read_data == 32'h6b65795f); // "key_"
+    api_set(1, 0, 'h081, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+    #10 `assert( o_api_read_data == 32'h6d656d20); // "mem "
+
 
     $display("%s:%0d Send legacy NTP", `__FILE__, `__LINE__);
     send_packet({64816'b0, ntp_legacy_packet}, 720, detect_bits);
@@ -355,8 +391,5 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
   end
   always begin
     #5 i_clk = ~i_clk;
-  end
-  always begin
-    #101 i_spi_sclk = ~i_spi_sclk;
   end
 endmodule

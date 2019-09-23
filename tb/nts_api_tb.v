@@ -29,172 +29,120 @@
 //
 
 module nts_api_tb;
+  parameter verbose = 1;
 
-  localparam API_SLAVE_BITS = 2;
-  localparam integer SPI_REG_SIZE = 1 /* start bit */
-                                 + API_SLAVE_BITS
-                                 + 1 /* we bit */
-                                 + 8 /* addr */
-                                 + 32 /* data */;
+  reg         i_external_api_cs;
+  reg         i_external_api_we;
+  reg  [11:0] i_external_api_address;
+  reg  [31:0] i_external_api_write_data;
+  wire [31:0] o_external_api_read_data;
 
-  reg                                 i_areset;
-  reg                                 i_clk;
-  reg                                 i_spi_sclk;
-  reg                                 i_spi_mosi;
-  reg                                 i_spi_ss;
+  wire        o_internal_api_we;
+  wire  [7:0] o_internal_api_address;
+  wire [31:0] o_internal_api_write_data;
 
-  reg  [32*(2**API_SLAVE_BITS)-1 : 0] i_api_read_data;
+  wire        o_internal_engine_api_cs;
+  wire [31:0] i_internal_engine_api_read_data;
 
-  reg                                 spi_close_reg;
-  reg                                 spi_busy;
-  reg              [SPI_REG_SIZE-1:0] tx_buf;
-  integer                             tx_counter;
-  reg                          [32:0] rx;
-  integer                             rx_counter;
+  wire        o_internal_clock_api_cs;
+  wire [31:0] i_internal_clock_api_read_data;
 
-  wire      [(2**API_SLAVE_BITS)-1:0] o_api_cs;
-  wire                                o_api_we;
-  wire                        [7 : 0] o_api_address;
-  wire                       [31 : 0] o_api_write_data;
-  wire                                o_spi_miso;
+  wire        o_internal_cookie_api_cs;
+  wire [31:0] i_internal_cookie_api_read_data;
+
+  wire        o_internal_keymem_api_cs;
+  wire [31:0] i_internal_keymem_api_read_data;
+
+  wire        o_internal_debug_api_cs;
+  wire [31:0] i_internal_debug_api_read_data;
+
+  wire [4:0]  cs;
+
+  assign      i_internal_engine_api_read_data = { 8'h0A, 7'h0, o_internal_api_we, i_external_api_write_data[7:0], o_internal_api_address };
+  assign      i_internal_clock_api_read_data  = { 8'h0B, 7'h0, o_internal_api_we, i_external_api_write_data[7:0], o_internal_api_address };
+  assign      i_internal_cookie_api_read_data = { 8'h0C, 7'h0, o_internal_api_we, i_external_api_write_data[7:0], o_internal_api_address };
+  assign      i_internal_keymem_api_read_data = { 8'h0D, 7'h0, o_internal_api_we, i_external_api_write_data[7:0], o_internal_api_address };
+  assign      i_internal_debug_api_read_data  = { 8'h0E, 7'h0, o_internal_api_we, i_external_api_write_data[7:0], o_internal_api_address };
+
+  assign      cs = { o_internal_engine_api_cs, o_internal_clock_api_cs, o_internal_cookie_api_cs, o_internal_keymem_api_cs, o_internal_debug_api_cs };
 
   `define assert(condition) if(!(condition)) begin $display("ASSERT FAILED: %s:%0d %s", `__FILE__, `__LINE__, `"condition`"); $finish(1); end
 
-  task spi_transmit_cmd;
-    input [API_SLAVE_BITS-1:0] slave;
-    input                      we;
-    input                [7:0] addr;
-    input               [31:0] write_data;
-    output  [SPI_REG_SIZE-1:0] tx;
-    output             integer tx_bits;
-  begin : spi_cmd_transmit_locals
-    $display("%s:%0d spi_transmit(%h,%h,%h,%h,...,...)", `__FILE__, `__LINE__, slave, we, addr, write_data);
-    `assert(tx_counter == 'b0);
-    while (spi_busy) #10 ;
-    tx      = { 1'b1, slave, we, addr, write_data };
-    tx_bits = SPI_REG_SIZE;
-  end
-  endtask
+  nts_api dut (
+    .i_external_api_cs(i_external_api_cs),
+    .i_external_api_we(i_external_api_we),
+    .i_external_api_address(i_external_api_address),
+    .i_external_api_write_data(i_external_api_write_data),
+    .o_external_api_read_data(o_external_api_read_data),
 
-  task spi_transmit_wait;
-  begin
-    $display("%s:%0d spi_wait() begin", `__FILE__, `__LINE__);
-    while (tx_counter != 'b0) #10 ;
-    $display("%s:%0d spi_wait() end", `__FILE__, `__LINE__);
-  end
-  endtask
+    .o_internal_api_we(o_internal_api_we),
+    .o_internal_api_address(o_internal_api_address),
+    .o_internal_api_write_data(o_internal_api_write_data),
 
-  task spi_close;
-  output spi_close_reg;
-  begin
-    $display("%s:%0d spi_close()", `__FILE__, `__LINE__);
-    spi_close_reg = 1'b1;
-  end
-  endtask
+    .o_internal_engine_api_cs(o_internal_engine_api_cs),
+    .i_internal_engine_api_read_data(i_internal_engine_api_read_data),
 
-  nts_api #(.CPHA(1), .CPOL(0), .API_SLAVE_BITS(API_SLAVE_BITS)) dut (
-    .i_areset(i_areset),
-    .i_clk(i_clk),
-    .i_spi_sclk(i_spi_sclk),
-    .i_spi_mosi(i_spi_mosi),
-    .o_spi_miso(o_spi_miso),
-    .i_spi_ss(i_spi_ss),
-    .o_api_cs(o_api_cs),
-    .o_api_we(o_api_we),
-    .o_api_address(o_api_address),
-    .o_api_write_data(o_api_write_data),
-    .i_api_read_data(i_api_read_data)
+    .o_internal_clock_api_cs(o_internal_clock_api_cs),
+    .i_internal_clock_api_read_data(i_internal_clock_api_read_data),
+
+    .o_internal_cookie_api_cs(o_internal_cookie_api_cs),
+    .i_internal_cookie_api_read_data(i_internal_cookie_api_read_data),
+
+    .o_internal_keymem_api_cs(o_internal_keymem_api_cs),
+    .i_internal_keymem_api_read_data(i_internal_keymem_api_read_data),
+
+    .o_internal_debug_api_cs(o_internal_debug_api_cs),
+    .i_internal_debug_api_read_data(i_internal_debug_api_read_data)
   );
+
+  task set;
+    input         i_cs;
+    input         i_we;
+    input  [11:0] i_addr;
+    input  [31:0] i_data;
+    output        o_cs;
+    output        o_we;
+    output [11:0] o_addr;
+    output  [31:0] o_data;
+  begin
+    o_cs   = i_cs;
+    o_we   = i_we;
+    o_addr = i_addr;
+    o_data = i_data;
+    if (verbose > 0)
+      $display("%s:%0d cs=%h we=%h addr=%h data=%h", `__FILE__, `__LINE__, i_cs, i_we, i_addr, i_data);
+  end
+  endtask
 
   initial begin
     $display("Test start %s:%0d ", `__FILE__, `__LINE__);
-    i_areset      = 1;
-    i_clk         = 0;
-    i_spi_sclk    = 0;
-    i_spi_mosi    = 0;
-    i_spi_ss      = 1;
-    i_api_read_data = 128'hdeadbeef_baadf00d_1cee7eaa_12345678;
-    rx            = 0;
-    rx_counter    = 0;
-    tx_counter    = 0;
-    spi_close_reg = 0;
-    spi_busy      = 0;
 
-    #10 i_areset = 0;
+    set(0,0,0,0, i_external_api_cs, i_external_api_we, i_external_api_address, i_external_api_write_data);
+    #1 `assert( cs == 5'b00000 );
 
-    spi_transmit_cmd( 'h0, 'h0, 'h00, 'h0000_0000, tx_buf, tx_counter);
-    spi_transmit_wait();
-    spi_close(spi_close_reg);
+    set(1,0,0,0, i_external_api_cs, i_external_api_we, i_external_api_address, i_external_api_write_data);
+    #1 `assert( cs == 5'b10000 ); `assert( o_external_api_read_data == 32'h0A00_0000);
 
-    spi_transmit_cmd( 'h1, 'h1, 'hff, 'h1234_1234, tx_buf, tx_counter);
-    spi_transmit_wait();
-    spi_close(spi_close_reg);
+    set(1,0,0,1, i_external_api_cs, i_external_api_we, i_external_api_address, i_external_api_write_data);
+    #1 `assert( cs == 5'b10000 ); `assert( o_external_api_read_data == 32'h0A00_0100);
 
-    spi_transmit_cmd( 'h0, 'h0, 'h00, 'h2222_2222, tx_buf, tx_counter);
-    spi_transmit_wait();
-    spi_close(spi_close_reg);
+    set(1,0,5,1, i_external_api_cs, i_external_api_we, i_external_api_address, i_external_api_write_data);
+    #1 `assert( cs == 5'b10000 ); `assert( o_external_api_read_data == 32'h0A00_0105);
 
-    spi_transmit_cmd( 'h2, 'h1, 'h33, 'h3333_333F, tx_buf, tx_counter);
-    spi_transmit_wait();
-    spi_close(spi_close_reg);
+    set(1,0,'h010, 'hF, i_external_api_cs, i_external_api_we, i_external_api_address, i_external_api_write_data);
+    #1 `assert( cs == 5'b01000 ); `assert( o_external_api_read_data == 32'h0B00_0F00);
 
-    #10000;
+    set(1,1,'h023, 'h9, i_external_api_cs, i_external_api_we, i_external_api_address, i_external_api_write_data);
+    #1 `assert( cs == 5'b00100 ); `assert( o_external_api_read_data == 32'h0C01_0903);
 
-    spi_transmit_cmd( 'h3, 'h1, 'hff, 'h1234_1234, tx_buf, tx_counter);
-    spi_transmit_wait();
-    spi_close(spi_close_reg);
+    set(1,1,'h082, 'hE, i_external_api_cs, i_external_api_we, i_external_api_address, i_external_api_write_data);
+    #1 `assert( cs == 5'b00010 ); `assert( o_external_api_read_data == 32'h0D01_0E02);
 
-    #10000;
+    set(1,1,'h0aF, 'hD, i_external_api_cs, i_external_api_we, i_external_api_address, i_external_api_write_data);
+    #1 `assert( cs == 5'b00001 ); `assert( o_external_api_read_data == 32'h0E01_0D0F);
+
     $display("Test end %s:%0d ", `__FILE__, `__LINE__);
     $finish;
   end
 
-  always @(posedge i_spi_sclk)
-  begin
-    i_spi_mosi = 1'bZ;
-    if (tx_counter != 'b0) begin
-      spi_busy = 'b1;
-      //$display("%s:%0d %b (%h) (%0d)", `__FILE__, `__LINE__, tx_buf, tx_buf, tx_counter);
-      i_spi_ss                 = 0;
-      tx_counter               = tx_counter-1;
-      rx                       = 0;
-      rx_counter               = 36;
-      { i_spi_mosi, tx_buf }   = { tx_buf, 1'b0 };
-    end else if (rx_counter != 0) begin
-      ;
-
-    end else if (spi_close_reg) begin
-      spi_busy                 = 'b0;
-      i_spi_ss                 = 1;
-      spi_close_reg            = 0;
-    end
-  end
-
-  always @(negedge i_spi_sclk)
-  begin
-    if (i_spi_ss) begin
-      ; //spi is idle
-    end else if (tx_counter != 0) begin
-      ;
-    end else if (rx_counter != 0) begin
-      rx_counter = rx_counter - 1;
-      rx = {rx[31:0], o_spi_miso };
-      $display("%s:%0d rx: %b (%h) (%0d)", `__FILE__, `__LINE__, rx, rx, rx_counter);
-    end
-  end
-
-  always begin
-    #5 i_clk = ~i_clk;
-  end
-
-  always begin
-    #101 i_spi_sclk = ~i_spi_sclk;
-  end
-
-  always @(posedge i_clk)
-  begin
-    if (i_areset == 'b1) ;
-    else if (o_api_cs != 'b0)
-      $display("%s:%0d ===========> (%b,%h,%h,%h,...,...) <==========", `__FILE__, `__LINE__, o_api_cs, o_api_we, o_api_address, o_api_write_data);
-  end
 endmodule

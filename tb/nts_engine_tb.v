@@ -314,6 +314,7 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
     #10 `assert( o_api_read_data == 32'h6b65795f); // "key_"
     api_set(1, 0, 'h081, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
     #10 `assert( o_api_read_data == 32'h6d656d20); // "mem "
+    api_set(0, 0, 'h000, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
 
 
     $display("%s:%0d Send legacy NTP", `__FILE__, `__LINE__);

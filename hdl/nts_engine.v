@@ -163,11 +163,14 @@ module nts_engine #(
   assign parser_txbuf_ipv4_done   = 'b0; //TODO implement
   assign parser_txbuf_ipv6_done   = 'b0; //TODO implement
 
+  assign api_read_data_engine = 0; //TODO implement
+  assign api_read_data_clock  = 0; //TODO implement
+  assign api_read_data_cookie = 0; //TODO implement
+  assign api_read_data_debug  = 0; //TODO implement
+
   assign o_dispatch_packet_read_discard  = dispatch_packet_discard_reg;
   assign o_dispatch_fifo_rd_en           = dispatch_fifo_rd_en;
   assign o_busy                          = busy_reg;
-
-  //assign o_keymem_api_read_data          = keymem_api_read_data;
 
   assign o_detect_unique_identifier      = detect_unique_identifier;
   assign o_detect_nts_cookie             = detect_nts_cookie;
@@ -178,7 +181,7 @@ module nts_engine #(
   // API instantiation.
   //----------------------------------------------------------------
 
-  nts_api dut (
+  nts_api api (
     .i_external_api_cs(i_api_cs),
     .i_external_api_we(i_api_we),
     .i_external_api_address(i_api_address),

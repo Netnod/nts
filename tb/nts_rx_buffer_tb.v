@@ -35,6 +35,7 @@ module nts_rx_buffer_testbench;
   reg                     i_clk;
   reg                     i_clear;
   reg                     dispatch_packet_avialable;
+  wire                    dispatch_packet_read;
   reg                     dispatch_fifo_empty;
   wire                    dispatch_fifo_rd_en;
   reg  [63:0]             dispatch_fifo_rd_data;
@@ -51,6 +52,7 @@ module nts_rx_buffer_testbench;
      .i_clk(i_clk),
      .i_clear(i_clear),
      .i_dispatch_packet_available(dispatch_packet_avialable),
+     .o_dispatch_packet_read(dispatch_packet_read),
      .i_dispatch_fifo_empty(dispatch_fifo_empty),
      .o_dispatch_fifo_rd_en(dispatch_fifo_rd_en),
      .i_dispatch_fifo_rd_data(dispatch_fifo_rd_data),

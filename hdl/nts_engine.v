@@ -35,12 +35,12 @@ module nts_engine #(
   input  wire                  i_clk,
   output wire                  o_busy,
 
-  input  wire                  i_dispatch_packet_available,
-  output wire                  o_dispatch_packet_read_discard,
-  input  wire [7:0]            i_dispatch_data_valid,
-  input  wire                  i_dispatch_fifo_empty,
-  output wire                  o_dispatch_fifo_rd_en,
-  input  wire [63:0]           i_dispatch_fifo_rd_data,
+  input  wire                  i_dispatch_rx_packet_available,
+  output wire                  o_dispatch_rx_packet_read_discard,
+  input  wire [7:0]            i_dispatch_rx_data_valid,
+  input  wire                  i_dispatch_rx_fifo_empty,
+  output wire                  o_dispatch_rx_fifo_rd_en,
+  input  wire [63:0]           i_dispatch_rx_fifo_rd_data,
 
   output wire                  o_dispatch_tx_packet_available,
   input  wire                  i_dispatch_tx_packet_read,
@@ -83,23 +83,9 @@ module nts_engine #(
   reg [3:0] state_new;
   reg [3:0] state_reg;
 
-  reg       busy_we;
-  reg       busy_new;
-  reg       busy_reg;
-
-  reg       dispatch_packet_discard_we;
-  reg       dispatch_packet_discard_new;
-  reg       dispatch_packet_discard_reg;
-
-  reg       delay_counter_we; //temporary debug register for simularing work in unimplemented states
-  reg [6:0] delay_counter_new; //temporary debug register for simularing work in unimplemented states
-  reg [6:0] delay_counter_reg; //temporary debug register for simularing work in unimplemented states
-
   //----------------------------------------------------------------
   // Wires.
   //----------------------------------------------------------------
-
-  wire                         dispatch_fifo_rd_en;
 
   wire                         access_port_wait;
   wire      [ADDR_WIDTH+3-1:0] access_port_addr;
@@ -107,8 +93,6 @@ module nts_engine #(
   wire                         access_port_rd_en;
   wire                         access_port_rd_dv;
   wire [ACCESS_PORT_WIDTH-1:0] access_port_rd_data;
-
-  wire                         debug_delay_continue;
 
   wire                         detect_unique_identifier;
   wire                         detect_nts_cookie;
@@ -147,30 +131,22 @@ module nts_engine #(
   wire                         parser_txbuf_ipv4_done;
   wire                         parser_txbuf_ipv6_done;
   wire                         txbuf_parser_full;
+  wire                         txbuf_parser_empty;
 
 
   //----------------------------------------------------------------
   // Concurrent connectivity for ports etc.
   //----------------------------------------------------------------
 
-  assign debug_delay_continue            = state_reg == STATE_TO_BE_IMPLEMENTED && (delay_counter_reg < 100);
-
   assign keymem_internal_get_current_key = 'b0;
-
-  assign parser_txbuf_clear       = 'b0; //TODO implement
-  assign parser_txbuf_write_en    = 'b0; //TODO implement
-  assign parser_txbuf_write_data  = 'b0; //TODO implement
-  assign parser_txbuf_ipv4_done   = 'b0; //TODO implement
-  assign parser_txbuf_ipv6_done   = 'b0; //TODO implement
 
   assign api_read_data_engine = 0; //TODO implement
   assign api_read_data_clock  = 0; //TODO implement
   assign api_read_data_cookie = 0; //TODO implement
   assign api_read_data_debug  = 0; //TODO implement
 
-  assign o_dispatch_packet_read_discard  = dispatch_packet_discard_reg;
-  assign o_dispatch_fifo_rd_en           = dispatch_fifo_rd_en;
-  assign o_busy                          = busy_reg;
+//  assign o_dispatch_packet_read_discard  = dispatch_packet_discard;
+//  assign o_dispatch_fifo_rd_en           = dispatch_fifo_rd_en;
 
   assign o_detect_unique_identifier      = detect_unique_identifier;
   assign o_detect_nts_cookie             = detect_nts_cookie;
@@ -219,12 +195,13 @@ module nts_engine #(
      .i_areset(i_areset),
      .i_clk(i_clk),
 
-     .i_clear(state_reg == STATE_RESET),
+     .i_clear(1'b0),
 
-     .i_dispatch_packet_available(i_dispatch_packet_available),
-     .i_dispatch_fifo_empty(i_dispatch_fifo_empty),
-     .o_dispatch_fifo_rd_en(dispatch_fifo_rd_en),
-     .i_dispatch_fifo_rd_data(i_dispatch_fifo_rd_data),
+     .i_dispatch_packet_available(i_dispatch_rx_packet_available),
+     .o_dispatch_packet_read(o_dispatch_rx_packet_read_discard),
+     .i_dispatch_fifo_empty(i_dispatch_rx_fifo_empty),
+     .o_dispatch_fifo_rd_en(o_dispatch_rx_fifo_rd_en),
+     .i_dispatch_fifo_rd_data(i_dispatch_rx_fifo_rd_data),
 
      .o_access_port_wait(access_port_wait),
      .i_access_port_addr(access_port_addr),
@@ -259,7 +236,7 @@ module nts_engine #(
     .i_parser_ipv6_done(parser_txbuf_ipv6_done),
 
     .o_parser_current_memory_full(txbuf_parser_full),
-    .o_parser_current_empty(txbuf_parser_full)
+    .o_parser_current_empty(txbuf_parser_empty)
   );
 
   //----------------------------------------------------------------
@@ -273,11 +250,21 @@ module nts_engine #(
    .i_areset(i_areset),
    .i_clk(i_clk),
 
+   .o_busy(o_busy),
+
    .i_clear(state_reg == STATE_RESET),
 
-   .i_process_initial(dispatch_fifo_rd_en),
-   .i_last_word_data_valid(i_dispatch_data_valid),
-   .i_data(i_dispatch_fifo_rd_data),
+   .i_process_initial(o_dispatch_rx_fifo_rd_en),
+   .i_last_word_data_valid(i_dispatch_rx_data_valid),
+   .i_data(i_dispatch_rx_fifo_rd_data),
+
+   .i_tx_empty(txbuf_parser_empty),
+   .i_tx_full(txbuf_parser_full),
+   .o_tx_clear(parser_txbuf_clear),
+   .o_tx_w_en(parser_txbuf_write_en),
+   .o_tx_w_data(parser_txbuf_write_data),
+   .o_tx_ipv4_done(parser_txbuf_ipv4_done),
+   .o_tx_ipv6_done(parser_txbuf_ipv6_done),
 
    .i_access_port_wait(access_port_wait),
    .o_access_port_addr(access_port_addr),
@@ -320,122 +307,4 @@ module nts_engine #(
     .ready(keymem_internal_ready)
   );
 
-  //----------------------------------------------------------------
-  // reg_update
-  // Update functionality for all registers in the core.
-  // All registers are positive edge triggered with asynchronous
-  // active high reset.
-  //----------------------------------------------------------------
-
-  always @ (posedge i_clk, posedge i_areset)
-  begin : reg_update
-    if (i_areset == 1'b1) begin
-      state_reg                   <= STATE_RESET;
-      delay_counter_reg           <= 'b0; //this is just for a debug delay in not implemented state :)
-      busy_reg                    <= 'b0;
-      dispatch_packet_discard_reg <= 'b0;
-    end else begin
-      if (state_we)
-        state_reg <= state_new;
-
-      if (delay_counter_we)
-        delay_counter_reg <= delay_counter_new;
-
-      if (busy_we)
-        busy_reg <= busy_new;
-
-      if (dispatch_packet_discard_we)
-        dispatch_packet_discard_reg <= dispatch_packet_discard_new;
-    end
-  end
-
-  //----------------------------------------------------------------
-  // State and output
-  // Small internal FSM and related output signals.
-  //----------------------------------------------------------------
-  always @*
-  begin : state_and_output
-    dispatch_packet_discard_we    = 'b0;
-    dispatch_packet_discard_new   = 'b0;
-    state_we                      = 'b0;
-    state_new                     = 'b0;
-    busy_we                       = 'b0;
-    busy_new                      = 'b0;
-    case (state_reg)
-      STATE_RESET:
-        begin
-          dispatch_packet_discard_we  = 'b1;
-          dispatch_packet_discard_new = 'b0;
-          state_we                    = 'b1;
-          state_new                   = STATE_EMPTY;
-          busy_we                     = 'b1;
-          busy_new                    = 'b0;
-        end
-      STATE_EMPTY:
-        begin
-          if (i_dispatch_packet_available && i_dispatch_fifo_empty == 'b0) begin
-            state_we                = 'b1;
-            state_new               = STATE_COPY;
-            busy_we                 = 'b1;
-            busy_new                = 'b1;
-          end
-        end
-      STATE_COPY:
-        if (i_dispatch_fifo_empty) begin
-          state_we                = 'b1;
-          state_new               = STATE_TO_BE_IMPLEMENTED;
-          //TODO rx_buffer to signal overflow
-        end
-      STATE_TO_BE_IMPLEMENTED:
-        begin
-          if (debug_delay_continue == 'b0) begin
-            dispatch_packet_discard_we  = 'b1;
-            dispatch_packet_discard_new = 'b1;
-            busy_we                     = 'b1;
-            busy_new                    = 'b0;
-            state_we                    = 'b1;
-            state_new                   = STATE_RESET;
-          end
-        end
-      default:
-        begin
-          busy_we   = 'b1;
-          busy_new  = 'b0;
-          state_we  = 'b1;
-          state_new = STATE_RESET;
-        end
-    endcase
-  end
-
-  //----------------------------------------------------------------
-  // Debug Delay
-  // A small delay to simulate system processing.
-  // Will be removed when more of the processing is implemented.
-  //----------------------------------------------------------------
-
-  always @*
-  begin : debug_delay
-    delay_counter_we              = 'b0;
-    delay_counter_new             = 'b0;
-    case (state_reg)
-      STATE_RESET:
-        begin
-          delay_counter_we        = 'b1;
-          delay_counter_new       = 'b0;
-        end
-      STATE_TO_BE_IMPLEMENTED:
-        begin
-          if (debug_delay_continue) begin
-
-            delay_counter_we     = 'b1;
-            delay_counter_new    = delay_counter_reg + 1;
-
-            if (delay_counter_reg == 0) begin
-              $display("%s:%0d TODO!!! NOT IMPLEMENTED. state = %0d", `__FILE__, `__LINE__, state_reg);
-            end
-          end
-        end
-      default: ;
-    endcase
-  end
 endmodule

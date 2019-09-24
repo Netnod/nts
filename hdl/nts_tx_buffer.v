@@ -180,7 +180,7 @@ module nts_tx_buffer #(
     if (i_areset == 1'b1) begin
       current_mem_reg   <= 'b0;
       for (i = 0; i < 2; i = i + 1) begin
-        mem_state_reg[i] <= 'b0;
+        mem_state_reg[i] <= STATE_EMPTY;
         word_count_reg[i] <= 'b0;
       end
     end else begin

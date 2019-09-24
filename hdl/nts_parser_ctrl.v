@@ -35,10 +35,20 @@ module nts_parser_ctrl #(
   input  wire                         i_areset, // async reset
   input  wire                         i_clk,
 
+  output wire                         o_busy,
+
   input  wire                         i_clear,
   input  wire                         i_process_initial,
   input  wire                   [7:0] i_last_word_data_valid,
   input  wire                  [63:0] i_data,
+
+  input  wire                         i_tx_empty,
+  input  wire                         i_tx_full,
+  output wire                         o_tx_clear,
+  output wire                         o_tx_w_en,
+  output wire                  [63:0] o_tx_w_data,
+  output wire                         o_tx_ipv4_done,
+  output wire                         o_tx_ipv6_done,
 
   input  wire                         i_access_port_wait,
   output wire      [ADDR_WIDTH+3-1:0] o_access_port_addr,
@@ -130,7 +140,7 @@ module nts_parser_ctrl #(
   reg                          memory_address_failure_reg;
   reg                          memory_address_lastbyte_read_reg;
 
-  reg                   [47:0] previous_i_data_reg; //We receive i_data one cycle before process signal
+  reg                   [63:0] previous_i_data_reg; //We receive i_data one cycle before process signal
   reg                          ipdecode_ethernet_protocol_we;
   reg                   [15:0] ipdecode_ethernet_protocol_new;
   reg                   [15:0] ipdecode_ethernet_protocol_reg;
@@ -199,6 +209,9 @@ module nts_parser_ctrl #(
   assign ipdecode_offset_ntp_ext[ADDR_WIDTH+3-1:3] = (detect_ipv4 && ipdecode_ip4_ihl_reg == 5) ? (5+6) : (detect_ipv6) ? (7+6) : 0;
   assign ipdecode_offset_ntp_ext[2:0]              = (detect_ipv4 && ipdecode_ip4_ihl_reg == 5) ? 2 : (detect_ipv6) ? 6 : 0;
 
+  assign o_busy                 = (i_tx_empty == 'b0) || (state_reg != STATE_IDLE);
+  //assign o_busy                 = state_reg != STATE_IDLE;
+
   assign o_access_port_addr     = access_port_addr_reg;
   assign o_access_port_rd_en    = access_port_rd_en_reg;
   assign o_access_port_wordsize = access_port_wordsize_reg;
@@ -206,6 +219,13 @@ module nts_parser_ctrl #(
   assign o_keymem_key_word        = keymem_key_word_reg;
   assign o_keymem_get_key_with_id = keymem_get_key_with_id_reg;
   assign o_keymem_server_id       = keymem_server_id_reg;
+
+  assign o_tx_clear     = state_reg == STATE_ERROR_GENERAL;
+  assign o_tx_ipv4_done = detect_ipv4 && state_reg == STATE_ERROR_UNIMPLEMENTED; //TODO implement termination logic
+  assign o_tx_ipv6_done = detect_ipv6 && state_reg == STATE_ERROR_UNIMPLEMENTED; //TODO implement termination logic
+  assign o_tx_w_en      = i_process_initial;   //TODO implement proper write logic
+  assign o_tx_w_data    = previous_i_data_reg; //TODO implement proper write logic
+
 
   assign o_detect_unique_identifier      = detect_unique_identifier_reg;
   assign o_detect_nts_cookie             = detect_nts_cookie_reg;
@@ -299,7 +319,7 @@ module nts_parser_ctrl #(
         end
       end
     end else begin
-      previous_i_data_reg  <= i_data[47:0];
+      previous_i_data_reg <= i_data;
 
       if (access_port_addr_we)
         access_port_addr_reg <= access_port_addr_new;
@@ -455,7 +475,7 @@ module nts_parser_ctrl #(
     ntp_extension_length_new   = 'b0;
     ntp_extension_tag_new      = 'b0;
 
-    if (i_clear)
+    if (i_clear || state_reg == STATE_IDLE)
       ntp_extension_reset      = 'b1;
 
     if (state_reg == STATE_EXTRACT_EXT_FROM_RAM && ntp_extension_copied_reg[ntp_extension_counter_reg] == 'b0 && i_access_port_rd_dv) begin

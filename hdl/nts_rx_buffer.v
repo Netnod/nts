@@ -35,10 +35,13 @@ module nts_rx_buffer #(
   input  wire                         i_areset, // async reset
   input  wire                         i_clk,
   input  wire                         i_clear,
+
   input  wire                         i_dispatch_packet_available,
+  output wire                         o_dispatch_packet_read,
   input  wire                         i_dispatch_fifo_empty,
   output wire                         o_dispatch_fifo_rd_en,
   input  wire                  [63:0] i_dispatch_fifo_rd_data,
+
   output wire                         o_access_port_wait,
   input  wire      [ADDR_WIDTH+3-1:0] i_access_port_addr,
   input  wire                   [2:0] i_access_port_wordsize,
@@ -73,6 +76,10 @@ module nts_rx_buffer #(
   reg                     dispatch_fifo_rd_en_we;
   reg                     dispatch_fifo_rd_en_new;
   reg                     dispatch_fifo_rd_en_reg;
+
+  reg                     dispatch_packet_read_we;
+  reg                     dispatch_packet_read_new;
+  reg                     dispatch_packet_read_reg;
 
   reg                     fifo_addr_we;
   reg  [ADDR_WIDTH-1:0]   fifo_addr_new;
@@ -124,10 +131,11 @@ module nts_rx_buffer #(
   // Concurrent connectivity for ports etc.
   //----------------------------------------------------------------
 
-  assign o_access_port_wait    = access_wait_reg;
-  assign o_access_port_rd_dv   = access_dv_reg;
-  assign o_access_port_rd_data = access_out_reg;
-  assign o_dispatch_fifo_rd_en = dispatch_fifo_rd_en_reg;
+  assign o_access_port_wait     = access_wait_reg;
+  assign o_access_port_rd_dv    = access_dv_reg;
+  assign o_access_port_rd_data  = access_out_reg;
+  assign o_dispatch_packet_read = dispatch_packet_read_reg;
+  assign o_dispatch_fifo_rd_en  = dispatch_fifo_rd_en_reg;
 
   //----------------------------------------------------------------
   // Memory holding the Receive buffer
@@ -188,8 +196,9 @@ module nts_rx_buffer #(
       access_ws16bit_reg       <= 'b0;
       access_ws32bit_reg       <= 'b0;
       access_ws64bit_reg       <= 'b0;
-      dispatch_fifo_rd_en_reg  <= 'b0;
       fifo_addr_reg            <= 'b0;
+      dispatch_fifo_rd_en_reg  <= 'b0;
+      dispatch_packet_read_reg <= 'b0;
       memctrl_reg              <= 'b0;
     end else begin
       if (access_out_we)
@@ -211,11 +220,14 @@ module nts_rx_buffer #(
       if (access_addr_lo_we)
         access_addr_lo_reg     <= access_addr_lo_new;
 
+     if (fifo_addr_we)
+       fifo_addr_reg           <= fifo_addr_new;
+
      if (dispatch_fifo_rd_en_we)
        dispatch_fifo_rd_en_reg <= dispatch_fifo_rd_en_new;
 
-     if (fifo_addr_we)
-       fifo_addr_reg           <= fifo_addr_new;
+     if (dispatch_packet_read_we)
+       dispatch_packet_read_reg <= dispatch_packet_read_new;
 
      if (memctrl_we)
        memctrl_reg             <= memctrl_new;
@@ -430,9 +442,11 @@ module nts_rx_buffer #(
   begin : fifo_control
     fifo_addr_we                  = 'b0;
     dispatch_fifo_rd_en_we        = 'b0;
+    dispatch_packet_read_we       = 'b1;
 
     fifo_addr_new                 = 'b0;
     dispatch_fifo_rd_en_new       = 'b0;
+    dispatch_packet_read_new      = 'b0;
 
     case (memctrl_reg)
       MEMORY_CTRL_IDLE:
@@ -451,6 +465,8 @@ module nts_rx_buffer #(
         end else begin
           dispatch_fifo_rd_en_we  = 'b1;
           dispatch_fifo_rd_en_new = 'b0;
+          dispatch_packet_read_we  = 'b1;
+          dispatch_packet_read_new = 'b1;
         end
       default: ;
     endcase

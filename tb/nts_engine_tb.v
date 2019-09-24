@@ -70,10 +70,10 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
   reg                  i_areset;
   reg                  i_clk;
 
-  reg                  i_dispatch_packet_available;
-  reg [7:0]            i_dispatch_data_valid;
-  reg                  i_dispatch_fifo_empty;
-  reg [63:0]           i_dispatch_fifo_rd_data;
+  reg                  i_dispatch_rx_packet_available;
+  reg [7:0]            i_dispatch_rx_data_valid;
+  reg                  i_dispatch_rx_fifo_empty;
+  reg [63:0]           i_dispatch_rx_fifo_rd_data;
 
   reg                  i_dispatch_tx_packet_read;
   reg                  i_dispatch_tx_fifo_rd_en;
@@ -98,8 +98,8 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
 
   wire [31:0]          o_api_read_data;
 
-  wire                 o_dispatch_fifo_rd_en;
-  wire                 o_dispatch_packet_read_discard;
+  wire                 o_dispatch_rx_fifo_rd_en;
+  wire                 o_dispatch_rx_packet_read_discard;
 
   wire                 o_dispatch_tx_packet_available;
   wire                 o_dispatch_tx_fifo_empty;
@@ -154,27 +154,27 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
       end
 
       #10
-      i_dispatch_packet_available = 0;
-      i_dispatch_data_valid       = 'b0;
-      i_dispatch_fifo_empty       = 'b1;
-      i_dispatch_fifo_rd_data     = 'b0;
+      i_dispatch_rx_packet_available = 0;
+      i_dispatch_rx_data_valid       = 'b0;
+      i_dispatch_rx_fifo_empty       = 'b1;
+      i_dispatch_rx_fifo_rd_data     = 'b0;
       `assert( o_busy == 'b0 );
-      `assert( o_dispatch_packet_read_discard == 'b0 );
-      `assert( o_dispatch_fifo_rd_en == 'b0 );
+      `assert( o_dispatch_rx_packet_read_discard == 'b0 );
+      `assert( o_dispatch_rx_fifo_rd_en == 'b0 );
 
 
       #10
-      i_dispatch_packet_available = 'b1;
+      i_dispatch_rx_packet_available = 'b1;
 
       case ((length/8) % 8)
-        0: i_dispatch_data_valid  = 8'b11111111; //all bytes valid
-        1: i_dispatch_data_valid  = 8'b00000001; //last byte valid
-        2: i_dispatch_data_valid  = 8'b00000011;
-        3: i_dispatch_data_valid  = 8'b00000111;
-        4: i_dispatch_data_valid  = 8'b00001111;
-        5: i_dispatch_data_valid  = 8'b00011111;
-        6: i_dispatch_data_valid  = 8'b00111111;
-        7: i_dispatch_data_valid  = 8'b01111111;
+        0: i_dispatch_rx_data_valid  = 8'b11111111; //all bytes valid
+        1: i_dispatch_rx_data_valid  = 8'b00000001; //last byte valid
+        2: i_dispatch_rx_data_valid  = 8'b00000011;
+        3: i_dispatch_rx_data_valid  = 8'b00000111;
+        4: i_dispatch_rx_data_valid  = 8'b00001111;
+        5: i_dispatch_rx_data_valid  = 8'b00011111;
+        6: i_dispatch_rx_data_valid  = 8'b00111111;
+        7: i_dispatch_rx_data_valid  = 8'b01111111;
         default:
           begin
             $display("length:%0d", length);
@@ -183,44 +183,45 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
       endcase
 
       `assert( o_busy == 'b0 );
-      `assert( o_dispatch_packet_read_discard == 'b0 );
-      `assert( o_dispatch_fifo_rd_en == 'b0 );
+      `assert( o_dispatch_rx_packet_read_discard == 'b0 );
+      `assert( o_dispatch_rx_fifo_rd_en == 'b0 );
 
       #10
       for (packet_ptr=packet_ptr-1; packet_ptr>=0; packet_ptr=packet_ptr-1) begin
-        i_dispatch_fifo_empty = 'b0;
-        i_dispatch_fifo_rd_data[63:0] = packet[packet_ptr];
-        if (verbose_output > 2) $display("%s:%0d i_dispatch_fifo_rd_data = %h", `__FILE__, `__LINE__, packet[packet_ptr]);
-        if (o_dispatch_fifo_rd_en == 'b0) begin
-          while ( o_dispatch_fifo_rd_en == 'b0 ) begin
+        i_dispatch_rx_fifo_empty = 'b0;
+        i_dispatch_rx_fifo_rd_data[63:0] = packet[packet_ptr];
+        if (verbose_output > 2) $display("%s:%0d i_dispatch_rx_fifo_rd_data = %h", `__FILE__, `__LINE__, packet[packet_ptr]);
+        if (o_dispatch_rx_fifo_rd_en == 'b0) begin
+          while ( o_dispatch_rx_fifo_rd_en == 'b0 ) begin
             if (verbose_output > 1) $display("%s:%0d waiting for dut to wake up...", `__FILE__, `__LINE__);
             #10 ;
           end
         end else #10 ;
       end
-      i_dispatch_fifo_empty = 'b1;
+      i_dispatch_rx_fifo_empty = 'b1;
       #10
-      `assert( o_dispatch_packet_read_discard == 'b0 );
-      `assert( o_dispatch_fifo_rd_en == 'b0 );
+      `assert( o_dispatch_rx_packet_read_discard == 'b1 );
+      `assert( o_dispatch_rx_fifo_rd_en == 'b0 );
+/*
       #10
-      `assert( o_dispatch_fifo_rd_en == 'b0 );
-      for ( i=0; i<100000 && o_dispatch_packet_read_discard == 'b1; i=i+1 ) begin
+      `assert( o_dispatch_rx_fifo_rd_en == 'b0 );
+      while ( o_dispatch_rx_packet_read_discard == 'b0 ) begin
         #10 ;
       end
-      `assert( o_dispatch_packet_read_discard == 'b0 );
-      `assert( o_dispatch_fifo_rd_en == 'b0 );
-      for (i=0; i<100000 && o_busy == 'b1; i=i+1) begin
-        #10 ;
-      end
-      `assert( o_busy == 'b0 );
-      `assert( o_dispatch_packet_read_discard == 'b1 );
-      `assert( o_dispatch_fifo_rd_en == 'b0 );
-      detect_bits = {detect_unique_identifier, detect_nts_cookie, detect_nts_cookie_placeholder, detect_nts_authenticator};
-      #10 ;
-      `assert( o_busy == 'b0 );
-      `assert( o_dispatch_packet_read_discard == 'b0 );
-      `assert( o_dispatch_fifo_rd_en == 'b0 );
+*/
+      `assert( o_busy );
+      `assert( o_dispatch_rx_packet_read_discard == 'b1 );
+      `assert( o_dispatch_rx_fifo_rd_en == 'b0 );
 
+      while (o_busy == 'b1) begin
+        #10 ;
+      end
+
+      `assert( o_busy == 'b0 );
+      `assert( o_dispatch_rx_packet_read_discard == 'b0 );
+      `assert( o_dispatch_rx_fifo_rd_en == 'b0 );
+
+      detect_bits = {detect_unique_identifier, detect_nts_cookie, detect_nts_cookie_placeholder, detect_nts_authenticator};
     end
   endtask
 
@@ -234,12 +235,12 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
 
     .o_busy(o_busy),
 
-    .i_dispatch_packet_available(i_dispatch_packet_available),
-    .o_dispatch_packet_read_discard(o_dispatch_packet_read_discard),
-    .i_dispatch_data_valid(i_dispatch_data_valid),
-    .i_dispatch_fifo_empty(i_dispatch_fifo_empty),
-    .o_dispatch_fifo_rd_en(o_dispatch_fifo_rd_en),
-    .i_dispatch_fifo_rd_data(i_dispatch_fifo_rd_data),
+    .i_dispatch_rx_packet_available(i_dispatch_rx_packet_available),
+    .o_dispatch_rx_packet_read_discard(o_dispatch_rx_packet_read_discard),
+    .i_dispatch_rx_data_valid(i_dispatch_rx_data_valid),
+    .i_dispatch_rx_fifo_empty(i_dispatch_rx_fifo_empty),
+    .o_dispatch_rx_fifo_rd_en(o_dispatch_rx_fifo_rd_en),
+    .i_dispatch_rx_fifo_rd_data(i_dispatch_rx_fifo_rd_data),
 
     .o_dispatch_tx_packet_available(o_dispatch_tx_packet_available),
     .i_dispatch_tx_packet_read(i_dispatch_tx_packet_read),
@@ -289,12 +290,16 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
 
   initial begin
     $display("Test start: %s:%0d", `__FILE__, `__LINE__);
-    i_clk                       = 0;
-    i_areset                    = 1;
-    i_dispatch_packet_available = 0;
-    i_dispatch_data_valid       = 'b0;
-    i_dispatch_fifo_empty       = 'b1;
-    i_dispatch_fifo_rd_data     = 'b0;
+    i_clk    = 0;
+    i_areset = 1;
+
+    i_dispatch_rx_packet_available = 0;
+    i_dispatch_rx_data_valid       = 'b0;
+    i_dispatch_rx_fifo_empty       = 'b1;
+    i_dispatch_rx_fifo_rd_data     = 'b0;
+
+    i_dispatch_tx_packet_read = 'b0;
+    i_dispatch_tx_fifo_rd_en  = 'b0;
 
     i_api_cs         = 0;
     i_api_we         = 0;
@@ -304,9 +309,12 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
 
     #10
     i_areset = 0;
+    `assert( o_dispatch_rx_packet_read_discard == 'b0 );
+    `assert( o_dispatch_rx_fifo_rd_en == 'b0 );
+
+    #20
+    $display("%s:%0d o_busy=%h", `__FILE__, `__LINE__, o_busy);
     `assert( o_busy == 'b0 );
-    `assert( o_dispatch_packet_read_discard == 'b0 );
-    `assert( o_dispatch_fifo_rd_en == 'b0 );
 
     // Verify success accessing keymem over API interface
     #10 ;

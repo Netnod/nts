@@ -56,10 +56,20 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
   reg                          i_areset; // async reset
   reg                          i_clk;
 
+  wire                         o_busy;
+
   reg                          i_clear;
   reg                          i_process_initial;
   reg                    [7:0] i_last_word_data_valid;
   reg                   [63:0] i_data;
+
+  reg                          i_tx_empty;
+  reg                          i_tx_full;
+  wire                         o_tx_clear;
+  wire                         o_tx_w_en;
+  wire                  [63:0] o_tx_w_data;
+  wire                         o_tx_ipv4_done;
+  wire                         o_tx_ipv6_done;
 
   reg                          i_access_port_wait;
   wire      [ADDR_WIDTH+3-1:0] o_access_port_addr;
@@ -153,6 +163,17 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
       #10;
       i_clear = 'b0;
 
+      #10;
+      i_tx_empty = 0;
+      #50;
+      `assert(o_busy);
+      i_tx_empty = 1;
+
+      while(o_busy)
+      begin
+        #10;
+      end
+
       source_ptr = 0;
       #10
       for (packet_ptr=packet_ptr-1; packet_ptr>=0; packet_ptr=packet_ptr-1) begin
@@ -177,10 +198,20 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
     .i_areset(i_areset), // async reset
     .i_clk(i_clk),
 
+    .o_busy(o_busy),
+
     .i_clear(i_clear),
     .i_process_initial(i_process_initial),
     .i_last_word_data_valid(i_last_word_data_valid),
     .i_data(i_data),
+
+    .i_tx_empty(i_tx_empty),
+    .i_tx_full(i_tx_full),
+    .o_tx_clear(o_tx_clear),
+    .o_tx_w_en(o_tx_w_en),
+    .o_tx_w_data(o_tx_w_data),
+    .o_tx_ipv4_done(o_tx_ipv4_done),
+    .o_tx_ipv6_done(o_tx_ipv6_done),
 
     .i_access_port_wait(i_access_port_wait),
     .o_access_port_addr(o_access_port_addr),
@@ -215,6 +246,9 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
     i_process_initial           = 0;
     i_last_word_data_valid      = 0;
     i_data                      = 0;
+
+    i_tx_empty                  = 1;
+    i_tx_full                   = 0;
 
     i_access_port_wait          = 0;
     i_access_port_rd_dv         = 0;

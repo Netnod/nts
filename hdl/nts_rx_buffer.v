@@ -36,6 +36,8 @@ module nts_rx_buffer #(
   input  wire                         i_clk,
   input  wire                         i_clear,
 
+  input  wire                         i_parser_busy,
+
   input  wire                         i_dispatch_packet_available,
   output wire                         o_dispatch_packet_read,
   input  wire                         i_dispatch_fifo_empty,
@@ -271,7 +273,7 @@ module nts_rx_buffer #(
 
     case (memctrl_reg)
       MEMORY_CTRL_IDLE:
-        if (i_dispatch_packet_available && i_dispatch_fifo_empty == 0) begin
+        if (i_dispatch_packet_available && i_dispatch_fifo_empty == 0 && i_parser_busy == 0) begin
           memctrl_we              = 'b1;
           memctrl_new             = MEMORY_CTRL_FIFO_WRITE;
 

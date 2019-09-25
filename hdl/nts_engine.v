@@ -125,11 +125,14 @@ module nts_engine #(
   wire                [31 : 0] keymem_internal_key_data;
   wire                         keymem_internal_ready;
 
+  wire                         parser_busy;
+
   wire                         parser_txbuf_clear;
   wire                         parser_txbuf_write_en;
   wire                  [63:0] parser_txbuf_write_data;
   wire                         parser_txbuf_ipv4_done;
   wire                         parser_txbuf_ipv6_done;
+
   wire                         txbuf_parser_full;
   wire                         txbuf_parser_empty;
 
@@ -145,8 +148,7 @@ module nts_engine #(
   assign api_read_data_cookie = 0; //TODO implement
   assign api_read_data_debug  = 0; //TODO implement
 
-//  assign o_dispatch_packet_read_discard  = dispatch_packet_discard;
-//  assign o_dispatch_fifo_rd_en           = dispatch_fifo_rd_en;
+  assign o_busy                          = parser_busy;
 
   assign o_detect_unique_identifier      = detect_unique_identifier;
   assign o_detect_nts_cookie             = detect_nts_cookie;
@@ -195,7 +197,9 @@ module nts_engine #(
      .i_areset(i_areset),
      .i_clk(i_clk),
 
-     .i_clear(1'b0),
+     .i_clear(parser_txbuf_clear), //Reset RX if TX reset issued.
+
+     .i_parser_busy(parser_busy),
 
      .i_dispatch_packet_available(i_dispatch_rx_packet_available),
      .o_dispatch_packet_read(o_dispatch_rx_packet_read_discard),
@@ -250,7 +254,7 @@ module nts_engine #(
    .i_areset(i_areset),
    .i_clk(i_clk),
 
-   .o_busy(o_busy),
+   .o_busy(parser_busy),
 
    .i_clear(state_reg == STATE_RESET),
 

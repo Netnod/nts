@@ -767,11 +767,10 @@ module nts_parser_ctrl #(
         end
       STATE_VERIFY_KEY_FROM_COOKIE2:
         if (i_keymem_ready && keymem_get_key_with_id_reg == 'b0 ) begin
-          //$display("keymem_key_word_reg=%h", keymem_key_word_reg);
           if (i_keymem_key_valid == 'b0) begin
-            //$display("xxx");
             state_we  = 'b1;
             state_new = STATE_ERROR_GENERAL;
+            //$display("%s:%0d i_keymem_ready=%h keymem_get_key_with_id_reg=%h i_keymem_key_valid=%h...", `__FILE__, `__LINE__, i_keymem_ready, keymem_get_key_with_id_reg, i_keymem_key_valid);
           end else if (keymem_key_word_reg == 'b1111) begin
             state_we  = 'b1;
             state_new = STATE_ERROR_UNIMPLEMENTED;

@@ -34,6 +34,7 @@ module nts_rx_buffer_testbench;
   reg                     i_areset;
   reg                     i_clk;
   reg                     i_clear;
+  reg                     i_parser_busy;
   reg                     dispatch_packet_avialable;
   wire                    dispatch_packet_read;
   reg                     dispatch_fifo_empty;
@@ -51,6 +52,7 @@ module nts_rx_buffer_testbench;
      .i_areset(i_areset),
      .i_clk(i_clk),
      .i_clear(i_clear),
+     .i_parser_busy(i_parser_busy),
      .i_dispatch_packet_available(dispatch_packet_avialable),
      .o_dispatch_packet_read(dispatch_packet_read),
      .i_dispatch_fifo_empty(dispatch_fifo_empty),
@@ -91,6 +93,7 @@ module nts_rx_buffer_testbench;
         i_clk = 1;
         i_areset = 1;
         i_clear = 1;
+        i_parser_busy = 1;
         access_port_addr = 'b0;
         access_port_wordsize = 'b0;
         access_port_rd_en = 'b0;
@@ -105,6 +108,9 @@ module nts_rx_buffer_testbench;
         dispatch_fifo_empty = 'b0;
         dispatch_fifo_rd_data = 64'hdeadbeef00000000;
 
+        #10 `assert(dispatch_fifo_rd_en == 'b0);
+        #10 `assert(dispatch_fifo_rd_en == 'b0);
+        i_parser_busy = 0;
         #10 `assert(dispatch_fifo_rd_en == 'b0);
         #10 `assert(dispatch_fifo_rd_en);
         dispatch_fifo_rd_data = 64'habad1deac0fef00d;

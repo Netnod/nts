@@ -58,15 +58,16 @@ module nts_tx_buffer #(
 
   localparam STATE_EMPTY                = 0;
   localparam STATE_HAS_DATA             = 1;
+  localparam STATE_FIFO_OUT             = 2;
+  localparam STATE_ERROR_GENERAL        = 4;
+  localparam STATE_ERROR_BUFFER_OVERRUN = 5;
+
   //localparam STATE_IP4_LENGTH           = 2;
   //localparam STATE_IP4_CHECKSUM         = 3;
   //localparam STATE_IP4_UDP_CHECKSUM     = 4;
   //localparam STATE_IP6_LENGTH           = 5;
   //localparam STATE_IP6_CHECKSUM         = 6;
   //localparam STATE_IP6_UDP_CHECKSUM     = 7;
-  localparam STATE_FIFO_OUT             = 8;
-  localparam STATE_ERROR_GENERAL        = 'h6;
-  localparam STATE_ERROR_BUFFER_OVERRUN = 'hf;
 
   localparam [ADDR_WIDTH-1:0] ADDRESS_FULL        = ~ 'b0;
   localparam [ADDR_WIDTH-1:0] ADDRESS_ALMOST_FULL = (~ 'b0) - 1;
@@ -80,8 +81,8 @@ module nts_tx_buffer #(
   reg                  current_mem_reg;
 
   reg                  mem_state_we    [1:0];
-  reg            [3:0] mem_state_new   [1:0];
-  reg            [3:0] mem_state_reg   [1:0];
+  reg            [2:0] mem_state_new   [1:0];
+  reg            [2:0] mem_state_reg   [1:0];
 
   reg                  ram_wr_en_we    [0:1];
   reg                  ram_wr_en_new   [0:1];

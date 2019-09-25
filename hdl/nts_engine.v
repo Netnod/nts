@@ -76,14 +76,6 @@ module nts_engine #(
   localparam STATE_TO_BE_IMPLEMENTED = 4'hf;
 
   //----------------------------------------------------------------
-  // Registers including update variables and write enable.
-  //----------------------------------------------------------------
-
-  reg       state_we;
-  reg [3:0] state_new;
-  reg [3:0] state_reg;
-
-  //----------------------------------------------------------------
   // Wires.
   //----------------------------------------------------------------
 
@@ -256,7 +248,7 @@ module nts_engine #(
 
    .o_busy(parser_busy),
 
-   .i_clear(state_reg == STATE_RESET),
+   .i_clear(1'b0), //currently no soft reset implemented
 
    .i_process_initial(o_dispatch_rx_fifo_rd_en),
    .i_last_word_data_valid(i_dispatch_rx_data_valid),

@@ -34,7 +34,8 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
   // Test bench constants
   //----------------------------------------------------------------
 
-  localparam [31:0] NTS_TESTKEY                 = 32'h2b3076b5;
+  localparam [31:0] NTS_TESTKEY0                = 32'h2b3076b5;
+  localparam [31:0] NTS_TESTKEY1                = 32'h2b30d49a;
   localparam [11:0] API_ADDR_KEYMEM_BASE        = 12'h080;
   localparam [11:0] API_ADDR_KEYMEM_NAME0       = API_ADDR_KEYMEM_BASE + 0;
   localparam [11:0] API_ADDR_KEYMEM_NAME1       = API_ADDR_KEYMEM_BASE + 1;
@@ -43,6 +44,10 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
   localparam [11:0] API_ADDR_KEYMEM_KEY0_LENGTH = API_ADDR_KEYMEM_BASE + 12'h11;
   localparam [11:0] API_ADDR_KEYMEM_KEY0_START  = API_ADDR_KEYMEM_BASE + 12'h40;
   localparam [11:0] API_ADDR_KEYMEM_KEY0_END    = API_ADDR_KEYMEM_BASE + 12'h4f;
+  localparam [11:0] API_ADDR_KEYMEM_KEY1_ID     = API_ADDR_KEYMEM_BASE + 12'h12;
+  localparam [11:0] API_ADDR_KEYMEM_KEY1_LENGTH = API_ADDR_KEYMEM_BASE + 12'h13;
+  localparam [11:0] API_ADDR_KEYMEM_KEY1_START  = API_ADDR_KEYMEM_BASE + 12'h50;
+  localparam [11:0] API_ADDR_KEYMEM_KEY1_END    = API_ADDR_KEYMEM_BASE + 12'h5f;
 
   localparam integer ETHIPV4_NTS_TESTPACKETS_BITS=5488;
   localparam integer ETHIPV6_NTS_TESTPACKETS_BITS=5648;
@@ -94,6 +99,8 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
   reg [31:0]           i_api_write_data;
 
   reg          [3 : 0] detect_bits;
+
+  reg                  tx_receiving;
 
   //----------------------------------------------------------------
   // Test bench wires
@@ -299,9 +306,6 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
     i_dispatch_rx_fifo_empty       = 'b1;
     i_dispatch_rx_fifo_rd_data     = 'b0;
 
-    i_dispatch_tx_packet_read = 'b0;
-    i_dispatch_tx_fifo_rd_en  = 'b0;
-
     i_api_cs         = 0;
     i_api_we         = 0;
     i_api_address    = 0;
@@ -329,12 +333,20 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
         api_set(1, 1, i[11:0], { 28'hdeadbee, i[3:0] }, i_api_cs, i_api_we, i_api_address, i_api_write_data);
         #10;
       end
-      api_set(1, 1, API_ADDR_KEYMEM_KEY0_ID, NTS_TESTKEY, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+      api_set(1, 1, API_ADDR_KEYMEM_KEY0_ID, NTS_TESTKEY0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
       #10;
       api_set(1, 1, API_ADDR_KEYMEM_KEY0_LENGTH, 32'b1, i_api_cs, i_api_we, i_api_address, i_api_write_data);
       #10;
+      for (i = API_ADDR_KEYMEM_KEY1_START; i <= API_ADDR_KEYMEM_KEY1_END; i = i + 1) begin
+        api_set(1, 1, i[11:0], { 28'hdeadbee, i[3:0] }, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+        #10;
+      end
+      api_set(1, 1, API_ADDR_KEYMEM_KEY1_ID, NTS_TESTKEY1, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+      #10;
+      api_set(1, 1, API_ADDR_KEYMEM_KEY1_LENGTH, 32'b1, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+      #10;
     end
-    api_set(1, 1, API_ADDR_KEYMEM_ADDR_CTRL, 32'b1, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+    api_set(1, 1, API_ADDR_KEYMEM_ADDR_CTRL, 32'b11, i_api_cs, i_api_we, i_api_address, i_api_write_data);
     #10;
     api_set(0, 0, 'h000, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
 
@@ -412,6 +424,31 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
     $display("Test stop: %s:%0d", `__FILE__, `__LINE__);
     $finish;
   end
+
+  always @(posedge i_clk or posedge i_areset)
+  begin
+    if (i_areset) begin
+      i_dispatch_tx_packet_read <= 'b0;
+      i_dispatch_tx_fifo_rd_en  <= 'b0;
+      tx_receiving              <= 'b0;
+
+    end else begin
+      i_dispatch_tx_packet_read <= 'b0;
+      i_dispatch_tx_fifo_rd_en  <= 'b0;
+      if (tx_receiving) begin
+        if (o_dispatch_tx_fifo_empty) begin
+          i_dispatch_tx_packet_read <= 'b1;
+          tx_receiving <= 'b0;
+        end else begin
+          i_dispatch_tx_fifo_rd_en  <= 'b1;
+        end
+      end else if (o_dispatch_tx_packet_available) begin
+        tx_receiving <= 'b1;
+      end
+    end
+  end
+
+
   always begin
     #5 i_clk = ~i_clk;
   end

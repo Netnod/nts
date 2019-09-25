@@ -37,9 +37,9 @@ all: DIRS VVPS
 run-tests: all
 	vvp output/vvp/nts_api_tb.vvp
 	vvp output/vvp/nts_rx_buffer_tb.vvp
-	vvp output/vvp/nts_engine_tb.vvp
 	vvp output/vvp/nts_parser_ctrl_tb.vvp
 	vvp output/vvp/nts_tx_buffer_tb.vvp
+	vvp output/vvp/nts_engine_tb.vvp
 #	vvp output/vvp/bram_tb.vvp
 #	vvp output/vvp/nts_dispatcher_tb.vvp
 

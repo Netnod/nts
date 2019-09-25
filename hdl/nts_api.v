@@ -36,8 +36,8 @@ module nts_api #(
   parameter [11:0] ADDR_COOKIE_BASE = 12'h020,
   parameter [11:0] ADDR_COOKIE_STOP = 12'h03F,
   parameter [11:0] ADDR_KEYMEM_BASE = 12'h080,
-  parameter [11:0] ADDR_KEYMEM_STOP = 12'h09F,
-  parameter [11:0] ADDR_DEBUG_BASE  = 12'h0a0,
+  parameter [11:0] ADDR_KEYMEM_STOP = 12'h17F,
+  parameter [11:0] ADDR_DEBUG_BASE  = 12'h180,
   parameter [11:0] ADDR_DEBUG_STOP  = 12'h1FF
 ) (
   input  wire        i_external_api_cs,

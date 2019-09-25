@@ -34,6 +34,16 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
   // Test bench constants
   //----------------------------------------------------------------
 
+  localparam [31:0] NTS_TESTKEY                 = 32'h2b3076b5;
+  localparam [11:0] API_ADDR_KEYMEM_BASE        = 12'h080;
+  localparam [11:0] API_ADDR_KEYMEM_NAME0       = API_ADDR_KEYMEM_BASE + 0;
+  localparam [11:0] API_ADDR_KEYMEM_NAME1       = API_ADDR_KEYMEM_BASE + 1;
+  localparam [11:0] API_ADDR_KEYMEM_ADDR_CTRL   = API_ADDR_KEYMEM_BASE + 12'h08;
+  localparam [11:0] API_ADDR_KEYMEM_KEY0_ID     = API_ADDR_KEYMEM_BASE + 12'h10;
+  localparam [11:0] API_ADDR_KEYMEM_KEY0_LENGTH = API_ADDR_KEYMEM_BASE + 12'h11;
+  localparam [11:0] API_ADDR_KEYMEM_KEY0_START  = API_ADDR_KEYMEM_BASE + 12'h40;
+  localparam [11:0] API_ADDR_KEYMEM_KEY0_END    = API_ADDR_KEYMEM_BASE + 12'h4f;
+
   localparam integer ETHIPV4_NTS_TESTPACKETS_BITS=5488;
   localparam integer ETHIPV6_NTS_TESTPACKETS_BITS=5648;
 
@@ -318,10 +328,23 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
 
     // Verify success accessing keymem over API interface
     #10 ;
-    api_set(1, 0, 'h080, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+    api_set(1, 0, API_ADDR_KEYMEM_NAME0, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
     #10 `assert( o_api_read_data == 32'h6b65795f); // "key_"
-    api_set(1, 0, 'h081, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+    api_set(1, 0, API_ADDR_KEYMEM_NAME1, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
     #10 `assert( o_api_read_data == 32'h6d656d20); // "mem "
+    begin : initilize_keymem
+      reg [11:0] i;
+      for (i = API_ADDR_KEYMEM_KEY0_START; i <= API_ADDR_KEYMEM_KEY0_END; i = i + 1) begin
+        api_set(1, 1, i[11:0], { 28'hdeadbee, i[3:0] }, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+        #10;
+      end
+      api_set(1, 1, API_ADDR_KEYMEM_KEY0_ID, NTS_TESTKEY, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+      #10;
+      api_set(1, 1, API_ADDR_KEYMEM_KEY0_LENGTH, 32'b1, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+      #10;
+    end
+    api_set(1, 1, API_ADDR_KEYMEM_ADDR_CTRL, 32'b1, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+    #10;
     api_set(0, 0, 'h000, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
 
 

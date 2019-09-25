@@ -210,20 +210,12 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
       end
       i_dispatch_rx_fifo_empty = 'b1;
       #10
-      `assert( o_dispatch_rx_packet_read_discard == 'b1 );
-      `assert( o_dispatch_rx_fifo_rd_en == 'b0 );
-/*
-      #10
-      `assert( o_dispatch_rx_fifo_rd_en == 'b0 );
-      while ( o_dispatch_rx_packet_read_discard == 'b0 ) begin
-        #10 ;
-      end
-*/
       `assert( o_busy );
       `assert( o_dispatch_rx_packet_read_discard == 'b1 );
       `assert( o_dispatch_rx_fifo_rd_en == 'b0 );
 
       while (o_busy == 'b1) begin
+         detect_bits = {detect_unique_identifier, detect_nts_cookie, detect_nts_cookie_placeholder, detect_nts_authenticator};
         #10 ;
       end
 
@@ -231,7 +223,6 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
       `assert( o_dispatch_rx_packet_read_discard == 'b0 );
       `assert( o_dispatch_rx_fifo_rd_en == 'b0 );
 
-      detect_bits = {detect_unique_identifier, detect_nts_cookie, detect_nts_cookie_placeholder, detect_nts_authenticator};
     end
   endtask
 

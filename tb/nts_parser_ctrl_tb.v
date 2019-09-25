@@ -90,6 +90,8 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
   wire                        o_detect_nts_cookie_placeholder;
   wire                        o_detect_nts_authenticator;
   
+  reg                 [3 : 0] detect_bits;
+
   reg                         keymem_state;
 
   reg                  [63:0] rx_buf [0:99];
@@ -106,7 +108,8 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
 
   task send_packet (
     input [65535:0] source,
-    input    [31:0] length
+    input    [31:0] length,
+    output    [3:0] detect_bits
   );
     integer i;
     integer packet_ptr;
@@ -187,6 +190,14 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
       #10
       i_process_initial = 'b0; //1 cycle delayed
 
+      `assert(o_busy);
+      while(o_busy)
+      begin
+        detect_bits = { o_detect_unique_identifier, o_detect_nts_cookie, o_detect_nts_cookie_placeholder, o_detect_nts_authenticator};
+        if (verbose_output >= 4) $display("%s:%0d detect_bits=%b (%h)", `__FILE__, `__LINE__, detect_bits, detect_bits);
+        #10;
+      end
+
     end
   endtask
 
@@ -263,11 +274,12 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
 
     $display("%s:%0d Send NTS IPv4 requests", `__FILE__, `__LINE__);
     #20
-    send_packet({60048'b0, nts_packet_ipv4_request1}, ETHIPV4_NTS_TESTPACKETS_BITS);
-    #2000;
+    send_packet({60048'b0, nts_packet_ipv4_request1}, ETHIPV4_NTS_TESTPACKETS_BITS, detect_bits);
+    $display("%s:%0d detect_bits=%b", `__FILE__, `__LINE__, detect_bits);
+    `assert(detect_bits == 'b1111);
 
-    send_packet({60048'b0, nts_packet_ipv4_request2}, ETHIPV4_NTS_TESTPACKETS_BITS);
-    #2000;
+    send_packet({60048'b0, nts_packet_ipv4_request2}, ETHIPV4_NTS_TESTPACKETS_BITS, detect_bits);
+    `assert(detect_bits == 'b1111);
 
     //----------------------------------------------------------------
     // IPv6 Request
@@ -275,11 +287,11 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
 
     $display("%s:%0d Send NTS IPv6 requests", `__FILE__, `__LINE__);
 
-    send_packet({59888'b0, nts_packet_ipv6_request1}, ETHIPV6_NTS_TESTPACKETS_BITS);
-    #2000;
+    send_packet({59888'b0, nts_packet_ipv6_request1}, ETHIPV6_NTS_TESTPACKETS_BITS, detect_bits);
+    `assert(detect_bits == 'b1111);
 
-    send_packet({59888'b0, nts_packet_ipv6_request2}, ETHIPV6_NTS_TESTPACKETS_BITS);
-    #2000;
+    send_packet({59888'b0, nts_packet_ipv6_request2}, ETHIPV6_NTS_TESTPACKETS_BITS, detect_bits);
+    `assert(detect_bits == 'b1111);
 
     $display("Test stop: %s:%0d", `__FILE__, `__LINE__);
     $finish;

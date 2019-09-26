@@ -51,6 +51,7 @@ lint_hdl:
 	verilator --lint-only hdl/bram.v
 	verilator --lint-only hdl/nts_api.v
 	verilator --lint-only hdl/nts_parser_ctrl.v
+	verilator --lint-only hdl/nts_timestamp.v
 	verilator --lint-only hdl/nts_dispatcher.v hdl/bram.v
 	verilator --lint-only hdl/nts_rx_buffer.v hdl/bram.v
 	verilator --lint-only hdl/nts_tx_buffer.v hdl/bram.v
@@ -73,6 +74,7 @@ VVPS: \
  output/vvp/bram_tb.vvp \
  output/vvp/nts_dispatcher_tb.vvp \
  output/vvp/nts_api_tb.vvp \
+ output/vvp/nts_timestamp_tb.vvp \
  output/vvp/nts_rx_buffer_tb.vvp \
  output/vvp/nts_tx_buffer_tb.vvp \
  output/vvp/nts_parser_ctrl_tb.vvp \
@@ -84,6 +86,12 @@ output/vvp:
 output/vvp/nts_api_tb.vvp: tb/nts_api_tb.v hdl/nts_api.v
 ifeq (,$(NO_LINT))
 	verilator --lint-only -Wno-STMTDLY $^
+endif
+	iverilog -o $@ $^
+
+output/vvp/nts_timestamp_tb.vvp: tb/nts_timestamp_tb.v hdl/nts_timestamp.v
+ifeq (,$(NO_LINT))
+	verilator --lint-only -Wno-STMTDLY -Wno-UNOPTFLAT $^
 endif
 	iverilog -o $@ $^
 

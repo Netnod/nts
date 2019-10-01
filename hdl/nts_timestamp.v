@@ -223,6 +223,7 @@ module nts_timestamp (
 
   always @*
   begin : tx_mux
+    tmp_ntp_data = 0;
     case (tx_counter_reg)
       0: tmp_ntp_data = packet[NTP_HEADER_BITS -   1 : NTP_HEADER_BITS -  64 ];
       1: tmp_ntp_data = packet[NTP_HEADER_BITS -  65 : NTP_HEADER_BITS - 128 ];
@@ -230,7 +231,7 @@ module nts_timestamp (
       3: tmp_ntp_data = packet[NTP_HEADER_BITS - 193 : NTP_HEADER_BITS - 256 ];
       4: tmp_ntp_data = packet[NTP_HEADER_BITS - 257 : NTP_HEADER_BITS - 320 ];
       5: tmp_ntp_data = packet[NTP_HEADER_BITS - 321 : NTP_HEADER_BITS - 384 ];
-      default: tmp_ntp_data = 64'hXXXX_XXXX_XXXX_XXXX;
+      default: ;
     endcase
   end
 

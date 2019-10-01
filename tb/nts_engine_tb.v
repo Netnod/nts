@@ -49,6 +49,10 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
   localparam [11:0] API_ADDR_KEYMEM_KEY1_START  = API_ADDR_KEYMEM_BASE + 12'h50;
   localparam [11:0] API_ADDR_KEYMEM_KEY1_END    = API_ADDR_KEYMEM_BASE + 12'h5f;
 
+  localparam [11:0] API_ADDR_CLOCK_BASE         = 12'h010;
+  localparam [11:0] API_ADDR_CLOCK_NAME0        = API_ADDR_CLOCK_BASE + 0;
+  localparam [11:0] API_ADDR_CLOCK_NAME1        = API_ADDR_CLOCK_BASE + 1;
+
   localparam integer ETHIPV4_NTS_TESTPACKETS_BITS=5488;
   localparam integer ETHIPV6_NTS_TESTPACKETS_BITS=5648;
 
@@ -84,6 +88,8 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
 
   reg                  i_areset;
   reg                  i_clk;
+
+  reg [63:0]           i_ntp_time;
 
   reg                  i_dispatch_rx_packet_available;
   reg [7:0]            i_dispatch_rx_data_valid;
@@ -241,6 +247,8 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
     .i_areset(i_areset),
     .i_clk(i_clk),
 
+    .i_ntp_time(i_ntp_time),
+
     .o_busy(o_busy),
 
     .i_dispatch_rx_packet_available(i_dispatch_rx_packet_available),
@@ -281,7 +289,7 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
     output        o_cs;
     output        o_we;
     output [11:0] o_addr;
-    output  [31:0] o_data;
+    output [31:0] o_data;
   begin
     o_cs   = i_cs;
     o_we   = i_we;
@@ -348,6 +356,11 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
     end
     api_set(1, 1, API_ADDR_KEYMEM_ADDR_CTRL, 32'b11, i_api_cs, i_api_we, i_api_address, i_api_write_data);
     #10;
+    api_set(1, 0, API_ADDR_CLOCK_NAME0, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+    $display("%s:%0d o_api_read_data = %h", `__FILE__, `__LINE__, o_api_read_data);
+    #10 `assert( o_api_read_data == 32'h74696d65); //"time"
+    api_set(1, 0, API_ADDR_CLOCK_NAME1, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+    #10 `assert( o_api_read_data == 32'h73746d70); //"stmp"
     api_set(0, 0, 'h000, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
 
 
@@ -445,6 +458,15 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
       end else if (o_dispatch_tx_packet_available) begin
         tx_receiving <= 'b1;
       end
+    end
+  end
+
+  always  @(posedge i_clk or posedge i_areset)
+  begin
+    if (i_areset) begin
+      i_ntp_time = 64'h0000_0001_0000_00000;
+    end else begin
+      i_ntp_time = i_ntp_time + 1;
     end
   end
 

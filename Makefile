@@ -55,7 +55,7 @@ lint_hdl:
 	verilator --lint-only hdl/nts_dispatcher.v hdl/bram.v
 	verilator --lint-only hdl/nts_rx_buffer.v hdl/bram.v
 	verilator --lint-only hdl/nts_tx_buffer.v hdl/bram.v
-	verilator --lint-only hdl/nts_engine.v hdl/nts_tx_buffer.v hdl/nts_rx_buffer.v hdl/nts_parser_ctrl.v hdl/nts_api.v hdl/bram.v sub/keymem/src/rtl/keymem.v
+	verilator --lint-only hdl/nts_engine.v hdl/nts_tx_buffer.v hdl/nts_rx_buffer.v hdl/nts_parser_ctrl.v hdl/nts_api.v hdl/nts_timestamp.v hdl/bram.v sub/keymem/src/rtl/keymem.v
 lint_tb:
 	verilator --lint-only -Wno-STMTDLY tb/bram_tb.v hdl/bram.v
 	verilator --lint-only -Wno-STMTDLY tb/nts_dispatcher_tb.v hdl/nts_dispatcher.v hdl/bram.v
@@ -63,7 +63,7 @@ lint_tb:
 	verilator --lint-only -Wno-STMTDLY tb/nts_rx_buffer_tb.v hdl/nts_rx_buffer.v hdl/bram.v
 	verilator --lint-only -Wno-STMTDLY tb/nts_tx_buffer_tb.v hdl/nts_tx_buffer.v hdl/bram.v
 	verilator --lint-only -Wno-STMTDLY -Wno-UNOPTFLAT tb/nts_parser_ctrl_tb.v hdl/nts_parser_ctrl.v
-	verilator --lint-only -Wno-STMTDLY -Wno-UNOPTFLAT tb/nts_engine_tb.v hdl/nts_engine.v hdl/nts_tx_buffer.v hdl/nts_rx_buffer.v hdl/nts_parser_ctrl.v hdl/nts_api.v hdl/bram.v sub/keymem/src/rtl/keymem.v
+	verilator --lint-only -Wno-STMTDLY -Wno-UNOPTFLAT tb/nts_engine_tb.v hdl/nts_engine.v hdl/nts_tx_buffer.v hdl/nts_rx_buffer.v hdl/nts_parser_ctrl.v hdl/nts_api.v hdl/nts_timestamp.v hdl/bram.v sub/keymem/src/rtl/keymem.v
 
 lint-submodules:
 	make -C sub/keymem/toolruns lint
@@ -119,7 +119,7 @@ ifeq (,$(NO_LINT))
 endif
 	iverilog -o $@ $^
 
-output/vvp/nts_engine_tb.vvp: tb/nts_engine_tb.v hdl/nts_tx_buffer.v hdl/nts_rx_buffer.v hdl/nts_parser_ctrl.v hdl/nts_engine.v hdl/nts_api.v hdl/bram.v sub/keymem/src/rtl/keymem.v
+output/vvp/nts_engine_tb.vvp: tb/nts_engine_tb.v hdl/nts_tx_buffer.v hdl/nts_rx_buffer.v hdl/nts_parser_ctrl.v hdl/nts_engine.v hdl/nts_api.v hdl/nts_timestamp.v hdl/bram.v sub/keymem/src/rtl/keymem.v
 ifeq (,$(NO_LINT))
 	verilator --lint-only -Wno-STMTDLY -Wno-UNOPTFLAT $^
 endif

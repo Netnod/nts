@@ -35,6 +35,8 @@ module nts_engine #(
   input  wire                  i_clk,
   output wire                  o_busy,
 
+  input wire  [63:0]           i_ntp_time,
+
   input  wire                  i_dispatch_rx_packet_available,
   output wire                  o_dispatch_rx_packet_read_discard,
   input  wire [7:0]            i_dispatch_rx_data_valid,
@@ -128,6 +130,17 @@ module nts_engine #(
   wire                         txbuf_parser_full;
   wire                         txbuf_parser_empty;
 
+  wire                         parser_timestamp_record_rectime;
+  wire                         parser_timestamp_transmit;
+  wire                [63 : 0] parser_timestamp_client_orgtime;
+  wire                [ 2 : 0] parser_timestamp_client_version;
+  wire                [ 7 : 0] parser_timestamp_client_poll;
+
+  wire                         tx_timestamp_read;
+  wire                         timestamp_tx_empty;
+  wire                [ 2 : 0] timestamp_tx_header_block;
+  wire                [63 : 0] timestamp_tx_header_data;
+
 
   //----------------------------------------------------------------
   // Concurrent connectivity for ports etc.
@@ -136,9 +149,16 @@ module nts_engine #(
   assign keymem_internal_get_current_key = 'b0;
 
   assign api_read_data_engine = 0; //TODO implement
-  assign api_read_data_clock  = 0; //TODO implement
   assign api_read_data_cookie = 0; //TODO implement
   assign api_read_data_debug  = 0; //TODO implement
+
+  assign parser_timestamp_record_rectime = 0; //TODO implement
+  assign parser_timestamp_transmit       = 0; //TODO implement
+  assign parser_timestamp_client_orgtime = 0; //TODO implement
+  assign parser_timestamp_client_version = 0; //TODO implement
+  assign parser_timestamp_client_poll    = 0; //TODO implement
+
+  assign tx_timestamp_read               = 0; //TODO implement
 
   assign o_busy                          = parser_busy;
 
@@ -282,6 +302,10 @@ module nts_engine #(
    .o_detect_nts_authenticator(detect_nts_authenticator)
   );
 
+  //----------------------------------------------------------------
+  // Server Key Memory instantiation.
+  //----------------------------------------------------------------
+
   keymem keymem (
     .clk(i_clk),
     .areset(i_areset),
@@ -301,6 +325,37 @@ module nts_engine #(
     .key_id(keymem_internal_key_id),
     .key_data(keymem_internal_key_data),
     .ready(keymem_internal_ready)
+  );
+
+  //----------------------------------------------------------------
+  // NTP Timestamp instantiation.
+  //----------------------------------------------------------------
+
+  nts_timestamp timestamp (
+    .i_areset(i_areset), // async reset
+    .i_clk(i_clk),
+
+    .i_ntp_time(i_ntp_time),
+
+    // Parsed information
+    .i_parser_clear(parser_txbuf_clear), //parser request ignore current packet
+    .i_parser_record_receive_timestamp(parser_timestamp_record_rectime),
+    .i_parser_transmit(parser_timestamp_transmit), //parser signal packet transmit OK
+    .i_parser_origin_timestamp(parser_timestamp_client_orgtime),
+    .i_parser_version_number(parser_timestamp_client_version),
+    .i_parser_poll(parser_timestamp_client_poll),
+
+    .i_tx_read(tx_timestamp_read),
+    .o_tx_empty(timestamp_tx_empty),
+    .o_tx_ntp_header_block(timestamp_tx_header_block),
+    .o_tx_ntp_header_data(timestamp_tx_header_data),
+
+    // API access
+    .i_api_cs(api_cs_clock),
+    .i_api_we(api_we),
+    .i_api_address(api_address),
+    .i_api_write_data(api_write_data),
+    .o_api_read_data(api_read_data_clock)
   );
 
 endmodule

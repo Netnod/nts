@@ -64,6 +64,12 @@ module nts_parser_ctrl #(
   input  wire                         i_keymem_key_valid,
   input  wire                         i_keymem_ready,
 
+  output wire                         o_timestamp_record_receive_timestamp,
+  output wire                         o_timestamp_transmit, //parser signal packet transmit OK
+  output wire                [63 : 0] o_timestamp_origin_timestamp,
+  output wire                [ 2 : 0] o_timestamp_version_number,
+  output wire                [ 7 : 0] o_timestamp_poll,
+
   output wire                         o_detect_unique_identifier,
   output wire                         o_detect_nts_cookie,
   output wire                         o_detect_nts_cookie_placeholder,
@@ -165,6 +171,23 @@ module nts_parser_ctrl #(
   reg                   [31:0] keymem_server_id_new;
   reg                   [31:0] keymem_server_id_reg;
 
+  reg                          timestamp_record_receive_timestamp_we;
+  reg                          timestamp_record_receive_timestamp_new;
+  reg                          timestamp_record_receive_timestamp_reg;
+  reg                          timestamp_transmit_we;  //parser signal packet transmit OK
+  reg                          timestamp_transmit_new; //parser signal packet transmit OK
+  reg                          timestamp_transmit_reg; //parser signal packet transmit OK
+  reg                          timestamp_origin_timestamp_we;
+  reg                 [63 : 0] timestamp_origin_timestamp_new;
+  reg                 [63 : 0] timestamp_origin_timestamp_reg;
+  reg                          timestamp_version_number_we;
+  reg                 [ 2 : 0] timestamp_version_number_new;
+  reg                 [ 2 : 0] timestamp_version_number_reg;
+  reg                          timestamp_poll_we;
+  reg                 [ 7 : 0] timestamp_poll_new;
+  reg                 [ 7 : 0] timestamp_poll_reg;
+
+
   reg                          ntp_extension_counter_we;
   reg [NTP_EXTENSION_BITS-1:0] ntp_extension_counter_new;
   reg [NTP_EXTENSION_BITS-1:0] ntp_extension_counter_reg;
@@ -225,6 +248,12 @@ module nts_parser_ctrl #(
   assign o_tx_ipv6_done = detect_ipv6 && state_reg == STATE_ERROR_UNIMPLEMENTED; //TODO implement termination logic
   assign o_tx_w_en      = i_process_initial;   //TODO implement proper write logic
   assign o_tx_w_data    = previous_i_data_reg; //TODO implement proper write logic
+
+  assign o_timestamp_record_receive_timestamp = timestamp_record_receive_timestamp_reg;
+  assign o_timestamp_transmit                 = timestamp_transmit_reg; //parser signal packet transmit OK
+  assign o_timestamp_origin_timestamp         = timestamp_origin_timestamp_reg;
+  assign o_timestamp_version_number           = timestamp_version_number_reg;
+  assign o_timestamp_poll                     = timestamp_poll_reg;
 
 
   assign o_detect_unique_identifier      = detect_unique_identifier_reg;
@@ -308,6 +337,11 @@ module nts_parser_ctrl #(
       ntp_extension_counter_reg  <= 'b0;
       previous_i_data_reg        <= 'b0;
       state_reg                  <= 'b0;
+      timestamp_record_receive_timestamp_reg <= 'b0;
+      timestamp_transmit_reg                 <= 'b0;
+      timestamp_origin_timestamp_reg         <= 'b0;
+      timestamp_version_number_reg           <= 'b0;
+      timestamp_poll_reg                     <= 'b0;
       word_counter_reg           <= 'b0;
       begin : ntp_extension_reset_async
         integer i;
@@ -383,6 +417,21 @@ module nts_parser_ctrl #(
 
       if (state_we)
         state_reg <= state_new;
+
+      if (timestamp_record_receive_timestamp_we)
+        timestamp_record_receive_timestamp_reg <= timestamp_record_receive_timestamp_new;
+
+      if (timestamp_transmit_we)
+        timestamp_transmit_reg <= timestamp_transmit_new;
+
+      if (timestamp_origin_timestamp_we)
+        timestamp_origin_timestamp_reg <= timestamp_origin_timestamp_new;
+
+      if (timestamp_version_number_we)
+        timestamp_version_number_reg <= timestamp_version_number_new;
+
+      if (timestamp_poll_we)
+        timestamp_poll_reg <= timestamp_poll_new;
 
       if (word_counter_we)
         word_counter_reg <= word_counter_new;
@@ -833,6 +882,65 @@ module nts_parser_ctrl #(
         end
       end
     end
+  end
+
+  //----------------------------------------------------------------
+  // NTP Decode
+  //----------------------------------------------------------------
+
+  always @*
+  begin
+    timestamp_origin_timestamp_we   = 0;
+    timestamp_origin_timestamp_new  = 0; /* RFC 5905 Figure 31: x.org         <--     r.xmt */
+    timestamp_version_number_we     = 0;
+    timestamp_version_number_new    = 0;
+
+    if (i_clear) begin
+      timestamp_origin_timestamp_we = 1;
+      timestamp_version_number_we   = 1;
+
+    end else if (i_process_initial) begin
+      if (detect_ipv4 && detect_ipv4_bad == 'b0) begin
+        if (word_counter_reg == 4) begin
+          timestamp_version_number_we  = 1;
+          timestamp_version_number_new = previous_i_data_reg[45:43];
+          $display("%s:%0d timestamp_version_number_new=%h", `__FILE__, `__LINE__, timestamp_version_number_new);
+        end else if (word_counter_reg == 9) begin
+          timestamp_origin_timestamp_we  = 1;
+          timestamp_origin_timestamp_new = { previous_i_data_reg[47:0], 16'h0 };
+        end else if (word_counter_reg == 10) begin
+          timestamp_origin_timestamp_we  = 1;
+          timestamp_origin_timestamp_new = { timestamp_origin_timestamp_reg[63:16], previous_i_data_reg[63:48] };
+          $display("%s:%0d timestamp_origin_timestamp_new=%h", `__FILE__, `__LINE__, timestamp_origin_timestamp_new);
+        end
+      end if (detect_ipv6) begin
+        if (word_counter_reg == 6) begin
+          timestamp_version_number_we  = 1;
+          timestamp_version_number_new = previous_i_data_reg[13:11];
+          $display("%s:%0d timestamp_version_number_new=%h", `__FILE__, `__LINE__, timestamp_version_number_new);
+        end else if (word_counter_reg == 11) begin
+          timestamp_origin_timestamp_we  = 1;
+          timestamp_origin_timestamp_new = { previous_i_data_reg[15:0], 48'h0 };
+        end else if (word_counter_reg == 12) begin
+          timestamp_origin_timestamp_we  = 1;
+          timestamp_origin_timestamp_new = { timestamp_origin_timestamp_reg[63:48], previous_i_data_reg[63:16] };
+          $display("%s:%0d timestamp_origin_timestamp_new=%h", `__FILE__, `__LINE__, timestamp_origin_timestamp_new);
+        end
+      end
+    end
+  end
+
+  //----------------------------------------------------------------
+  // NTP Timestamp signals
+  //----------------------------------------------------------------
+
+  always @*
+  begin
+     timestamp_transmit_we  = 0;
+     timestamp_transmit_new = 0;
+     timestamp_record_receive_timestamp_we  = 0;
+     timestamp_record_receive_timestamp_new = 0;
+     //TODO implement
   end
 
   //----------------------------------------------------------------

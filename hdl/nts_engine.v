@@ -152,12 +152,6 @@ module nts_engine #(
   assign api_read_data_cookie = 0; //TODO implement
   assign api_read_data_debug  = 0; //TODO implement
 
-  assign parser_timestamp_record_rectime = 0; //TODO implement
-  assign parser_timestamp_transmit       = 0; //TODO implement
-  assign parser_timestamp_client_orgtime = 0; //TODO implement
-  assign parser_timestamp_client_version = 0; //TODO implement
-  assign parser_timestamp_client_poll    = 0; //TODO implement
-
   assign tx_timestamp_read               = 0; //TODO implement
 
   assign o_busy                          = parser_busy;
@@ -295,6 +289,12 @@ module nts_engine #(
    .i_keymem_key_length(keymem_internal_key_length),
    .i_keymem_key_valid(keymem_internal_key_valid),
    .i_keymem_ready(keymem_internal_ready),
+
+   .o_timestamp_record_receive_timestamp(parser_timestamp_record_rectime),
+   .o_timestamp_transmit(parser_timestamp_transmit),
+   .o_timestamp_origin_timestamp(parser_timestamp_client_orgtime),
+   .o_timestamp_version_number(parser_timestamp_client_version),
+   .o_timestamp_poll(parser_timestamp_client_poll),
 
    .o_detect_unique_identifier(detect_unique_identifier),
    .o_detect_nts_cookie(detect_nts_cookie),

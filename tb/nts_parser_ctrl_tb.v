@@ -78,6 +78,12 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
   reg                          i_access_port_rd_dv;
   reg  [ACCESS_PORT_WIDTH-1:0] i_access_port_rd_data;
 
+  wire                         o_timestamp_record_receive_timestamp;
+  wire                         o_timestamp_transmit; //parser signal packet transmit OK
+  wire                [63 : 0] o_timestamp_origin_timestamp;
+  wire                [ 2 : 0] o_timestamp_version_number;
+  wire                [ 7 : 0] o_timestamp_poll;
+
   wire                  [3:0] o_keymem_key_word;
   wire                        o_keymem_get_key_with_id;
   wire                 [31:0] o_keymem_server_id;
@@ -237,6 +243,12 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
     .i_keymem_key_length(i_keymem_key_length),
     .i_keymem_key_valid(i_keymem_key_valid),
     .i_keymem_ready(i_keymem_ready),
+
+    .o_timestamp_record_receive_timestamp(o_timestamp_record_receive_timestamp),
+    .o_timestamp_transmit(o_timestamp_transmit), //parser signal packet transmit OK
+    .o_timestamp_origin_timestamp(o_timestamp_origin_timestamp),
+    .o_timestamp_version_number(o_timestamp_version_number),
+    .o_timestamp_poll(o_timestamp_poll),
 
     .o_detect_unique_identifier(o_detect_unique_identifier),
     .o_detect_nts_cookie(o_detect_nts_cookie),

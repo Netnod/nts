@@ -78,6 +78,7 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
   reg                          i_access_port_rd_dv;
   reg  [ACCESS_PORT_WIDTH-1:0] i_access_port_rd_data;
 
+  reg                          i_timestamp_busy;
   wire                         o_timestamp_record_receive_timestamp;
   wire                         o_timestamp_transmit; //parser signal packet transmit OK
   wire                [63 : 0] o_timestamp_origin_timestamp;
@@ -95,7 +96,7 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
   wire                        o_detect_nts_cookie;
   wire                        o_detect_nts_cookie_placeholder;
   wire                        o_detect_nts_authenticator;
-  
+
   reg                 [3 : 0] detect_bits;
 
   reg                         keymem_state;
@@ -244,6 +245,7 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
     .i_keymem_key_valid(i_keymem_key_valid),
     .i_keymem_ready(i_keymem_ready),
 
+    .i_timestamp_busy(i_timestamp_busy),
     .o_timestamp_record_receive_timestamp(o_timestamp_record_receive_timestamp),
     .o_timestamp_transmit(o_timestamp_transmit), //parser signal packet transmit OK
     .o_timestamp_origin_timestamp(o_timestamp_origin_timestamp),
@@ -255,7 +257,7 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
     .o_detect_nts_cookie_placeholder(o_detect_nts_cookie_placeholder),
     .o_detect_nts_authenticator(o_detect_nts_authenticator)
   );
-  
+
   //----------------------------------------------------------------
   // Test bench code
   //----------------------------------------------------------------
@@ -276,6 +278,8 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
     i_access_port_wait          = 0;
     i_access_port_rd_dv         = 0;
     i_access_port_rd_data       = 0;
+
+    i_timestamp_busy            = 0;
 
     #10
     i_areset = 0;
@@ -362,6 +366,16 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
     end else begin
       i_access_port_rd_data = 32'hXXXX_XXXX;
       i_access_port_rd_dv = 0;
+    end
+  end
+
+
+  always @*
+  begin
+    if (o_timestamp_transmit) begin
+      i_timestamp_busy = 1;
+      #100;
+      i_timestamp_busy = 0;
     end
   end
 

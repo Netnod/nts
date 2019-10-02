@@ -64,6 +64,7 @@ module nts_parser_ctrl #(
   input  wire                         i_keymem_key_valid,
   input  wire                         i_keymem_ready,
 
+  input  wire                         i_timestamp_busy,
   output wire                         o_timestamp_record_receive_timestamp,
   output wire                         o_timestamp_transmit, //parser signal packet transmit OK
   output wire                [63 : 0] o_timestamp_origin_timestamp,
@@ -93,6 +94,8 @@ module nts_parser_ctrl #(
   localparam STATE_EXTRACT_COOKIE_FROM_RAM  = 4'h6;
   localparam STATE_VERIFY_KEY_FROM_COOKIE1  = 4'h7;
   localparam STATE_VERIFY_KEY_FROM_COOKIE2  = 4'h8;
+  localparam STATE_TIMESTAMP                = 4'h9;
+  localparam STATE_TIMESTAMP_WAIT           = 4'ha;
   localparam STATE_ERROR_UNIMPLEMENTED      = 4'he;
   localparam STATE_ERROR_GENERAL            = 4'hf;
 
@@ -250,7 +253,7 @@ module nts_parser_ctrl #(
   assign o_tx_w_data    = previous_i_data_reg; //TODO implement proper write logic
 
   assign o_timestamp_record_receive_timestamp = timestamp_record_receive_timestamp_reg;
-  assign o_timestamp_transmit                 = timestamp_transmit_reg; //parser signal packet transmit OK
+  assign o_timestamp_transmit                 = (state_reg == STATE_TIMESTAMP);
   assign o_timestamp_origin_timestamp         = timestamp_origin_timestamp_reg;
   assign o_timestamp_version_number           = timestamp_version_number_reg;
   assign o_timestamp_poll                     = timestamp_poll_reg;
@@ -822,8 +825,18 @@ module nts_parser_ctrl #(
             //$display("%s:%0d i_keymem_ready=%h keymem_get_key_with_id_reg=%h i_keymem_key_valid=%h...", `__FILE__, `__LINE__, i_keymem_ready, keymem_get_key_with_id_reg, i_keymem_key_valid);
           end else if (keymem_key_word_reg == 'b1111) begin
             state_we  = 'b1;
-            state_new = STATE_ERROR_UNIMPLEMENTED;
+            state_new = STATE_TIMESTAMP;
           end
+        end
+      STATE_TIMESTAMP:
+        begin
+          state_we  = 'b1;
+          state_new = STATE_TIMESTAMP_WAIT;
+        end
+      STATE_TIMESTAMP_WAIT:
+        if (i_timestamp_busy == 'b0) begin
+          state_we  = 'b1;
+          state_new = STATE_ERROR_UNIMPLEMENTED;
         end
       STATE_ERROR_GENERAL:
         begin
@@ -936,11 +949,17 @@ module nts_parser_ctrl #(
 
   always @*
   begin
-     timestamp_transmit_we  = 0;
-     timestamp_transmit_new = 0;
      timestamp_record_receive_timestamp_we  = 0;
      timestamp_record_receive_timestamp_new = 0;
-     //TODO implement
+
+     if (state_reg == STATE_IDLE && i_process_initial) begin
+       // nts_engine (parser and rx_buffer) begins to receive packet from scheduler
+       timestamp_record_receive_timestamp_we  = 1;
+       timestamp_record_receive_timestamp_new = 1;
+     end else if (timestamp_record_receive_timestamp_reg == 1) begin
+       timestamp_record_receive_timestamp_we  = 1;
+       timestamp_record_receive_timestamp_new = 0;
+     end
   end
 
   //----------------------------------------------------------------
@@ -998,6 +1017,8 @@ module nts_parser_ctrl #(
         STATE_EXTENSIONS_EXTRACTED: $display("%s:%0d STATE_EXTENSIONS_EXTRACTED", `__FILE__, `__LINE__);
         STATE_VERIFY_KEY_FROM_COOKIE1: $display("%s:%0d STATE_VERIFY_KEY_FROM_COOKIE1", `__FILE__, `__LINE__);
         STATE_VERIFY_KEY_FROM_COOKIE2: $display("%s:%0d STATE_VERIFY_KEY_FROM_COOKIE2", `__FILE__, `__LINE__);
+        STATE_TIMESTAMP: $display("%s:%0d TIMESTAMP", `__FILE__, `__LINE__);
+        STATE_TIMESTAMP_WAIT: $display("%s:%0d TIMESTAMP_WAIT", `__FILE__, `__LINE__);
         STATE_ERROR_GENERAL: $display("%s:%0d warning: error", `__FILE__, `__LINE__);
         default: $display("%s:%0d warning: state %0d not implemented", `__FILE__, `__LINE__, state_reg);
       endcase

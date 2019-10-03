@@ -49,6 +49,7 @@ clean:
 lint: lint_hdl lint_tb
 lint_hdl:
 	verilator --lint-only hdl/bram.v
+	verilator --lint-only hdl/bram_dpge.v
 	verilator --lint-only hdl/nts_api.v
 	verilator --lint-only hdl/nts_parser_ctrl.v
 	verilator --lint-only hdl/nts_timestamp.v

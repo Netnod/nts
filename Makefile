@@ -50,6 +50,7 @@ lint: lint_hdl lint_tb
 lint_hdl:
 	verilator --lint-only hdl/bram.v
 	verilator --lint-only hdl/bram_dpge.v
+	verilator --lint-only hdl/memory_ctrl.v hdl/bram_dpge.v
 	verilator --lint-only hdl/nts_api.v
 	verilator --lint-only hdl/nts_parser_ctrl.v
 	verilator --lint-only hdl/nts_timestamp.v
@@ -73,6 +74,7 @@ DIRS: output/vvp
 
 VVPS: \
  output/vvp/bram_tb.vvp \
+ output/vvp/memory_ctrl_tb.vvp \
  output/vvp/nts_dispatcher_tb.vvp \
  output/vvp/nts_api_tb.vvp \
  output/vvp/nts_timestamp_tb.vvp \
@@ -83,6 +85,12 @@ VVPS: \
 
 output/vvp:
 	mkdir -p $@
+
+output/vvp/memory_ctrl_tb.vvp: tb/memory_ctrl_tb.v hdl/memory_ctrl.v hdl/bram_dpge.v
+ifeq (,$(NO_LINT))
+	verilator --lint-only -Wno-STMTDLY $^
+endif
+	iverilog -o $@ $^
 
 output/vvp/nts_api_tb.vvp: tb/nts_api_tb.v hdl/nts_api.v
 ifeq (,$(NO_LINT))

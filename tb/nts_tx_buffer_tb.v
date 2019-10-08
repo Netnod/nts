@@ -74,6 +74,7 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
 
   reg           rx_start;
   reg     [1:0] rx_state;
+  reg    [12:0] rx_count;
   reg  [6299:0] rx_buf;
   reg    [63:0] tx_buf [0:99];
 
@@ -190,6 +191,7 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
   task receive_packet;
   begin : recieve_packets_locals
     integer i;
+    reg [63:0] rx_block;
     $display("%s:%0d receive_packet begin", `__FILE__, `__LINE__);
     `assert((rx_state == 0) || (rx_state == 3));
     rx_start = 1;
@@ -202,8 +204,15 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
       `assert(i < 10000);
       #10 i = i + 1;
     end
-    if (verbose_output >= 2)
+    if (verbose_output >= 2) begin
+      $display("%s:%0d rx_count=%h", `__FILE__, `__LINE__, rx_count);
+      for ( i = {19'h0, rx_count } - 1; i>=0 ; i = i - 1)
+      begin
+        rx_block = rx_buf[i*64+:64];
+        $display("%s:%0d rx_buf[%2d*64+:64]=%h", `__FILE__, `__LINE__, i, rx_block);
+      end
       $display("%s:%0d rx_buf=%h", `__FILE__, `__LINE__, rx_buf);
+    end
     $display("%s:%0d receive_packet end", `__FILE__, `__LINE__);
   end
   endtask
@@ -293,45 +302,48 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
   begin : simple_rx
     integer i;
     if (i_areset) begin
-      i_dispatch_tx_packet_read <= 0;
-      i_dispatch_tx_fifo_rd_en <= 0;
-      rx_state <= 0;
-      rx_buf[6299:64] <= 6236'b0;
-      rx_buf[63:0] <= 64'hXXXX_XXXX_XXXX_XXXX;
+      i_dispatch_tx_packet_read = 0;
+      i_dispatch_tx_fifo_rd_en = 0;
+      rx_state = 0;
+      rx_buf[6299:64] = 6236'b0;
+      rx_buf[63:0] = 64'hXXXX_XXXX_XXXX_XXXX;
     end else begin
       if (rx_state != 0) begin
         //$display("%s:%0d rx_start=%h rx_state=%h o_dispatch_tx_fifo_empty=%h o_dispatch_tx_fifo_rd_data=%h", `__FILE__, `__LINE__, rx_start, rx_state, o_dispatch_tx_fifo_empty, o_dispatch_tx_fifo_rd_data);
       end
-      i_dispatch_tx_packet_read <= 0;
-      i_dispatch_tx_fifo_rd_en <= 0;
+      i_dispatch_tx_packet_read = 0;
+      i_dispatch_tx_fifo_rd_en = 0;
       case (rx_state)
         0:
           begin
-            rx_buf[6299:64] <= 6236'b0;
-            rx_buf[63:0] <= 64'hXXXX_0001_XXXX_XXXX;
-             if (rx_start)
-               rx_state <= 1;
+            rx_buf[6299:64] = 6236'b0;
+            rx_buf[63:0] = 64'hXXXX_0001_XXXX_XXXX;
+            rx_count = 0;
+            if (rx_start)
+              rx_state = 1;
           end
         1: if (o_dispatch_tx_packet_available && o_dispatch_tx_fifo_empty=='b0) begin
-             i_dispatch_tx_fifo_rd_en <= 1;
-             rx_state <= 2;
+             //i_dispatch_tx_fifo_rd_en <= 1;
+             rx_state = 2;
            end
         2:
           begin
-            rx_buf[6299:64] <= rx_buf[6235:0];
-            rx_buf[63:0]    <= o_dispatch_tx_fifo_rd_data;
             if (o_dispatch_tx_fifo_empty) begin
-              rx_state                  <= 3;
-              i_dispatch_tx_packet_read <= 1;
+              rx_state                  = 3;
+              i_dispatch_tx_packet_read = 1;
             end else begin
-              i_dispatch_tx_fifo_rd_en  <= 1;
+              i_dispatch_tx_fifo_rd_en  = 1;
+              rx_buf[6299:64] = rx_buf[6235:0];
+              rx_buf[63:0]    = o_dispatch_tx_fifo_rd_data;
+              rx_count        = rx_count + 1;
             end
           end
         3:
           if (rx_start) begin
-            rx_state        <= 1;
-            rx_buf[6299:64] <= 6236'b0;
-            rx_buf[63:0]    <= 64'hXXXX_0003_XXXX_XXXX;
+            rx_state        = 1;
+            rx_buf[6299:64] = 6236'b0;
+            rx_buf[63:0]    = 64'hXXXX_0003_XXXX_XXXX;
+            rx_count        = 0;
           end
       endcase
     end

@@ -84,17 +84,16 @@ module nts_tx_buffer #(
   reg            [2:0] mem_state_new   [1:0];
   reg            [2:0] mem_state_reg   [1:0];
 
-  reg                  ram_wr_en_we    [0:1];
-  reg                  ram_wr_en_new   [0:1];
-  reg                  ram_wr_en_reg   [0:1];
+  reg                  ram_rd          [0:1];
+  reg                  ram_wr          [0:1];
 
-  reg                  ram_wr_data_we  [0:1];
-  reg           [63:0] ram_wr_data_new [0:1];
-  reg           [63:0] ram_wr_data_reg [0:1];
+  reg           [63:0] ram_wr_data     [0:1];
 
-  reg                  ram_addr_we     [0:1];
-  reg [ADDR_WIDTH-1:0] ram_addr_new    [0:1];
-  reg [ADDR_WIDTH-1:0] ram_addr_reg    [0:1];
+  reg                  ram_addr_hi_we  [0:1];
+  reg [ADDR_WIDTH-1:0] ram_addr_hi_new [0:1];
+  reg [ADDR_WIDTH-1:0] ram_addr_hi_reg [0:1];
+
+  reg            [2:0] ram_addr_lo     [0:1];
 
   reg                  word_count_we   [0:1];
   reg [ADDR_WIDTH-1:0] word_count_new  [0:1];
@@ -105,6 +104,8 @@ module nts_tx_buffer #(
   //----------------------------------------------------------------
 
   wire           [63:0] ram_rd_data [1:0];
+  wire                  ram_error   [1:0];
+  wire                  ram_busy    [1:0];
 
   wire                  parser;
   wire                  fifo;
@@ -118,32 +119,48 @@ module nts_tx_buffer #(
   assign fifo                            = ~ current_mem_reg;
   assign fifo_word_count_p1              = word_count_reg[ fifo ] + 1; //TODO handle overflow
   assign o_dispatch_tx_packet_available  = mem_state_reg[ fifo ] == STATE_FIFO_OUT;
-  assign o_dispatch_tx_fifo_empty        = ram_addr_reg[ fifo ] == fifo_word_count_p1;
+  assign o_dispatch_tx_fifo_empty        = ram_addr_hi_reg[ fifo ] == fifo_word_count_p1;
   assign o_dispatch_tx_fifo_rd_data      = ram_rd_data[ fifo ];
   assign o_dispatch_tx_bytes_last_word   = 0; //TODO implement
   assign o_parser_current_empty          = mem_state_reg[ parser ] == STATE_EMPTY;
-  assign o_parser_current_memory_full    = (mem_state_reg[ parser ] == STATE_HAS_DATA && ram_addr_reg[ parser ] == ADDRESS_FULL) ||
-                                           (mem_state_reg[ parser ] == STATE_HAS_DATA && ram_addr_reg[ parser ] == ADDRESS_ALMOST_FULL && i_parser_w_en) ||
+  assign o_parser_current_memory_full    = (mem_state_reg[ parser ] == STATE_HAS_DATA && ram_addr_hi_reg[ parser ] == ADDRESS_FULL) ||
+                                           (mem_state_reg[ parser ] == STATE_HAS_DATA && ram_addr_hi_reg[ parser ] == ADDRESS_ALMOST_FULL && i_parser_w_en) ||
                                            (mem_state_reg[ parser ] > STATE_HAS_DATA); //TODO verify
 
   //----------------------------------------------------------------
   // Memory holding the Tx buffer
   //----------------------------------------------------------------
 
-  bram #(ADDR_WIDTH,64) mem0 (
-     .i_clk(i_clk),
-     .i_addr(ram_addr_reg[0]),
-     .i_write(ram_wr_en_reg[0]),
-     .i_data(ram_wr_data_reg[0]),
-     .o_data(ram_rd_data[0])
+  memory_ctrl #(.ADDR_WIDTH(ADDR_WIDTH)) mem0 (
+    .i_clk(i_clk),
+    .i_areset(i_areset),
+
+    .i_read_64(ram_rd[0]),
+    .i_write_64(ram_wr[0]),
+    .i_write_data(ram_wr_data[0]),
+
+    .i_addr_hi(ram_addr_hi_reg[0]),
+    .i_addr_lo(ram_addr_lo[0]),
+
+    .o_data(ram_rd_data[0]),
+    .o_error(ram_error[0]),
+    .o_busy(ram_busy[0])
   );
 
-  bram #(ADDR_WIDTH,64) mem1 (
-     .i_clk(i_clk),
-     .i_addr(ram_addr_reg[1]),
-     .i_write(ram_wr_en_reg[1]),
-     .i_data(ram_wr_data_reg[1]),
-     .o_data(ram_rd_data[1])
+  memory_ctrl #(.ADDR_WIDTH(ADDR_WIDTH)) mem1 (
+    .i_clk(i_clk),
+    .i_areset(i_areset),
+
+    .i_read_64(ram_rd[1]),
+    .i_write_64(ram_wr[1]),
+    .i_write_data(ram_wr_data[1]),
+
+    .i_addr_hi(ram_addr_hi_reg[1]),
+    .i_addr_lo(ram_addr_lo[1]),
+
+    .o_data(ram_rd_data[1]),
+    .o_error(ram_error[1]),
+    .o_busy(ram_busy[1])
   );
 
   //----------------------------------------------------------------
@@ -155,18 +172,26 @@ module nts_tx_buffer #(
     integer i;
     for (i = 0; i < 2; i = i + 1) begin
       if (i_areset == 1'b1) begin // synchronous reset
-        ram_addr_reg[i]    <= 'b0;
-        ram_wr_data_reg[i] <= 'b0;
-        ram_wr_en_reg[i]   <= 'b0;
+        ram_addr_hi_reg[i] <= 'b0;
+        //ram_addr_lo_reg[i] <= 'b0;
+        //ram_rd_en_reg[i]   <= 'b0;
+        //ram_wr_data_reg[i] <= 'b0;
+        //ram_wr_en_reg[i]   <= 'b0;
       end else begin
-        if (ram_addr_we[i])
-          ram_addr_reg[i] <= ram_addr_new[i];
+        if (ram_addr_hi_we[i])
+          ram_addr_hi_reg[i] <= ram_addr_hi_new[i];
 
-        if (ram_wr_data_we[i])
-          ram_wr_data_reg[i] <= ram_wr_data_new[i];
+        //if (ram_addr_lo_we[i])
+        //  ram_addr_lo_reg[i] <= ram_addr_lo_new[i];
 
-        if (ram_wr_en_we[i])
-          ram_wr_en_reg[i] <= ram_wr_en_new[i];
+        //if (ram_rd_en_we[i])
+        //  ram_rd_en_reg[i] <= ram_rd_en_new[i];
+
+        //if (ram_wr_data_we[i])
+        //  ram_wr_data_reg[i] <= ram_wr_data_new[i];
+
+        //if (ram_wr_en_we[i])
+        //  ram_wr_en_reg[i] <= ram_wr_en_new[i];
       end
     end
   end
@@ -207,14 +232,16 @@ module nts_tx_buffer #(
         mem_state_we[i] = 0;
         mem_state_new[i] = STATE_EMPTY;
 
-        ram_addr_we[i] = 0;
-        ram_addr_new[i] = 0;
+        ram_addr_hi_we[i] = 0;
+        ram_addr_hi_new[i] = 0;
 
-        ram_wr_data_we[i]  = 0;
-        ram_wr_data_new[i] = 0;
+        ram_addr_lo[i] = 0;
 
-        ram_wr_en_we[i]  = 1;
-        ram_wr_en_new[i] = 0;
+        ram_rd[i]  = 0;
+
+        ram_wr[i]  = 0;
+
+        ram_wr_data[i]  = 0;
 
         word_count_we[i]  = 0;
         word_count_new[i] = 0;
@@ -224,43 +251,42 @@ module nts_tx_buffer #(
     if (i_parser_clear) begin
       mem_state_we  [parser] = 1;
       mem_state_new [parser] = STATE_EMPTY;
-      ram_wr_data_we[parser] = 1;
-      ram_wr_en_we  [parser] = 1;
       word_count_we [parser] = 1;
     end else begin
+      ram_addr_hi_we[parser]  = 1;
+      ram_addr_hi_new[parser] = 0;
       case ( mem_state_reg[parser] )
         STATE_EMPTY:
-          if (i_parser_w_en) begin
-            mem_state_we[parser] = 1;
-            mem_state_new[parser] = STATE_HAS_DATA;
+          begin
+            if (i_parser_w_en) begin
+              mem_state_we[parser] = 1;
+              mem_state_new[parser] = STATE_HAS_DATA;
 
-            ram_addr_we[parser] = 1;
+              ram_addr_lo[parser]  = 0;
 
-            ram_wr_data_we[parser]  = 1;
-            ram_wr_data_new[parser] = i_parser_w_data;
+              ram_wr_data[parser] = i_parser_w_data;
 
-            ram_wr_en_we[parser]  = 1;
-            ram_wr_en_new[parser] = 1;
+              ram_wr[parser]  = 1;
 
-            word_count_we[parser] = 1;
+              word_count_we[parser] = 1;
+              $display("%s:%0d WRITE: %h:%h = %h. wr=%h rd=%h", `__FILE__, `__LINE__, ram_addr_hi_reg[parser], ram_addr_lo[parser], i_parser_w_data, ram_wr[parser], ram_rd[parser] );
+            end
           end
         STATE_HAS_DATA:
           begin
             if (i_parser_w_en) begin
-              ram_addr_we[parser] = 1;
-              ram_addr_new[parser] = ram_addr_reg[parser] + 1;
+              ram_addr_hi_we[parser]  = 1;
+              ram_addr_hi_new[parser] = ram_addr_hi_reg[parser] + 1;
 
-              ram_wr_data_we[parser] = 1;
-              ram_wr_data_new[parser] = i_parser_w_data;
+              ram_wr_data[parser] = i_parser_w_data;
 
-              ram_wr_en_we[parser]  = 1;
-              ram_wr_en_new[parser] = 1;
+              ram_wr[parser] = 1;
 
               word_count_we[parser] = 1;
               word_count_new[parser] = word_count_reg[parser] + 1;
+              $display("%s:%0d WRITE: %h:%h = %h. wr=%h rd=%h", `__FILE__, `__LINE__, ram_addr_hi_reg[parser], ram_addr_lo[parser], i_parser_w_data, ram_wr[parser], ram_rd[parser] );
             end else begin
-              ram_wr_en_we[parser]  = 1;
-              ram_wr_en_new[parser] = 0;
+              ram_wr[parser] = 0;
             end
             if (i_parser_ipv4_done || i_parser_ipv6_done) begin
               mem_state_we[parser] = 1;
@@ -271,8 +297,9 @@ module nts_tx_buffer #(
           if (mem_state_reg[fifo] == STATE_EMPTY) begin
             current_mem_we  = 1;
             current_mem_new = ~ current_mem_reg;
-            ram_addr_we[parser] = 1;
-            ram_addr_new[parser] = 0;
+            ram_rd[parser] = 1;
+            ram_addr_hi_we[parser] = 1;
+            ram_addr_hi_new[parser] = 0;
           end
         default ;
       endcase
@@ -287,23 +314,24 @@ module nts_tx_buffer #(
           //if (ram_addr_reg[fifo] == word_count_reg[fifo]) begin
           //  ;
           //end else
+          ram_rd[fifo] = 1;
           if (i_dispatch_tx_fifo_rd_en) begin
-            ram_addr_we  [fifo] = 1;
-            ram_addr_new [fifo] = ram_addr_reg[fifo] + 1;
+            ram_addr_hi_we  [fifo] = 1;
+            ram_addr_hi_new [fifo] = ram_addr_hi_reg[fifo] + 1;
           end
           if (i_dispatch_tx_packet_read) begin
             mem_state_we [fifo] = 1;
             mem_state_new[fifo] = STATE_EMPTY;
-            ram_addr_we  [fifo] = 1;
-            ram_addr_new [fifo] = 0;
+            ram_addr_hi_we[fifo] = 1;
+            ram_addr_hi_new[fifo] = 0;
           end
         end
       STATE_ERROR_GENERAL:
         begin
           mem_state_we [fifo] = 1;
           mem_state_new[fifo] = STATE_EMPTY;
-          ram_addr_we  [fifo] = 1;
-          ram_addr_new [fifo] = 0;
+          ram_addr_hi_we [fifo] = 1;
+          ram_addr_hi_new[fifo] = 0;
         end
       default:
         begin

@@ -122,7 +122,7 @@ ifeq (,$(NO_LINT))
 endif
 	iverilog -o $@ $^
 
-output/vvp/nts_tx_buffer_tb.vvp: tb/nts_tx_buffer_tb.v hdl/nts_tx_buffer.v hdl/bram.v
+output/vvp/nts_tx_buffer_tb.vvp: tb/nts_tx_buffer_tb.v hdl/nts_tx_buffer.v hdl/memory_ctrl.v hdl/bram_dpge.v
 ifeq (,$(NO_LINT))
 	verilator --lint-only -Wno-STMTDLY $^
 endif

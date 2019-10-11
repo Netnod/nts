@@ -136,6 +136,7 @@ module nts_engine #(
   wire                [ 2 : 0] parser_timestamp_client_version;
   wire                [ 7 : 0] parser_timestamp_client_poll;
 
+  wire                         timestamp_parser_busy;
   wire                         tx_timestamp_read;
   wire                         timestamp_tx_empty;
   wire                [ 2 : 0] timestamp_tx_header_block;
@@ -151,6 +152,8 @@ module nts_engine #(
   assign api_read_data_engine = 0; //TODO implement
   assign api_read_data_cookie = 0; //TODO implement
   assign api_read_data_debug  = 0; //TODO implement
+
+  assign timestamp_parser_busy           = 0; //TODO implement
 
   assign tx_timestamp_read               = 0; //TODO implement
 
@@ -290,6 +293,7 @@ module nts_engine #(
    .i_keymem_key_valid(keymem_internal_key_valid),
    .i_keymem_ready(keymem_internal_ready),
 
+   .i_timestamp_busy(timestamp_parser_busy),
    .o_timestamp_record_receive_timestamp(parser_timestamp_record_rectime),
    .o_timestamp_transmit(parser_timestamp_transmit),
    .o_timestamp_origin_timestamp(parser_timestamp_client_orgtime),

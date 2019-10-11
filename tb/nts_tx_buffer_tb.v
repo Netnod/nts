@@ -63,8 +63,12 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
   wire  [3:0] o_dispatch_tx_bytes_last_word;
 
   reg         i_parser_clear;
-  reg         i_parser_w_en;
-  reg [63:0]  i_parser_w_data;
+  reg         i_write_en;
+  reg [63:0]  i_write_data;
+
+  reg                  i_address_internal;
+  reg [ADDR_WIDTH-1:0] i_address_hi;
+  reg            [2:0] i_address_lo;
 
   reg         i_parser_ipv4_done;
   reg         i_parser_ipv6_done;
@@ -88,10 +92,9 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
   // Test bench tasks
   //----------------------------------------------------------------
 
-  task send_packet (
+  task write_packet (
     input [65535:0] source,
-    input    [31:0] length,
-    input           ipv6
+    input    [31:0] length
   );
     integer i;
     integer packet_ptr;
@@ -120,6 +123,7 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
           `assert(0)
       endcase
       if (verbose_output > 2) $display("%s:%0d length=%0d packet_ptr=%0d packet=%h", `__FILE__, `__LINE__, length, 0, packet[0]);
+      i_address_internal = 1;
       for (i=0; i<length/64; i=i+1) begin
          packet[packet_ptr] = source[source_ptr+:64];
          if (verbose_output > 2) $display("%s:%0d length=%0d packet_ptr=%0d packet=%h", `__FILE__, `__LINE__, length, packet_ptr, packet[packet_ptr]);
@@ -166,25 +170,43 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
       #10
       for (packet_ptr=packet_ptr-1; packet_ptr>=0; packet_ptr=packet_ptr-1) begin
         if (verbose_output >= 3) $display("%s:%0d packet_ptr[%0d]=%h", `__FILE__, `__LINE__, packet_ptr, packet[packet_ptr]);
-        i_parser_w_en         = 1;
-        i_parser_w_data[63:0] = packet[packet_ptr];
+        i_write_en         = 1;
+        i_write_data[63:0] = packet[packet_ptr];
         tx_buf[source_ptr] = packet[packet_ptr];
         source_ptr = source_ptr + 1;
         #10 ;
         //i_process_initial = 'b1; //1 cycle delayed
       end
-      i_parser_w_en = 0;
+      i_write_en = 0;
+      #10 ;
+      //i_process_initial = 'b0; //1 cycle delayed
+    end
+  endtask
+
+  task transmit_packet( input ipv6 );
+    begin
       if (ipv6) begin
-        #10 i_parser_ipv6_done = 1;
-        #10 i_parser_ipv6_done = 0;
+        i_parser_ipv6_done = 1;
+        #10 ;
+        i_parser_ipv6_done = 0;
         #10 ;
       end else begin
-        #10 i_parser_ipv4_done = 1;
-        #10 i_parser_ipv4_done = 0;
+        i_parser_ipv4_done = 1;
+        #10 ;
+        i_parser_ipv4_done = 0;
         #10 ;
       end
-      //i_process_initial = 'b0; //1 cycle delayed
+    end
+  endtask
 
+  task send_packet (
+    input [65535:0] source,
+    input    [31:0] length,
+    input           ipv6
+  );
+    begin
+      write_packet ( source, length );
+      transmit_packet ( ipv6 );
     end
   endtask
 
@@ -233,8 +255,13 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
     .o_dispatch_tx_bytes_last_word(o_dispatch_tx_bytes_last_word),
 
     .i_parser_clear(i_parser_clear),
-    .i_parser_w_en(i_parser_w_en),
-    .i_parser_w_data(i_parser_w_data),
+
+    .i_write_en(i_write_en),
+    .i_write_data(i_write_data),
+
+    .i_address_internal(i_address_internal),
+    .i_address_hi(i_address_hi),
+    .i_address_lo(i_address_lo),
 
     .i_parser_ipv4_done(i_parser_ipv4_done),
     .i_parser_ipv6_done(i_parser_ipv6_done),
@@ -258,8 +285,11 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
     //i_dispatch_tx_fifo_rd_en  = 0;
 
     i_parser_clear  = 0;
-    i_parser_w_en   = 0;
-    i_parser_w_data = 0;
+    i_write_en   = 0;
+    i_write_data = 0;
+    i_address_internal = 1;
+    i_address_hi       = 0;
+    i_address_lo       = 0;
 
     i_parser_ipv4_done = 0;
     i_parser_ipv6_done = 0;
@@ -294,6 +324,28 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
     receive_packet();
     receive_packet();
 
+    //----------------------------------------------------------------
+    // Test write port
+    //----------------------------------------------------------------
+
+    $display("%s:%0d Test write port", `__FILE__, `__LINE__);
+
+    write_packet({65344'b0, 64'hA1A2_A3A4_A5A6_A7A8, 64'hB1B2_B3B4_B5B6_B7B8, 64'hC1C2_C3C4_C5C6_C7C8 }, 3*64);
+    i_address_internal = 0;
+    i_address_hi       = 0;
+    i_address_lo       = 4;
+    i_write_en         = 1;
+    i_write_data       = 64'hD1D2_D3D4_D5D6_D7D8;
+    #10;
+    i_address_hi       = 1;
+    i_write_data       = 64'hE1E2_E3E4_E5E6_E7E8;
+    #10;
+    i_write_en         = 0;
+    #10;
+    transmit_packet(0);
+    #10;
+    receive_packet();
+
     $display("Test stop: %s:%0d", `__FILE__, `__LINE__);
     $finish;
   end
@@ -323,7 +375,7 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
               rx_state = 1;
           end
         1: if (o_dispatch_tx_packet_available && o_dispatch_tx_fifo_empty=='b0) begin
-             //i_dispatch_tx_fifo_rd_en <= 1;
+             i_dispatch_tx_fifo_rd_en = 1;
              rx_state = 2;
            end
         2:

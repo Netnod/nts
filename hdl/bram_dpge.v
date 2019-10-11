@@ -34,7 +34,7 @@
 module bram_dpge #(
     //Parameters
     parameter ADDR_WIDTH = 10,
-    parameter DATA_WIDTH = 8
+    parameter DATA_WIDTH = 64
   ) (
     input i_clk,
     input i_en,
@@ -53,8 +53,8 @@ module bram_dpge #(
   //Synchronios clocked registers
   (* ram_style = "block" *) reg  [DATA_WIDTH-1:0] ram [DEPTH-1:0]; /* Xilinx: will map to Block RAM */
 
-  reg [63:0] doa;
-  reg [63:0] dob;
+  reg [DATA_WIDTH-1:0] doa;
+  reg [DATA_WIDTH-1:0] dob;
 
   //Outputs
   assign o_data_a = doa;

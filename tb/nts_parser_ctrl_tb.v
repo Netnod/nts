@@ -92,6 +92,9 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
   reg                         i_keymem_key_valid;
   reg                         i_keymem_ready;
 
+  wire                        o_muxctrl_timestamp_ipv4;
+  wire                        o_muxctrl_timestamp_ipv6;
+
   wire                        o_detect_unique_identifier;
   wire                        o_detect_nts_cookie;
   wire                        o_detect_nts_cookie_placeholder;
@@ -252,6 +255,9 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
     .o_timestamp_version_number(o_timestamp_version_number),
     .o_timestamp_poll(o_timestamp_poll),
 
+    .o_muxctrl_timestamp_ipv4(o_muxctrl_timestamp_ipv4),
+    .o_muxctrl_timestamp_ipv6(o_muxctrl_timestamp_ipv6),
+
     .o_detect_unique_identifier(o_detect_unique_identifier),
     .o_detect_nts_cookie(o_detect_nts_cookie),
     .o_detect_nts_cookie_placeholder(o_detect_nts_cookie_placeholder),
@@ -377,6 +383,12 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
       #100;
       i_timestamp_busy = 0;
     end
+  end
+
+  always @*
+  begin
+    if (verbose_output >= 1) $display("%s:%0d o_muxctrl_timestamp_ipv4=%h o_muxctrl_timestamp_ipv6=%h", `__FILE__, `__LINE__, o_muxctrl_timestamp_ipv4, o_muxctrl_timestamp_ipv6);
+
   end
 
   always begin

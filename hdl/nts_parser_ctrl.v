@@ -71,6 +71,9 @@ module nts_parser_ctrl #(
   output wire                [ 2 : 0] o_timestamp_version_number,
   output wire                [ 7 : 0] o_timestamp_poll,
 
+  output wire                         o_muxctrl_timestamp_ipv4,
+  output wire                         o_muxctrl_timestamp_ipv6,
+
   output wire                         o_detect_unique_identifier,
   output wire                         o_detect_nts_cookie,
   output wire                         o_detect_nts_cookie_placeholder,
@@ -257,6 +260,9 @@ module nts_parser_ctrl #(
   assign o_timestamp_origin_timestamp         = timestamp_origin_timestamp_reg;
   assign o_timestamp_version_number           = timestamp_version_number_reg;
   assign o_timestamp_poll                     = timestamp_poll_reg;
+
+  assign o_muxctrl_timestamp_ipv4 = ((state_reg == STATE_TIMESTAMP) || (state_reg == STATE_TIMESTAMP_WAIT)) && (detect_ipv4) && (detect_ipv4_bad=='b0);
+  assign o_muxctrl_timestamp_ipv6 = ((state_reg == STATE_TIMESTAMP) || (state_reg == STATE_TIMESTAMP_WAIT)) && (detect_ipv6);
 
 
   assign o_detect_unique_identifier      = detect_unique_identifier_reg;

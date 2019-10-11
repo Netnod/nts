@@ -58,8 +58,7 @@ module nts_timestamp_tb #( parameter verbose = 1 );
   reg  [2 : 0] i_parser_version_number;
   reg  [7 : 0] i_parser_poll;
 
-  reg           i_tx_read;
-  wire          o_tx_empty;
+  wire          o_tx_wr_en;
   wire [ 2 : 0] o_tx_ntp_header_block;
   wire [63 : 0] o_tx_ntp_header_data;
 
@@ -76,6 +75,7 @@ module nts_timestamp_tb #( parameter verbose = 1 );
   reg [63 : 0] client_time;
 
   integer i; //loop counter
+  integer row_count;
 
   //----------------------------------------------------------------
   // Design Under Test - Core instantiation
@@ -93,8 +93,7 @@ module nts_timestamp_tb #( parameter verbose = 1 );
     .i_parser_version_number(i_parser_version_number),
     .i_parser_poll(i_parser_poll),
 
-    .i_tx_read(i_tx_read),
-    .o_tx_empty(o_tx_empty),
+    .o_tx_wr_en(o_tx_wr_en),
     .o_tx_ntp_header_block(o_tx_ntp_header_block),
     .o_tx_ntp_header_data(o_tx_ntp_header_data),
 
@@ -158,8 +157,6 @@ module nts_timestamp_tb #( parameter verbose = 1 );
     i_parser_version_number = 0;
     i_parser_poll = 0;
 
-    i_tx_read = 0;
-
     api_set(0, 0, 0, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
 
     #10;
@@ -192,20 +189,20 @@ module nts_timestamp_tb #( parameter verbose = 1 );
       if (verbose > 0)
         $display("%s:%0d Timestamp #%0d", `__FILE__, `__LINE__, i);
 
-      `assert(o_tx_empty);
+      `assert(o_tx_wr_en == 'b0);
       i_parser_record_receive_timestamp = 1;
 
       #10;
-      `assert(o_tx_empty);
+      `assert(o_tx_wr_en == 'b0);
       i_parser_record_receive_timestamp = 1; //timestamp expected in TX
       expect_receive_timestamp = i_ntp_time;
 
       #10;
-      `assert(o_tx_empty);
+      `assert(o_tx_wr_en == 'b0);
       i_parser_record_receive_timestamp = 0;
 
       #10;
-      `assert(o_tx_empty);
+      `assert(o_tx_wr_en == 'b0);
       i_parser_transmit = 1;
       i_parser_origin_timestamp = client_time;
       expect_origin_timestamp = client_time;
@@ -218,11 +215,13 @@ module nts_timestamp_tb #( parameter verbose = 1 );
       i_parser_poll = 0;
 
 
-      while( o_tx_empty ) #10;
+      while( o_tx_wr_en == 'b0 ) #10;
 
-      while ( o_tx_empty == 'b0 ) begin
+      row_count = 0;
+      while ( o_tx_wr_en ) begin
         if (verbose > 1)
           $display("%s:%0d TX(%h): %h", `__FILE__, `__LINE__, o_tx_ntp_header_block, o_tx_ntp_header_data);
+        `assert( row_count[2:0] == o_tx_ntp_header_block );
         case (o_tx_ntp_header_block)
           0: `assert( 64'h040100001007de1a == o_tx_ntp_header_data ) //NTP version 4, root delay.
           1: `assert( 64'h1007d155abad1dea == o_tx_ntp_header_data ) //Root dispersion, REF ID
@@ -231,13 +230,11 @@ module nts_timestamp_tb #( parameter verbose = 1 );
           4: `assert( expect_receive_timestamp == o_tx_ntp_header_data )
           5: `assert( expect_transmit_timestamp == o_tx_ntp_header_data )
         endcase
-        i_tx_read = 1;
+        row_count = row_count + 1;
         #10;
       end
-      `assert(o_tx_empty);
-      i_tx_read = 0;
+      `assert(o_tx_wr_en == 'b0);
       #10;
-      `assert(o_tx_empty);
     end
 
     $display("Test end %s:%0d ", `__FILE__, `__LINE__);

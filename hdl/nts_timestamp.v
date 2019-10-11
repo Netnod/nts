@@ -42,8 +42,7 @@ module nts_timestamp (
   input wire  [ 2 : 0] i_parser_version_number,
   input wire  [ 7 : 0] i_parser_poll,
 
-  input  wire          i_tx_read,
-  output wire          o_tx_empty,
+  output wire          o_tx_wr_en,
   output wire [ 2 : 0] o_tx_ntp_header_block,
   output wire [63 : 0] o_tx_ntp_header_data,
 
@@ -85,7 +84,7 @@ module nts_timestamp (
   localparam STATE_BITS = 1;
 
   localparam [STATE_BITS-1 : 0] STATE_IDLE      = 0;
-  localparam [STATE_BITS-1 : 0] STATE_TX_FIFO   = 1;
+  localparam [STATE_BITS-1 : 0] STATE_TX_WRITE  = 1;
 
   //----------------------------------------------------------------
   // reg
@@ -216,10 +215,9 @@ module nts_timestamp (
                     p_transmit_timestamp_reg
                   };
 
+  assign o_tx_wr_en            = (state_reg == STATE_TX_WRITE);
   assign o_tx_ntp_header_data  = tmp_ntp_data;
   assign o_tx_ntp_header_block = tx_counter_reg;
-
-  assign o_tx_empty            = tmp_ntp_empty;
 
   always @*
   begin : tx_mux
@@ -234,15 +232,6 @@ module nts_timestamp (
       default: ;
     endcase
   end
-
-  always @*
-  begin
-    tmp_ntp_empty = 1;
-    if (state_reg == STATE_TX_FIFO) begin
-      tmp_ntp_empty = 0;
-    end
-  end
-
 
   //----------------------------------------------------------------
   // Register update
@@ -374,11 +363,11 @@ module nts_timestamp (
         STATE_IDLE:
            if (i_parser_transmit) begin
             state_we  = 'b1;
-            state_new = STATE_TX_FIFO;
+            state_new = STATE_TX_WRITE;
           end
-        STATE_TX_FIFO:
+        STATE_TX_WRITE:
           begin
-            if (tx_counter_reg == NTP_HEADER_BLOCKS_M1 && i_tx_read) begin
+            if (tx_counter_reg == NTP_HEADER_BLOCKS_M1) begin
               state_we  = 'b1;
               state_new = STATE_IDLE;
             end
@@ -396,14 +385,12 @@ module nts_timestamp (
   begin : tx_fifo_counter_process
     tx_counter_we  = 'b0;
     tx_counter_new = 'b0;
-    if (state_reg == STATE_TX_FIFO) begin
-      if (i_tx_read) begin
-        tx_counter_we  = 'b1;
-        if (tx_counter_reg == NTP_HEADER_BLOCKS_M1) begin
-          tx_counter_new = 'b0;
-        end else begin
-          tx_counter_new = tx_counter_reg + 1;
-        end
+    if (state_reg == STATE_TX_WRITE) begin
+      tx_counter_we  = 'b1;
+      if (tx_counter_reg == NTP_HEADER_BLOCKS_M1) begin
+        tx_counter_new = 'b0;
+      end else begin
+        tx_counter_new = tx_counter_reg + 1;
       end
     end else begin
       tx_counter_we  = 'b1; //reset counter in other states

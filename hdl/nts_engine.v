@@ -78,6 +78,16 @@ module nts_engine #(
   localparam STATE_TO_BE_IMPLEMENTED = 4'hf;
 
   //----------------------------------------------------------------
+  // Regs for Muxes
+  //----------------------------------------------------------------
+
+  reg                  mux_tx_write_en;
+  reg           [63:0] mux_tx_write_data;
+  reg                  mux_tx_address_internal;
+  reg [ADDR_WIDTH-1:0] mux_tx_address_hi;
+  reg            [2:0] mux_tx_address_lo;
+
+  //----------------------------------------------------------------
   // Wires.
   //----------------------------------------------------------------
 
@@ -137,11 +147,12 @@ module nts_engine #(
   wire                [ 7 : 0] parser_timestamp_client_poll;
 
   wire                         timestamp_parser_busy;
-  wire                         tx_timestamp_read;
-  wire                         timestamp_tx_empty;
+  wire                         timestamp_tx_wr_en;
   wire                [ 2 : 0] timestamp_tx_header_block;
   wire                [63 : 0] timestamp_tx_header_data;
 
+  wire                         parser_muxctrl_timestamp_ipv4;
+  wire                         parser_muxctrl_timestamp_ipv6;
 
   //----------------------------------------------------------------
   // Concurrent connectivity for ports etc.
@@ -152,10 +163,6 @@ module nts_engine #(
   assign api_read_data_engine = 0; //TODO implement
   assign api_read_data_cookie = 0; //TODO implement
   assign api_read_data_debug  = 0; //TODO implement
-
-  assign timestamp_parser_busy           = 0; //TODO implement
-
-  assign tx_timestamp_read               = 0; //TODO implement
 
   assign o_busy                          = parser_busy;
 
@@ -225,7 +232,50 @@ module nts_engine #(
   );
 
   //----------------------------------------------------------------
-  // Transmit Vuffer instantiation.
+  // Transmit Mux instantiation.
+  //----------------------------------------------------------------
+
+  always @*
+  begin : tx_mux_vars
+    reg [1:0] muxctrl;
+
+    muxctrl = { parser_muxctrl_timestamp_ipv6, parser_muxctrl_timestamp_ipv4 };
+
+    mux_tx_address_internal = 1;
+    mux_tx_address_hi       = 0;
+    mux_tx_address_lo       = 0;
+    mux_tx_write_en         = parser_txbuf_write_en;
+    mux_tx_write_data       = parser_txbuf_write_data;
+
+    case (muxctrl)
+      2'b01: //IPv4 timestamp
+       begin
+         mux_tx_address_internal = 0;
+         mux_tx_address_hi       = 0;
+         mux_tx_address_hi[2:0]  = timestamp_tx_header_block;
+         mux_tx_address_hi       = mux_tx_address_hi + 5;
+         mux_tx_address_lo       = 2;
+         mux_tx_write_en         = timestamp_tx_wr_en;
+         mux_tx_write_data       = timestamp_tx_header_data;
+       end
+      2'b10: //IPv6 timestamp
+       begin
+         mux_tx_address_internal = 0;
+         mux_tx_address_hi       = 0;
+         mux_tx_address_hi[2:0]  = timestamp_tx_header_block;
+         mux_tx_address_hi       = mux_tx_address_hi + 7;
+         mux_tx_address_lo       = 6;
+         mux_tx_write_en         = timestamp_tx_wr_en;
+         mux_tx_write_data       = timestamp_tx_header_data;
+       end
+      default: ;
+    endcase;
+
+  end
+
+
+  //----------------------------------------------------------------
+  // Transmit Buffer instantiation.
   //----------------------------------------------------------------
 
   nts_tx_buffer #(
@@ -242,8 +292,13 @@ module nts_engine #(
     .o_dispatch_tx_bytes_last_word(o_dispatch_tx_bytes_last_word),
 
     .i_parser_clear(parser_txbuf_clear),
-    .i_parser_w_en(parser_txbuf_write_en),
-    .i_parser_w_data(parser_txbuf_write_data),
+
+    .i_write_en(mux_tx_write_en),
+    .i_write_data(mux_tx_write_data),
+
+    .i_address_internal(mux_tx_address_internal),
+    .i_address_hi(mux_tx_address_hi),
+    .i_address_lo(mux_tx_address_lo),
 
     .i_parser_ipv4_done(parser_txbuf_ipv4_done),
     .i_parser_ipv6_done(parser_txbuf_ipv6_done),
@@ -300,6 +355,9 @@ module nts_engine #(
    .o_timestamp_version_number(parser_timestamp_client_version),
    .o_timestamp_poll(parser_timestamp_client_poll),
 
+   .o_muxctrl_timestamp_ipv4(parser_muxctrl_timestamp_ipv4),
+   .o_muxctrl_timestamp_ipv6(parser_muxctrl_timestamp_ipv6),
+
    .o_detect_unique_identifier(detect_unique_identifier),
    .o_detect_nts_cookie(detect_nts_cookie),
    .o_detect_nts_cookie_placeholder(detect_nts_cookie_placeholder),
@@ -341,6 +399,8 @@ module nts_engine #(
 
     .i_ntp_time(i_ntp_time),
 
+    .o_busy(timestamp_parser_busy),
+
     // Parsed information
     .i_parser_clear(parser_txbuf_clear), //parser request ignore current packet
     .i_parser_record_receive_timestamp(parser_timestamp_record_rectime),
@@ -349,8 +409,7 @@ module nts_engine #(
     .i_parser_version_number(parser_timestamp_client_version),
     .i_parser_poll(parser_timestamp_client_poll),
 
-    .i_tx_read(tx_timestamp_read),
-    .o_tx_empty(timestamp_tx_empty),
+    .o_tx_wr_en(timestamp_tx_wr_en),
     .o_tx_ntp_header_block(timestamp_tx_header_block),
     .o_tx_ntp_header_data(timestamp_tx_header_data),
 

@@ -32,7 +32,12 @@ module nts_timestamp (
   input wire  i_areset, // async reset
   input wire  i_clk,
 
+  // NTP time
   input wire  [ 63 : 0 ] i_ntp_time,
+
+  // Timestamp module is busy. Needed by parser etc
+  output wire          o_busy,
+
 
   // Parsed information
   input wire           i_parser_clear, //parser request ignore current packet
@@ -166,6 +171,8 @@ module nts_timestamp (
   //----------------------------------------------------------------
 
   assign o_api_read_data = api_tmp_read_data;
+
+  assign o_busy = state_reg != STATE_IDLE;
 
   assign ntp_ref_ts[63:32] = p_reference_timestamp_seconds_reg;
   assign ntp_ref_ts[31: 0] = 32'b0; // Fraction

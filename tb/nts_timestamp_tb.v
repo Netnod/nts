@@ -49,6 +49,8 @@ module nts_timestamp_tb #( parameter verbose = 1 );
   reg i_areset;
   reg i_clk;
 
+  wire        o_busy;
+
   reg  [63:0] i_ntp_time;
 
   reg          i_parser_clear;
@@ -85,6 +87,8 @@ module nts_timestamp_tb #( parameter verbose = 1 );
     .i_clk(i_clk),
 
     .i_ntp_time(i_ntp_time),
+
+    .o_busy(o_busy),
 
     .i_parser_clear(i_parser_clear),
     .i_parser_record_receive_timestamp(i_parser_record_receive_timestamp),
@@ -189,19 +193,23 @@ module nts_timestamp_tb #( parameter verbose = 1 );
       if (verbose > 0)
         $display("%s:%0d Timestamp #%0d", `__FILE__, `__LINE__, i);
 
+      `assert(o_busy == 'b0);
       `assert(o_tx_wr_en == 'b0);
       i_parser_record_receive_timestamp = 1;
 
       #10;
+      `assert(o_busy == 'b0);
       `assert(o_tx_wr_en == 'b0);
       i_parser_record_receive_timestamp = 1; //timestamp expected in TX
       expect_receive_timestamp = i_ntp_time;
 
       #10;
+      `assert(o_busy == 'b0);
       `assert(o_tx_wr_en == 'b0);
       i_parser_record_receive_timestamp = 0;
 
       #10;
+      `assert(o_busy == 'b0);
       `assert(o_tx_wr_en == 'b0);
       i_parser_transmit = 1;
       i_parser_origin_timestamp = client_time;
@@ -209,18 +217,23 @@ module nts_timestamp_tb #( parameter verbose = 1 );
       expect_transmit_timestamp = i_ntp_time;
 
       #10;
+      `assert(o_busy);
       i_parser_transmit = 0;
       i_parser_origin_timestamp = 0;
       i_parser_version_number = 0;
       i_parser_poll = 0;
 
 
-      while( o_tx_wr_en == 'b0 ) #10;
+      while( o_tx_wr_en == 'b0 ) begin
+        #10;
+        `assert(o_busy);
+      end
 
       row_count = 0;
       while ( o_tx_wr_en ) begin
         if (verbose > 1)
           $display("%s:%0d TX(%h): %h", `__FILE__, `__LINE__, o_tx_ntp_header_block, o_tx_ntp_header_data);
+        `assert(o_busy);
         `assert( row_count[2:0] == o_tx_ntp_header_block );
         case (o_tx_ntp_header_block)
           0: `assert( 64'h040100001007de1a == o_tx_ntp_header_data ) //NTP version 4, root delay.

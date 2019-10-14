@@ -2,3 +2,15 @@
 	path = sub/keymem
 	url = https://gitlab.netnod.se/tid-och-takt/keymem.git
         ignore = dirty
+[submodule "sub/aes-siv"]
+	path = sub/aes-siv
+	url = https://gitlab.netnod.se/tid-och-takt/aes-siv.git
+        ignore = dirty
+[submodule "sub/cmac"]
+	path = sub/cmac
+	url = https://gitlab.netnod.se/tid-och-takt/cmac.git
+        ignore = dirty
+[submodule "sub/aes"]
+	path = sub/aes
+	url = https://gitlab.netnod.se/tid-och-takt/aes.git
+        ignore = dirty

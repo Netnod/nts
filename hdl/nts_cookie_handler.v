@@ -34,7 +34,9 @@
 
 module nts_cookie_handler #(
   parameter integer KEY_LENGTH      = 512,
-  parameter integer KEY_ADDR_32BITS = 4
+  parameter integer KEY_ADDR_32BITS = 4,
+  parameter integer WRP_LENGTH      = 256,
+  parameter integer WRP_ADDR_32BITS = 3
 ) (
   input  wire                         i_clk,
   input  wire                         i_areset,
@@ -42,7 +44,6 @@ module nts_cookie_handler #(
   input  wire                         i_key_valid,
   input  wire                         i_key_length,
   input  wire                [31 : 0] i_key_data,
-  input wire                 [31 : 0] i_key_id,
   input  wire                         i_cookie_nonce,
   input  wire                         i_cookie_s2c,
   input  wire                         i_cookie_c2s,
@@ -54,7 +55,7 @@ module nts_cookie_handler #(
   output wire                         o_unwrap_tag_ok,
   output wire                         o_unrwapped_s2c,
   output wire                         o_unwrapped_c2s,
-  output wire [KEY_ADDR_32BITS-1 : 0] o_unwrapped_word,
+  output wire [WRP_ADDR_32BITS-1 : 0] o_unwrapped_word,
   output wire                [31 : 0] o_unwrapped_data
 );
 
@@ -70,18 +71,22 @@ module nts_cookie_handler #(
   localparam AEAD_AES_SIV_CMAC_512 = 1'h1;
 
   localparam STATE_IDLE                    = 0;
-  localparam STATE_UNWRAP_LOAD_AD          = 1;
-  localparam STATE_UNWRAP_LOAD_NONCE       = 2;
-  localparam STATE_UNWRAP_LOAD_S2C_1       = 3;
-  localparam STATE_UNWRAP_LOAD_S2C_2       = 4;
-  localparam STATE_UNWRAP_LOAD_C2S_1       = 5;
-  localparam STATE_UNWRAP_LOAD_C2S_2       = 6;
+  localparam STATE_UNWRAP_MEMSTORE_AD      = 1;
+  localparam STATE_UNWRAP_MEMSTORE_NONCE   = 2;
+  localparam STATE_UNWRAP_MEMSTORE_S2C_1   = 3;
+  localparam STATE_UNWRAP_MEMSTORE_S2C_2   = 4;
+  localparam STATE_UNWRAP_MEMSTORE_C2S_1   = 5;
+  localparam STATE_UNWRAP_MEMSTORE_C2S_2   = 6;
   localparam STATE_UNWRAP_PROCESSING_START = 7;
   localparam STATE_UNWRAP_PROCESSING_WAIT1 = 8;
   localparam STATE_UNWRAP_PROCESSING_WAIT2 = 9;
   localparam STATE_UNWRAP_OK               = 10;
-
-  localparam STATE_ERROR                   = 15;
+  localparam STATE_UNWRAP_MEMLOAD_S2C_1    = 11;
+  localparam STATE_UNWRAP_MEMLOAD_S2C_2    = 12;
+  localparam STATE_UNWRAP_MEMLOAD_C2S_1    = 13;
+  localparam STATE_UNWRAP_MEMLOAD_C2S_2    = 14;
+  localparam STATE_UNWRAP_TRANSMIT         = 15;
+  localparam STATE_ERROR                   = 20;
 
   localparam [LOCAL_MEMORY_BUS_WIDTH-1:0] MEMORY_COOKIE_AD    = 0;
   localparam [LOCAL_MEMORY_BUS_WIDTH-1:0] MEMORY_COOKIE_NONCE = 1;
@@ -94,12 +99,8 @@ module nts_cookie_handler #(
   //----------------------------------------------------------------
 
   reg            state_we;
-  reg   [ 3 : 0] state_new;
-  reg   [ 3 : 0] state_reg;
-
-  reg            key_id_we;
-  reg   [31 : 0] key_id_new;
-  reg   [31 : 0] key_id_reg;
+  reg   [ 4 : 0] state_new;
+  reg   [ 4 : 0] state_reg;
 
   reg    [3 : 0] cookie_addr;
   reg   [31 : 0] cookie_new;
@@ -117,6 +118,16 @@ module nts_cookie_handler #(
   reg            unwrap_tag_ok_reg;
   reg            unwrap_tag_ok_new;
   reg            unwrap_tag_ok_we;
+
+  reg    [127:0] unwrapped_new;
+  reg            unwrapped_s2c_we  [ 0 : 1 ];
+  reg    [127:0] unwrapped_s2c_reg [ 0 : 1 ];
+  reg            unwrapped_c2s_we  [ 0 : 1 ];
+  reg    [127:0] unwrapped_c2s_reg [ 0 : 1 ];
+
+  reg            unwrap_transmit_counter_we;
+  reg      [3:0] unwrap_transmit_counter_new;
+  reg      [3:0] unwrap_transmit_counter_reg;
 
   //----------------------------------------------------------------
   // AES-SIV Registers including update variables and write enable.
@@ -189,6 +200,11 @@ module nts_cookie_handler #(
   wire           core_tag_ok;
   wire           core_ready;
 
+  reg            u_c2s;
+  reg            u_s2c;
+  reg      [2:0] u_word;
+  reg     [31:0] u_data;
+
   wire           reset_n;
 
   //----------------------------------------------------------------
@@ -212,10 +228,10 @@ module nts_cookie_handler #(
   assign o_busy = state_reg != STATE_IDLE;
   assign o_unwrap_tag_ok = unwrap_tag_ok_reg;
 
-  assign o_unrwapped_s2c = 0; //TODO
-  assign o_unwrapped_c2s = 0; //TODO
-  assign o_unwrapped_word = 0; //TODO
-  assign o_unwrapped_data = 0; //TODO
+  assign o_unrwapped_s2c = u_s2c;
+  assign o_unwrapped_c2s = u_c2s;
+  assign o_unwrapped_word = u_word;
+  assign o_unwrapped_data = u_data;
   assign reset_n = ~ i_areset;
 
   //----------------------------------------------------------------
@@ -257,11 +273,50 @@ module nts_cookie_handler #(
                   .block_rd(mem_block_rd)
                  );
 
+  always @*
+  begin : unwrap_output
+    u_s2c = 0;
+    u_c2s = 0;
+    u_word = 0;
+    u_data = 0;
+    if (state_reg == STATE_UNWRAP_TRANSMIT) begin : unwrap_output_locals
+      reg [127:0] output_reg;
+      reg   [1:0] output_index;
+      output_reg = 0;
+      u_word = unwrap_transmit_counter_reg[2:0];
+      output_index = unwrap_transmit_counter_reg[1:0];
+      case (unwrap_transmit_counter_reg[3:2])
+        0:
+          begin
+            u_s2c = 1;
+            output_reg = unwrapped_s2c_reg[1];
+          end
+        1:
+          begin
+            u_s2c = 1;
+            output_reg = unwrapped_s2c_reg[0];
+          end
+        2:
+          begin
+            u_c2s = 1;
+            output_reg = unwrapped_c2s_reg[1];
+          end
+        3:
+          begin
+            u_c2s = 1;
+            output_reg = unwrapped_c2s_reg[0];
+          end
+        default: ;
+      endcase
+      u_data = output_reg[output_index*32+:32];
+      //$display("%s:%0d %b %b [%0d] = %h", `__FILE__, `__LINE__, u_c2s, u_s2c, u_word, u_data);
+    end
+  end
+
   always @(posedge i_clk or posedge i_areset)
   begin : reg_update
     integer i;
     if (i_areset) begin
-      key_id_reg <= 0;
       key_length_reg <= 0;
       state_reg <= 0;
       unwrap_tag_ok_reg <= 0;
@@ -277,12 +332,17 @@ module nts_cookie_handler #(
         cookie_nonce_reg[i] <= 32'h0;
       end
 
+      for (i = 0; i < 2; i = i + 1) begin
+        unwrapped_s2c_reg[i] <= 0;
+        unwrapped_c2s_reg[i] <= 0;
+      end
+
+      unwrap_transmit_counter_reg <= 0;
     end else begin
       // ------------- FSM -------------
       if (state_we) state_reg <= state_new;
 
       // ------------- General Regs -------------
-      if (key_id_we) key_id_reg <= key_id_new;
       if (key_length_we) key_length_reg <= key_length_new;
 
       if (cookie_nonce_we)
@@ -328,7 +388,43 @@ module nts_cookie_handler #(
 
       if (key_we)
         key_reg[key_addr] <= key_new;
+
+      if (unwrapped_c2s_we[0])
+        unwrapped_c2s_reg[0] <= unwrapped_new;
+
+      if (unwrapped_c2s_we[1])
+        unwrapped_c2s_reg[1] <= unwrapped_new;
+
+      if (unwrapped_s2c_we[0])
+        unwrapped_s2c_reg[0] <= unwrapped_new;
+
+      if (unwrapped_s2c_we[1])
+        unwrapped_s2c_reg[1] <= unwrapped_new;
+
+      if (unwrap_transmit_counter_we)
+        unwrap_transmit_counter_reg <= unwrap_transmit_counter_new;
     end
+  end
+
+  always @*
+  begin : memory_load_unwrapped
+    unwrapped_c2s_we[0] = 0;
+    unwrapped_c2s_we[1] = 0;
+    unwrapped_s2c_we[0] = 0;
+    unwrapped_s2c_we[1] = 0;
+    unwrapped_new = mem_block_rd;
+    case (state_reg)
+      STATE_UNWRAP_MEMLOAD_S2C_1: unwrapped_s2c_we[0] = 1;
+      STATE_UNWRAP_MEMLOAD_S2C_2: unwrapped_s2c_we[1] = 1;
+      STATE_UNWRAP_MEMLOAD_C2S_1: unwrapped_c2s_we[0] = 1;
+      STATE_UNWRAP_MEMLOAD_C2S_2: unwrapped_c2s_we[1] = 1;
+      default: unwrapped_new = 0;
+    endcase
+/*
+    if (unwrapped_new != 0) begin
+      $display("%s:%0d Memory load: %h %h %h %h %h", `__FILE__, `__LINE__, unwrapped_c2s_we[0], unwrapped_c2s_we[1], unwrapped_s2c_we[0], unwrapped_s2c_we[1], unwrapped_new );
+    end
+*/
   end
 
   always @*
@@ -340,8 +436,6 @@ module nts_cookie_handler #(
     cookie_c2s_we = 0;
     key_we = 0;
     key_addr = 0;
-    key_id_we = 0;
-    key_id_new = 0;
     key_length_we = 0;
     key_length_new = 0;
     //-------- AES-SIV regs ---------
@@ -371,8 +465,6 @@ module nts_cookie_handler #(
             key_we = 1;
             key_new = i_key_data;
             key_addr = i_key_word;
-            key_id_we = 1;
-            key_id_new = i_key_id;
             key_length_we = 1;
             key_length_new = i_key_length;
           end
@@ -402,7 +494,7 @@ module nts_cookie_handler #(
             config_mode_new = key_length_reg ? AEAD_AES_SIV_CMAC_512 : AEAD_AES_SIV_CMAC_256;
 
             ad_start_we = 1;
-            ad_start_new[LOCAL_MEMORY_BUS_WIDTH-1:0] = MEMORY_COOKIE_AD;
+            ad_start_new[LOCAL_MEMORY_BUS_WIDTH-1:0] = MEMORY_COOKIE_AD; /* UNUSED (Chrony format) */
             ad_length_we = 1;
             ad_length_new = 0;
 
@@ -440,81 +532,83 @@ module nts_cookie_handler #(
     core_block_rd = 0;
     state_we = 0;
     state_new = 0;
+    unwrap_transmit_counter_we = 0;
+    unwrap_transmit_counter_new = 0;
 
     case (state_reg)
       STATE_IDLE:
         begin
           if (i_op_unwrap) begin
             state_we = 1;
-            state_new = STATE_UNWRAP_LOAD_AD;
+            state_new = STATE_UNWRAP_MEMSTORE_AD;
           end
         end
-      STATE_UNWRAP_LOAD_AD:
+      STATE_UNWRAP_MEMSTORE_AD:
         begin
           mem_cs = 1;
           mem_we = 1;
           mem_addr = MEMORY_COOKIE_AD;
-          mem_block_wr = { key_id_reg, 96'b0 };
-          $display("%s:%0d STATE_UNWRAP_LOAD_AD: write mem[%0d]=%h", `__FILE__, `__LINE__, mem_addr, mem_block_wr);
+          mem_block_wr = 128'h0; /* UNUSED. AD=None in Chrony format */
+          //$display("%s:%0d STATE_UNWRAP_MEMSTORE_AD: write mem[%0d]=%h", `__FILE__, `__LINE__, mem_addr, mem_block_wr);
           state_we = 1;
-          state_new = STATE_UNWRAP_LOAD_NONCE;
+          state_new = STATE_UNWRAP_MEMSTORE_NONCE;
         end
-      STATE_UNWRAP_LOAD_NONCE:
+      STATE_UNWRAP_MEMSTORE_NONCE:
         begin
           if (mem_ack) begin
             mem_cs = 1;
             mem_we = 1;
             mem_addr = MEMORY_COOKIE_NONCE;
             mem_block_wr = { cookie_nonce_reg[0], cookie_nonce_reg[1], cookie_nonce_reg[2], cookie_nonce_reg[3] };
-            $display("%s:%0d STATE_UNWRAP_LOAD_NONCE: write mem[%0d]=%h", `__FILE__, `__LINE__, mem_addr, mem_block_wr);
+            //$display("%s:%0d STATE_UNWRAP_MEMSTORE_NONCE: write mem[%0d]=%h", `__FILE__, `__LINE__, mem_addr, mem_block_wr);
             state_we = 1;
-            state_new = STATE_UNWRAP_LOAD_C2S_1;
+            state_new = STATE_UNWRAP_MEMSTORE_C2S_1;
           end
         end
-      STATE_UNWRAP_LOAD_C2S_1:
+      STATE_UNWRAP_MEMSTORE_C2S_1:
         begin
           if (mem_ack) begin
             mem_cs = 1;
             mem_we = 1;
             mem_addr = MEMORY_COOKIE_C2S;
             mem_block_wr = { cookie_c2s_reg[0], cookie_c2s_reg[1], cookie_c2s_reg[2], cookie_c2s_reg[3] };
-            $display("%s:%0d STATE_UNWRAP_LOAD_C2S_1: write mem[%0d]=%h", `__FILE__, `__LINE__, mem_addr, mem_block_wr);
+            //$display("%s:%0d STATE_UNWRAP_MEMSTORE_C2S_1: write mem[%0d]=%h", `__FILE__, `__LINE__, mem_addr, mem_block_wr);
             state_we = 1;
-            state_new = STATE_UNWRAP_LOAD_C2S_2;
+            state_new = STATE_UNWRAP_MEMSTORE_C2S_2;
           end
         end
-      STATE_UNWRAP_LOAD_C2S_2:
+      STATE_UNWRAP_MEMSTORE_C2S_2:
         begin
           if (mem_ack) begin
             mem_cs = 1;
             mem_we = 1;
             mem_addr = MEMORY_COOKIE_C2S+1;
             mem_block_wr = { cookie_c2s_reg[4], cookie_c2s_reg[5], cookie_c2s_reg[6], cookie_c2s_reg[7] };
-            $display("%s:%0d STATE_UNWRAP_LOAD_C2S_2: write mem[%0d]=%h", `__FILE__, `__LINE__, mem_addr, mem_block_wr);
+            //$display("%s:%0d STATE_UNWRAP_MEMSTORE_C2S_2: write mem[%0d]=%h", `__FILE__, `__LINE__, mem_addr, mem_block_wr);
             state_we = 1;
-            state_new = STATE_UNWRAP_LOAD_S2C_1;
+            state_new = STATE_UNWRAP_MEMSTORE_S2C_1;
           end
         end
-      STATE_UNWRAP_LOAD_S2C_1:
+      STATE_UNWRAP_MEMSTORE_S2C_1:
         begin
           if (mem_ack) begin
             mem_cs = 1;
             mem_we = 1;
             mem_addr = MEMORY_COOKIE_S2C;
             mem_block_wr = { cookie_s2c_reg[0], cookie_s2c_reg[1], cookie_s2c_reg[2], cookie_s2c_reg[3] };
-            $display("%s:%0d STATE_UNWRAP_LOAD_S2C_1: write mem[%0d]=%h", `__FILE__, `__LINE__, mem_addr, mem_block_wr);
+            //$display("%s:%0d STATE_UNWRAP_MEMSTORE_S2C_1: write mem[%0d]=%h", `__FILE__, `__LINE__, mem_addr, mem_block_wr);
             state_we = 1;
-            state_new = STATE_UNWRAP_LOAD_S2C_2;
+            state_new = STATE_UNWRAP_MEMSTORE_S2C_2;
           end
         end
-      STATE_UNWRAP_LOAD_S2C_2:
+      STATE_UNWRAP_MEMSTORE_S2C_2:
         begin
           if (mem_ack) begin
             mem_cs = 1;
             mem_we = 1;
             mem_addr = MEMORY_COOKIE_S2C+1;
             mem_block_wr = { cookie_s2c_reg[4], cookie_s2c_reg[5], cookie_s2c_reg[6], cookie_s2c_reg[7] };
-            $display("%s:%0d STATE_UNWRAP_LOAD_S2C_2: write mem[%0d]=%h", `__FILE__, `__LINE__, mem_addr, mem_block_wr);
+            //$display("%s:%0d STATE_UNWRAP_MEMSTORE_S2C_2: write mem[%0d]=%h", `__FILE__, `__LINE__, mem_addr, mem_block_wr);
             state_we = 1;
             state_new = STATE_UNWRAP_PROCESSING_START;
           end
@@ -536,7 +630,7 @@ module nts_cookie_handler #(
             state_new = STATE_UNWRAP_OK;
           end else begin
             state_we = 1;
-            state_new = STATE_ERROR; //TODO implement a success handler... :)
+            state_new = STATE_ERROR;
           end
         end else begin
           core_ack = mem_ack;
@@ -545,6 +639,62 @@ module nts_cookie_handler #(
           mem_we = core_we;
           mem_addr = core_addr[LOCAL_MEMORY_BUS_WIDTH-1:0];
           mem_block_wr = core_block_wr;
+          if (core_cs) begin
+            if (core_addr[15:LOCAL_MEMORY_BUS_WIDTH] != 0) begin
+              //Illegal memory access
+              state_we = 1;
+              state_new = STATE_ERROR;
+            end
+          end
+        end
+      STATE_UNWRAP_OK:
+        begin
+          mem_cs = 1;
+          mem_we = 0;
+          mem_addr = MEMORY_COOKIE_S2C;
+          state_we = 1;
+          state_new = STATE_UNWRAP_MEMLOAD_S2C_1;
+        end
+      STATE_UNWRAP_MEMLOAD_S2C_1:
+        begin
+          mem_cs = 1;
+          mem_we = 0;
+          mem_addr = MEMORY_COOKIE_S2C + 1;
+          state_we = 1;
+          state_new = STATE_UNWRAP_MEMLOAD_S2C_2;
+        end
+      STATE_UNWRAP_MEMLOAD_S2C_2:
+        begin
+          mem_cs = 1;
+          mem_we = 0;
+          mem_addr = MEMORY_COOKIE_C2S;
+          state_we = 1;
+          state_new = STATE_UNWRAP_MEMLOAD_C2S_1;
+        end
+      STATE_UNWRAP_MEMLOAD_C2S_1:
+        begin
+          mem_cs = 1;
+          mem_we = 0;
+          mem_addr = MEMORY_COOKIE_C2S + 1;
+          state_we = 1;
+          state_new = STATE_UNWRAP_MEMLOAD_C2S_2;
+        end
+      STATE_UNWRAP_MEMLOAD_C2S_2:
+        begin
+          state_we = 1;
+          state_new = STATE_UNWRAP_TRANSMIT;
+          unwrap_transmit_counter_we = 1;
+          unwrap_transmit_counter_new = 0;
+        end
+      STATE_UNWRAP_TRANSMIT:
+        begin
+          if (unwrap_transmit_counter_reg == 15) begin
+            state_we = 1;
+            state_new = STATE_IDLE;
+          end else begin
+             unwrap_transmit_counter_we = 1;
+             unwrap_transmit_counter_new = unwrap_transmit_counter_reg + 1;
+          end
         end
       default:
         begin

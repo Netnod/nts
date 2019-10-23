@@ -59,18 +59,23 @@ module nts_cookie_handler_tb #( parameter verbose = 1);
   reg   [3 : 0] i_cookie_word;
   reg  [31 : 0] i_cookie_data;
   reg           i_op_unwrap;
+  reg           i_op_gencookie;
   wire          o_busy;
   wire          o_unwrap_tag_ok;
   wire          o_unrwapped_s2c;
   wire          o_unwrapped_c2s;
   wire  [2 : 0] o_unwrapped_word;
   wire [31 : 0] o_unwrapped_data;
+  wire          o_noncegen_get;
+  reg  [63 : 0] i_noncegen_nonce;
+  reg           i_noncegen_ready;
 
   reg         reset_unwrap_rx;
   reg [255:0] c2s;
   reg [255:0] s2c;
   reg   [7:0] reced_s2c;
   reg   [7:0] reced_c2s;
+  reg   [3:0] nonce_delay;
 
   nts_cookie_handler dut (
     .i_clk(i_clk),
@@ -86,12 +91,16 @@ module nts_cookie_handler_tb #( parameter verbose = 1);
     .i_cookie_word(i_cookie_word),
     .i_cookie_data(i_cookie_data),
     .i_op_unwrap(i_op_unwrap),
+    .i_op_gencookie(i_op_gencookie),
     .o_busy(o_busy),
     .o_unwrap_tag_ok(o_unwrap_tag_ok),
     .o_unrwapped_s2c(o_unrwapped_s2c),
     .o_unwrapped_c2s(o_unwrapped_c2s),
     .o_unwrapped_word(o_unwrapped_word),
-    .o_unwrapped_data(o_unwrapped_data)
+    .o_unwrapped_data(o_unwrapped_data),
+    .o_noncegen_get(o_noncegen_get),
+    .i_noncegen_nonce(i_noncegen_nonce),
+    .i_noncegen_ready(i_noncegen_ready)
   );
 
   //----------------------------------------------------------------
@@ -373,6 +382,7 @@ module nts_cookie_handler_tb #( parameter verbose = 1);
     i_cookie_word = 0;
     i_cookie_data = 0;
     i_op_unwrap = 0;
+    i_op_gencookie = 0;
     reset_unwrap_rx = 0;
     #10;
     i_areset = 0;
@@ -383,6 +393,12 @@ module nts_cookie_handler_tb #( parameter verbose = 1);
 
     unwrap_test("Testcase 1", NTS_TEST_REQUEST_MASTER_KEY, NTS_TEST_REQUEST_MASTER_KEY_ID, 0, NTS_TEST_COOKIE1, 1, 256'h9e36980572b3cf91a8fb2f29b105a1d95439ebabeb61403e1aba654e9ba56176, 256'h8f62b677d6c55010504abd646cf394cfc5990605f6032b0e8b7df00667cac34b );
 
+    i_op_gencookie = 1;
+    #10;
+    i_op_gencookie = 0;
+    #10;
+
+    #1000;
     $display("Test stop: %s:%0d", `__FILE__, `__LINE__);
     $finish;
   end
@@ -415,6 +431,25 @@ module nts_cookie_handler_tb #( parameter verbose = 1);
     end
   end
 
+  always @(posedge i_clk or posedge i_areset)
+  begin
+    if (i_areset) begin
+      i_noncegen_nonce <= 64'h0;
+      i_noncegen_ready <= 0;
+      nonce_delay <= 0;
+    end else begin
+      i_noncegen_ready <= 0;
+      if (nonce_delay == 4'hF) begin
+        nonce_delay <= 0;
+        i_noncegen_nonce <= i_noncegen_nonce + 1;
+        i_noncegen_ready <= 1;
+      end else if (nonce_delay > 0) begin
+        nonce_delay <= nonce_delay + 1;
+      end else if (o_noncegen_get) begin
+        nonce_delay <= 1;
+      end
+    end
+  end
 
   always begin
     #5 i_clk = ~i_clk;

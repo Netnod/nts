@@ -40,23 +40,33 @@ module nts_cookie_handler #(
 ) (
   input  wire                         i_clk,
   input  wire                         i_areset,
+
   input  wire [KEY_ADDR_32BITS-1 : 0] i_key_word,
   input  wire                         i_key_valid,
   input  wire                         i_key_length,
   input  wire                [31 : 0] i_key_data,
+
   input  wire                         i_cookie_nonce,
   input  wire                         i_cookie_s2c,
   input  wire                         i_cookie_c2s,
   input  wire                         i_cookie_tag,
   input  wire [KEY_ADDR_32BITS-1 : 0] i_cookie_word,
   input  wire                [31 : 0] i_cookie_data,
+
   input  wire                         i_op_unwrap,
+  input  wire                         i_op_gencookie,
+
   output wire                         o_busy,
+
   output wire                         o_unwrap_tag_ok,
   output wire                         o_unrwapped_s2c,
   output wire                         o_unwrapped_c2s,
   output wire [WRP_ADDR_32BITS-1 : 0] o_unwrapped_word,
-  output wire                [31 : 0] o_unwrapped_data
+  output wire                [31 : 0] o_unwrapped_data,
+
+  output wire                         o_noncegen_get,
+  input  wire                [63 : 0] i_noncegen_nonce,
+  input  wire                         i_noncegen_ready
 );
 
   //----------------------------------------------------------------
@@ -86,7 +96,8 @@ module nts_cookie_handler #(
   localparam STATE_UNWRAP_MEMLOAD_C2S_1    = 13;
   localparam STATE_UNWRAP_MEMLOAD_C2S_2    = 14;
   localparam STATE_UNWRAP_TRANSMIT         = 15;
-  localparam STATE_ERROR                   = 20;
+  localparam STATE_WRAP_MEMSTORE_NONCE     = 16;
+  localparam STATE_ERROR                   = 31;
 
   localparam [LOCAL_MEMORY_BUS_WIDTH-1:0] MEMORY_COOKIE_AD    = 0;
   localparam [LOCAL_MEMORY_BUS_WIDTH-1:0] MEMORY_COOKIE_NONCE = 1;
@@ -100,6 +111,7 @@ module nts_cookie_handler #(
 
   reg            state_we;
   reg   [ 4 : 0] state_new;
+  reg   [ 4 : 0] state_debug_old_reg;
   reg   [ 4 : 0] state_reg;
 
   reg    [3 : 0] cookie_addr;
@@ -128,6 +140,20 @@ module nts_cookie_handler #(
   reg            unwrap_transmit_counter_we;
   reg      [3:0] unwrap_transmit_counter_new;
   reg      [3:0] unwrap_transmit_counter_reg;
+
+  reg            nonce_generate_we;
+  reg            nonce_generate_new;
+  reg            nonce_generate_reg;
+
+  reg     [63:0] nonce_new;
+  reg            nonce_invalidate;
+  reg            nonce_a_we;
+  reg     [63:0] nonce_a_reg;
+  reg            nonce_a_valid_reg;
+  reg            nonce_b_we;
+  reg     [63:0] nonce_b_reg;
+  reg            nonce_b_valid_reg;
+
 
   //----------------------------------------------------------------
   // AES-SIV Registers including update variables and write enable.
@@ -226,12 +252,16 @@ module nts_cookie_handler #(
                         tag_in_reg[2], tag_in_reg[3]};
 
   assign o_busy = state_reg != STATE_IDLE;
+
   assign o_unwrap_tag_ok = unwrap_tag_ok_reg;
 
   assign o_unrwapped_s2c = u_s2c;
   assign o_unwrapped_c2s = u_c2s;
   assign o_unwrapped_word = u_word;
   assign o_unwrapped_data = u_data;
+
+  assign o_noncegen_get = nonce_generate_reg;
+
   assign reset_n = ~ i_areset;
 
   //----------------------------------------------------------------
@@ -319,6 +349,12 @@ module nts_cookie_handler #(
     if (i_areset) begin
       key_length_reg <= 0;
       state_reg <= 0;
+      state_debug_old_reg <= 0;
+      nonce_a_reg <= 0;
+      nonce_a_valid_reg <= 0;
+      nonce_b_reg <= 0;
+      nonce_b_valid_reg <= 0;
+      nonce_generate_reg <= 0;
       unwrap_tag_ok_reg <= 0;
 
       for (i = 0 ; i < 16 ; i = i + 1) begin
@@ -340,7 +376,10 @@ module nts_cookie_handler #(
       unwrap_transmit_counter_reg <= 0;
     end else begin
       // ------------- FSM -------------
-      if (state_we) state_reg <= state_new;
+      if (state_we) begin
+        state_reg <= state_new;
+        state_debug_old_reg <= state_reg;
+      end
 
       // ------------- General Regs -------------
       if (key_length_we) key_length_reg <= key_length_new;
@@ -353,6 +392,18 @@ module nts_cookie_handler #(
 
       if (cookie_c2s_we)
         cookie_c2s_reg[cookie_addr] <= cookie_new;
+
+      if (nonce_a_we) begin
+        nonce_a_reg <= nonce_new;
+        nonce_a_valid_reg <= ~ nonce_invalidate;
+      end
+      if (nonce_b_we) begin
+        nonce_b_reg <= nonce_new;
+        nonce_b_valid_reg <= ~ nonce_invalidate;
+      end
+
+      if (nonce_generate_we)
+        nonce_generate_reg <= nonce_generate_new;
 
       if (unwrap_tag_ok_we)
         unwrap_tag_ok_reg <= unwrap_tag_ok_new;
@@ -425,6 +476,45 @@ module nts_cookie_handler #(
       $display("%s:%0d Memory load: %h %h %h %h %h", `__FILE__, `__LINE__, unwrapped_c2s_we[0], unwrapped_c2s_we[1], unwrapped_s2c_we[0], unwrapped_s2c_we[1], unwrapped_new );
     end
 */
+  end
+
+  always @*
+  begin : noncegen_copy
+    //Internal
+    nonce_a_we = 0;
+    nonce_b_we = 0;
+    nonce_new = 0;
+    nonce_invalidate = 0;
+    //External (noncegen)
+    nonce_generate_we = 0;
+    nonce_generate_new = 0;
+
+    if (state_reg == STATE_WRAP_MEMSTORE_NONCE) begin
+      nonce_a_we = 1;
+      nonce_b_we = 1;
+      nonce_invalidate = 1;
+    end
+    else if (nonce_generate_reg) begin
+      if (i_noncegen_ready) begin
+        nonce_generate_we = 1;
+        nonce_generate_new = 0;
+        if (nonce_a_valid_reg == 'b0) begin
+          nonce_new = i_noncegen_nonce;
+          nonce_a_we = 1;
+          //$display("%s:%0d nonce_a = %h", `__FILE__, `__LINE__, nonce_new);
+        end
+        else if (nonce_b_valid_reg == 'b0) begin
+          nonce_new = i_noncegen_nonce;
+          nonce_b_we = 1;
+          //$display("%s:%0d nonce_b = %h", `__FILE__, `__LINE__, nonce_new);
+        end
+      end
+    end
+    else if (nonce_a_valid_reg == 'b0 || nonce_b_valid_reg == 'b0) begin
+      //$display("%s:%0d Request new nonce", `__FILE__, `__LINE__);
+      nonce_generate_we = 1;
+      nonce_generate_new = 1;
+    end
   end
 
   always @*
@@ -518,6 +608,9 @@ module nts_cookie_handler #(
           unwrap_tag_ok_we = 1;
           unwrap_tag_ok_new = core_tag_ok;
         end
+      STATE_ERROR:
+        begin
+        end
       default: ;
     endcase
   end
@@ -541,6 +634,14 @@ module nts_cookie_handler #(
           if (i_op_unwrap) begin
             state_we = 1;
             state_new = STATE_UNWRAP_MEMSTORE_AD;
+          end
+          if (i_op_gencookie) begin
+            state_we = 1;
+            if (nonce_a_valid_reg && nonce_b_valid_reg) begin
+              state_new = STATE_WRAP_MEMSTORE_NONCE;
+            end else begin
+              state_new = STATE_ERROR;
+            end
           end
         end
       STATE_UNWRAP_MEMSTORE_AD:
@@ -642,6 +743,7 @@ module nts_cookie_handler #(
           if (core_cs) begin
             if (core_addr[15:LOCAL_MEMORY_BUS_WIDTH] != 0) begin
               //Illegal memory access
+             //$display("%s:%0d Illegal memory access: %h_%h", `__FILE__, `__LINE__, core_addr[15:LOCAL_MEMORY_BUS_WIDTH], core_addr[LOCAL_MEMORY_BUS_WIDTH-1:0]);
               state_we = 1;
               state_new = STATE_ERROR;
             end
@@ -696,11 +798,21 @@ module nts_cookie_handler #(
              unwrap_transmit_counter_new = unwrap_transmit_counter_reg + 1;
           end
         end
+      STATE_WRAP_MEMSTORE_NONCE:
+        begin
+          mem_cs = 1;
+          mem_we = 1;
+          mem_addr = MEMORY_COOKIE_NONCE;
+          mem_block_wr = { nonce_a_reg, nonce_b_reg };
+          //$display("%s:%0d STATE_UNWRAP_MEMSTORE_NONCE: write mem[%0d]=%h", `__FILE__, `__LINE__, mem_addr, mem_block_wr);
+           state_we = 1;
+           state_new = STATE_IDLE;
+        end
       default:
         begin
           state_we = 1;
           state_new = STATE_IDLE;
-          $display("%s:%0d Error state %0d not implemented", `__FILE__, `__LINE__, state_reg);
+          $display("%s:%0d Error state %0d not implemented. Previous state was: %0d", `__FILE__, `__LINE__, state_reg, state_debug_old_reg);
         end
     endcase
   end

@@ -598,11 +598,14 @@ module nts_cookie_handler #(
     cookie_s2c_we = 0;
     cookie_c2s_we = 0;
     key_we = 0;
+    key_new = 0;
     key_addr = 0;
     key_id_we = 0;
     key_id_new = 0;
     key_length_we = 0;
     key_length_new = 0;
+    unwrap_tag_ok_we = 0;
+    unwrap_tag_ok_new = 0;
     //-------- AES-SIV regs ---------
     config_we = 0;
     config_encdec_new = 1;
@@ -674,6 +677,9 @@ module nts_cookie_handler #(
             pc_start_new[LOCAL_MEMORY_BUS_WIDTH-1:0] = MEMORY_COOKIE_C2S;
             pc_length_we = 1;
             pc_length_new = 64;
+
+            unwrap_tag_ok_we = 1;
+            unwrap_tag_ok_new = 0;
           end
         end
       STATE_UNWRAP_PROCESSING_START:

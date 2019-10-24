@@ -132,24 +132,6 @@ module nts_cookie_handler_tb #( parameter verbose = 1);
     end
   endtask // wait_ready
 
-  task write_key_zero;
-    begin : write_key_zero_locals
-      integer i;
-      for (i = 0; i < 16; i++) begin
-       i_key_word = i[3:0];
-       i_key_valid = 1;
-       i_key_length = 1;
-       i_key_data = { i[7:0], i[7:0], i[7:0], i[7:0] };
-       #10;
-      end
-      i_key_word = 0;
-      i_key_valid = 0;
-      i_key_length = 0;
-      i_key_data = 0;
-      #10;
-    end
-  endtask
-
   `define dump(prefix, x) $display("%s:%0d **** %s%s = %h", `__FILE__, `__LINE__, prefix, `"x`", x)
 
   task dump_aes_siv_inputs;
@@ -237,7 +219,7 @@ module nts_cookie_handler_tb #( parameter verbose = 1);
       reg [4:0] i;
       reg [3:0] j;
       i_key_id = keyid;
-      for (i = 0; i < 16; i++) begin
+      for (i = 0; i < 16; i = i + 1) begin
         j = 15-i[3:0];
         i_key_word = j[3:0];
         i_key_valid = 1;
@@ -390,7 +372,7 @@ module nts_cookie_handler_tb #( parameter verbose = 1);
   endtask
 
   task unwrap_test_and_wrap (
-    input [256:0] testname_str,
+    input [255:0] testname_str,
     input [511:0] masterkey_value,
     input  [31:0] masterkey_keyid,
     input         masterkey_length,
@@ -401,7 +383,8 @@ module nts_cookie_handler_tb #( parameter verbose = 1);
     input [255:0] expect_s2c,
     input [831:0] expect_cookie
   );
-  begin
+  begin : unwrap_and_wrap_locals
+    reg unwrap_result;
     if (verbose>1) begin
       $display("%s:%0d Unwrap_and_wrap [%s] start...", `__FILE__, `__LINE__, testname_str);
     end
@@ -416,6 +399,8 @@ module nts_cookie_handler_tb #( parameter verbose = 1);
     write_cookie(cookie);
     start_unwrap();
     wait_ready();
+    unwrap_result = o_unwrap_tag_ok;
+
     if (expect_success) begin
       `assert( o_unwrap_tag_ok );
       if (verbose>1) begin
@@ -442,7 +427,7 @@ module nts_cookie_handler_tb #( parameter verbose = 1);
     `assert(expect_cookie == rx_cookie);
 
     if (verbose>0) begin
-      $display("%s:%0d Unwrap_and_wrap [%s] executed with expected result (%0d).", `__FILE__, `__LINE__, testname_str, o_unwrap_tag_ok);
+      $display("%s:%0d Unwrap_and_wrap [%s] executed with expected result (%0d).", `__FILE__, `__LINE__, testname_str, unwrap_result);
     end
   end
   endtask

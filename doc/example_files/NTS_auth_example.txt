@@ -1,0 +1,47 @@
+key        = unhexlify('''2be26209 fdc335d0 13aeb45a ecd91f1a
+                          a4e1055b 8f7fdae8 c592b87d 09200b74''')
+nonce      = unhexlify('''7208a18a 82f9a600 130d32d0 5c9d74dd''')
+ad         = unhexlify('''23000020 00000000 00000000 00000000
+                          00000000 00000000 00000000 00000000
+                          00000000 00000000 40478317 6d76ee40
+                          01040024 62733aee 2f65b707 8698f4f1
+                          b42cf4f8 bb7149ed d0b8a6d2 426a823c
+                          a6563ff5 02040068 ea0e3f0d 06043007
+                          46b5d7c0 9f9e2a29 a785c2b9 b6d49397
+                          1faefc47 977295e2 127b7dfd dcfa59ed
+                          82e24e32 94789bb2 0d7dddf8 a5c7d998
+                          2ce752f0 775ab86e 985a57f2 d34cac37
+                          d6621199 d600a4fd af6de2b8 a70bfdd6
+                          1b072c09 10d5e57a 1956a84c''')
+ciphertext = unhexlify('''464470e5 98f324b7 31647dde 6191623e''')
+expected_plaintext  = unhexlify('''''')
+
+-----------------------------------------------------------------------------
+
+NTP Header first in AD. Then extensions.
+NTP Extension fields inside AD:
+
+uid = unhexlify('''62733aee 2f65b707 8698f4f1 b42cf4f8
+                   bb7149ed d0b8a6d2 426a823c a6563ff5''')
+cookie = unhexlify('''ea0e3f0d 06043007 46b5d7c0 9f9e2a29
+                      a785c2b9 b6d49397 1faefc47 977295e2
+                      127b7dfd dcfa59ed 82e24e32 94789bb2
+                      0d7dddf8 a5c7d998 2ce752f0 775ab86e
+                      985a57f2 d34cac37 d6621199 d600a4fd
+                      af6de2b8 a70bfdd6 1b072c09 10d5e57a
+                      1956a84c''')
+auth = unhexlify('''00100010 7208a18a 82f9a600 130d32d0
+                    5c9d74dd 464470e5 98f324b7 31647dde
+                    6191623e''')
+
+-----------------------------------------------------------------------------
+
+Keys used to generate the authentication field:
+
+keyid = unhexlify('''ea0e3f0d''')
+master_key = unhexlify('''f9cc9df4 9293092f e1fad350 6229daa8
+                          7a2f3cfe 79b8f35e 1f8198fa 688dd6b1''')
+expected_c2s_key = unhexlify('''2be26209 fdc335d0 13aeb45a ecd91f1a
+                       a4e1055b 8f7fdae8 c592b87d 09200b74''')
+expected_s2c_key = unhexlify('''3852da8b fe83e54b 4ecf9c6d 5a7f5e5b
+                       2a537686 231dec5d 45745e93 14daaad4''')

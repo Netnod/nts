@@ -51,6 +51,7 @@ module nts_cookie_handler_tb #( parameter verbose = 1);
   reg   [3 : 0] i_key_word;
   reg           i_key_valid;
   reg           i_key_length;
+  reg  [31 : 0] i_key_id;
   reg  [31 : 0] i_key_data;
   reg           i_cookie_nonce;
   reg           i_cookie_s2c;
@@ -69,6 +70,9 @@ module nts_cookie_handler_tb #( parameter verbose = 1);
   wire          o_noncegen_get;
   reg  [63 : 0] i_noncegen_nonce;
   reg           i_noncegen_ready;
+  wire          o_cookie_valid;
+  wire  [3 : 0] o_cookie_word;
+  wire [63 : 0] o_cookie_data;
 
   reg         reset_unwrap_rx;
   reg [255:0] c2s;
@@ -76,6 +80,10 @@ module nts_cookie_handler_tb #( parameter verbose = 1);
   reg   [7:0] reced_s2c;
   reg   [7:0] reced_c2s;
   reg   [3:0] nonce_delay;
+  reg         nonce_set;
+  reg  [63:0] nonce_set_a;
+  reg  [63:0] nonce_set_b;
+  reg [831:0] rx_cookie;
 
   nts_cookie_handler dut (
     .i_clk(i_clk),
@@ -83,6 +91,7 @@ module nts_cookie_handler_tb #( parameter verbose = 1);
     .i_key_word(i_key_word),
     .i_key_valid(i_key_valid),
     .i_key_length(i_key_length),
+    .i_key_id(i_key_id),
     .i_key_data(i_key_data),
     .i_cookie_nonce(i_cookie_nonce),
     .i_cookie_s2c(i_cookie_s2c),
@@ -100,7 +109,10 @@ module nts_cookie_handler_tb #( parameter verbose = 1);
     .o_unwrapped_data(o_unwrapped_data),
     .o_noncegen_get(o_noncegen_get),
     .i_noncegen_nonce(i_noncegen_nonce),
-    .i_noncegen_ready(i_noncegen_ready)
+    .i_noncegen_ready(i_noncegen_ready),
+    .o_cookie_valid(o_cookie_valid),
+    .o_cookie_word(o_cookie_word),
+    .o_cookie_data(o_cookie_data)
   );
 
   //----------------------------------------------------------------
@@ -224,6 +236,7 @@ module nts_cookie_handler_tb #( parameter verbose = 1);
     begin : write_key
       reg [4:0] i;
       reg [3:0] j;
+      i_key_id = keyid;
       for (i = 0; i < 16; i++) begin
         j = 15-i[3:0];
         i_key_word = j[3:0];
@@ -320,6 +333,15 @@ module nts_cookie_handler_tb #( parameter verbose = 1);
   end
   endtask
 
+  task start_cookiegen;
+  begin
+    i_op_gencookie = 1;
+    #10;
+    i_op_gencookie = 0;
+    #10;
+  end
+  endtask
+
   task reset_rx;
   begin
     reset_unwrap_rx = 1;
@@ -367,6 +389,64 @@ module nts_cookie_handler_tb #( parameter verbose = 1);
   end
   endtask
 
+  task unwrap_test_and_wrap (
+    input [256:0] testname_str,
+    input [511:0] masterkey_value,
+    input  [31:0] masterkey_keyid,
+    input         masterkey_length,
+    input [831:0] cookie,
+    input [127:0] wrap_new_nonce,
+    input         expect_success,
+    input [255:0] expect_c2s,
+    input [255:0] expect_s2c,
+    input [831:0] expect_cookie
+  );
+  begin
+    if (verbose>1) begin
+      $display("%s:%0d Unwrap_and_wrap [%s] start...", `__FILE__, `__LINE__, testname_str);
+    end
+    i_areset = 1;
+    nonce_set = 1;
+    nonce_set_a = wrap_new_nonce[127:64];
+    nonce_set_b = wrap_new_nonce[63:0];
+    #10;
+    i_areset = 0;
+    reset_rx();
+    write_key(masterkey_keyid, masterkey_value, masterkey_length);
+    write_cookie(cookie);
+    start_unwrap();
+    wait_ready();
+    if (expect_success) begin
+      `assert( o_unwrap_tag_ok );
+      if (verbose>1) begin
+        $display("%s:%0d UNWRAPPED %b S2C = %h", `__FILE__, `__LINE__, reced_s2c, s2c);
+        $display("%s:%0d UNWRAPPED %b C2S = %h", `__FILE__, `__LINE__, reced_c2s, c2s);
+      end
+      `assert( reced_s2c == 8'hff );
+      `assert( reced_c2s == 8'hff );
+      `assert( c2s == expect_c2s );
+      `assert( s2c == expect_s2c );
+    end else begin
+      `assert( o_unwrap_tag_ok == 'b0 );
+    end
+
+    start_cookiegen();
+    wait_ready();
+
+    if (verbose>1) begin
+      if (expect_cookie != rx_cookie) begin
+        $display("%s:%0d Expected = %h", `__FILE__, `__LINE__, expect_cookie);
+        $display("%s:%0d RxCookie = %h", `__FILE__, `__LINE__, rx_cookie);
+      end
+    end
+    `assert(expect_cookie == rx_cookie);
+
+    if (verbose>0) begin
+      $display("%s:%0d Unwrap_and_wrap [%s] executed with expected result (%0d).", `__FILE__, `__LINE__, testname_str, o_unwrap_tag_ok);
+    end
+  end
+  endtask
+
   initial begin
     $display("Test start: %s:%0d", `__FILE__, `__LINE__);
     i_clk = 0;
@@ -383,6 +463,9 @@ module nts_cookie_handler_tb #( parameter verbose = 1);
     i_cookie_data = 0;
     i_op_unwrap = 0;
     i_op_gencookie = 0;
+    nonce_set = 0;
+    nonce_set_a = 0;
+    nonce_set_b = 0;
     reset_unwrap_rx = 0;
     #10;
     i_areset = 0;
@@ -393,12 +476,24 @@ module nts_cookie_handler_tb #( parameter verbose = 1);
 
     unwrap_test("Testcase 1", NTS_TEST_REQUEST_MASTER_KEY, NTS_TEST_REQUEST_MASTER_KEY_ID, 0, NTS_TEST_COOKIE1, 1, 256'h9e36980572b3cf91a8fb2f29b105a1d95439ebabeb61403e1aba654e9ba56176, 256'h8f62b677d6c55010504abd646cf394cfc5990605f6032b0e8b7df00667cac34b );
 
-    i_op_gencookie = 1;
-    #10;
-    i_op_gencookie = 0;
-    #10;
+    start_cookiegen();
 
-    #1000;
+    wait_ready();
+    #200;
+
+    unwrap_test_and_wrap(
+      "c == WRAP(k, n, UNWRAP(k, n, c))",
+      NTS_TEST_REQUEST_MASTER_KEY,
+      NTS_TEST_REQUEST_MASTER_KEY_ID,
+      0,
+      NTS_TEST_COOKIE1,
+      128'hcd65766f2c8fb4cc6b8d5b7aca60c5ec,
+      1,
+      256'h9e36980572b3cf91a8fb2f29b105a1d95439ebabeb61403e1aba654e9ba56176,
+      256'h8f62b677d6c55010504abd646cf394cfc5990605f6032b0e8b7df00667cac34b,
+      NTS_TEST_COOKIE1
+     );
+
     $display("Test stop: %s:%0d", `__FILE__, `__LINE__);
     $finish;
   end
@@ -410,12 +505,14 @@ module nts_cookie_handler_tb #( parameter verbose = 1);
       s2c <= 0;
       reced_s2c <= 0;
       reced_c2s <= 0;
+      rx_cookie <= 0;
     end else begin
       if (reset_unwrap_rx) begin
         c2s <= 0;
         s2c <= 0;
         reced_s2c <= 0;
         reced_c2s <= 0;
+        rx_cookie <= 0;
       end else begin
         if (o_unrwapped_s2c) begin
           s2c[o_unwrapped_word*32+:32] <= o_unwrapped_data;
@@ -428,6 +525,14 @@ module nts_cookie_handler_tb #( parameter verbose = 1);
           if (verbose>1) $display("%s:%0d UNWRAPPED C2S[%0d] = %h", `__FILE__, `__LINE__, o_unwrapped_word, o_unwrapped_data);
         end
       end
+
+      if (o_cookie_valid) begin : rx_cookie_count
+        reg [3:0] rx_pos;
+        rx_pos = 12 - o_cookie_word;
+        if (verbose>1) $display("%s:%0d o_cookie_word=%h, o_cookie_data=%h", `__FILE__, `__LINE__, o_cookie_word, o_cookie_data);
+        rx_cookie[rx_pos*64+:64] <= o_cookie_data;
+      end
+
     end
   end
 
@@ -441,7 +546,11 @@ module nts_cookie_handler_tb #( parameter verbose = 1);
       i_noncegen_ready <= 0;
       if (nonce_delay == 4'hF) begin
         nonce_delay <= 0;
-        i_noncegen_nonce <= i_noncegen_nonce + 1;
+        if (nonce_set) begin
+          i_noncegen_nonce <= (i_noncegen_nonce == nonce_set_a) ? nonce_set_b : nonce_set_a;
+        end else begin
+          i_noncegen_nonce <= i_noncegen_nonce + 1;
+        end
         i_noncegen_ready <= 1;
       end else if (nonce_delay > 0) begin
         nonce_delay <= nonce_delay + 1;

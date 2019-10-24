@@ -33,10 +33,14 @@
 //
 
 module nts_cookie_handler #(
-  parameter integer KEY_LENGTH      = 512,
-  parameter integer KEY_ADDR_32BITS = 4,
-  parameter integer WRP_LENGTH      = 256,
-  parameter integer WRP_ADDR_32BITS = 3
+  parameter    [15:0] COOKIE_TAG       = 16'h0204,
+  parameter    [15:0] COOKIE_LEN       = 16'h0068,
+  parameter integer KEY_LENGTH         = 512,
+  parameter integer KEY_ADDR_32BITS    = 4,
+  parameter integer WRP_LENGTH         = 256,
+  parameter integer WRP_ADDR_32BITS    = 3,
+  parameter integer COOKIE_LENGTH      = 832,
+  parameter integer COOKIE_ADDR_64BITS = 4
 ) (
   input  wire                         i_clk,
   input  wire                         i_areset,
@@ -44,6 +48,7 @@ module nts_cookie_handler #(
   input  wire [KEY_ADDR_32BITS-1 : 0] i_key_word,
   input  wire                         i_key_valid,
   input  wire                         i_key_length,
+  input  wire                [31 : 0] i_key_id,
   input  wire                [31 : 0] i_key_data,
 
   input  wire                         i_cookie_nonce,
@@ -66,7 +71,12 @@ module nts_cookie_handler #(
 
   output wire                         o_noncegen_get,
   input  wire                [63 : 0] i_noncegen_nonce,
-  input  wire                         i_noncegen_ready
+  input  wire                         i_noncegen_ready,
+
+  output wire                          o_cookie_valid,
+  output wire                   [63:0] o_cookie_data,
+  output wire [COOKIE_ADDR_64BITS-1:0] o_cookie_word
+
 );
 
   //----------------------------------------------------------------
@@ -76,6 +86,7 @@ module nts_cookie_handler #(
   localparam LOCAL_MEMORY_BUS_WIDTH = 4;
 
   localparam MODE_DECRYPT = 0;
+  localparam MODE_ENCRYPT = 1;
 
   localparam AEAD_AES_SIV_CMAC_256 = 1'h0;
   localparam AEAD_AES_SIV_CMAC_512 = 1'h1;
@@ -97,6 +108,18 @@ module nts_cookie_handler #(
   localparam STATE_UNWRAP_MEMLOAD_C2S_2    = 14;
   localparam STATE_UNWRAP_TRANSMIT         = 15;
   localparam STATE_WRAP_MEMSTORE_NONCE     = 16;
+  localparam STATE_WRAP_MEMSTORE_S2C_1     = 17;
+  localparam STATE_WRAP_MEMSTORE_S2C_2     = 18;
+  localparam STATE_WRAP_MEMSTORE_C2S_1     = 19;
+  localparam STATE_WRAP_MEMSTORE_C2S_2     = 20;
+  localparam STATE_WRAP_PROCESSING_START   = 21;
+  localparam STATE_WRAP_PROCESSING_WAIT1   = 22;
+  localparam STATE_WRAP_PROCESSING_WAIT2   = 23;
+  localparam STATE_WRAP_OK                 = 24;
+  localparam STATE_WRAP_MEMLOAD_CT_0       = 25;
+  localparam STATE_WRAP_MEMLOAD_CT_1       = 26;
+  localparam STATE_WRAP_MEMLOAD_CT_2       = 27;
+  localparam STATE_WRAP_MEMLOAD_CT_3       = 28;
   localparam STATE_ERROR                   = 31;
 
   localparam [LOCAL_MEMORY_BUS_WIDTH-1:0] MEMORY_COOKIE_AD    = 0;
@@ -122,6 +145,10 @@ module nts_cookie_handler #(
   reg   [31 : 0] cookie_c2s_reg [0 : 15];
   reg            cookie_nonce_we;
   reg   [31 : 0] cookie_nonce_reg [3 : 0];
+
+  reg   [31 : 0] key_id_reg;
+  reg   [31 : 0] key_id_new;
+  reg            key_id_we;
 
   reg            key_length_reg;
   reg            key_length_new;
@@ -154,6 +181,20 @@ module nts_cookie_handler #(
   reg     [63:0] nonce_b_reg;
   reg            nonce_b_valid_reg;
 
+  reg            nonce_old_we;
+  reg    [127:0] nonce_old_new;
+  reg    [127:0] nonce_old_reg;
+
+  reg            ct_we;
+  reg      [1:0] ct_wr_addr;
+  reg    [127:0] ct_new;
+  reg    [511:0] ct_reg; //Ciphertext (cookie except tag)
+
+  reg            ct_out_we;
+  reg      [3:0] ct_out_new; //Ciphertext/cookie counter 0..12
+  reg      [3:0] ct_out_reg; //Ciphertext/cookie counter 0..12
+  reg            ct_out_active_new; //Ciphertext/cookie output on/off
+  reg            ct_out_active_reg; //Ciphertext/cookie output on/off
 
   //----------------------------------------------------------------
   // AES-SIV Registers including update variables and write enable.
@@ -231,6 +272,10 @@ module nts_cookie_handler #(
   reg      [2:0] u_word;
   reg     [31:0] u_data;
 
+  reg                          wrapped_cookie_valid;
+  reg                   [63:0] wrapped_cookie_data;
+  reg [COOKIE_ADDR_64BITS-1:0] wrapped_cookie_word;
+
   wire           reset_n;
 
   //----------------------------------------------------------------
@@ -251,7 +296,7 @@ module nts_cookie_handler #(
   assign core_tag_in = {tag_in_reg[0], tag_in_reg[1],
                         tag_in_reg[2], tag_in_reg[3]};
 
-  assign o_busy = state_reg != STATE_IDLE;
+  assign o_busy = (state_reg != STATE_IDLE) || ct_out_active_reg;
 
   assign o_unwrap_tag_ok = unwrap_tag_ok_reg;
 
@@ -261,6 +306,10 @@ module nts_cookie_handler #(
   assign o_unwrapped_data = u_data;
 
   assign o_noncegen_get = nonce_generate_reg;
+
+  assign o_cookie_valid = wrapped_cookie_valid;
+  assign o_cookie_data  = wrapped_cookie_data;
+  assign o_cookie_word  = wrapped_cookie_word;
 
   assign reset_n = ~ i_areset;
 
@@ -347,6 +396,10 @@ module nts_cookie_handler #(
   begin : reg_update
     integer i;
     if (i_areset) begin
+      ct_reg <= 0;
+      ct_out_reg <= 0;
+      ct_out_active_reg <= 0;
+      key_id_reg <= 0;
       key_length_reg <= 0;
       state_reg <= 0;
       state_debug_old_reg <= 0;
@@ -355,6 +408,7 @@ module nts_cookie_handler #(
       nonce_b_reg <= 0;
       nonce_b_valid_reg <= 0;
       nonce_generate_reg <= 0;
+      nonce_old_reg <= 0;
       unwrap_tag_ok_reg <= 0;
 
       for (i = 0 ; i < 16 ; i = i + 1) begin
@@ -382,7 +436,19 @@ module nts_cookie_handler #(
       end
 
       // ------------- General Regs -------------
-      if (key_length_we) key_length_reg <= key_length_new;
+      if (ct_we) begin
+        ct_reg[ct_wr_addr*128+:128] <= ct_new;
+      end
+      if (ct_out_we) begin
+        ct_out_reg <= ct_out_new;
+        ct_out_active_reg <= ct_out_active_new;
+      end
+
+      if (key_id_we)
+        key_id_reg <= key_id_new;
+
+      if (key_length_we)
+        key_length_reg <= key_length_new;
 
       if (cookie_nonce_we)
         cookie_nonce_reg[cookie_addr[1:0]] <= cookie_new;
@@ -404,6 +470,9 @@ module nts_cookie_handler #(
 
       if (nonce_generate_we)
         nonce_generate_reg <= nonce_generate_new;
+
+      if (nonce_old_we)
+        nonce_old_reg <= nonce_old_new;
 
       if (unwrap_tag_ok_we)
         unwrap_tag_ok_reg <= unwrap_tag_ok_new;
@@ -485,6 +554,8 @@ module nts_cookie_handler #(
     nonce_b_we = 0;
     nonce_new = 0;
     nonce_invalidate = 0;
+    nonce_old_we  = 0;
+    nonce_old_new = 0;
     //External (noncegen)
     nonce_generate_we = 0;
     nonce_generate_new = 0;
@@ -493,6 +564,8 @@ module nts_cookie_handler #(
       nonce_a_we = 1;
       nonce_b_we = 1;
       nonce_invalidate = 1;
+      nonce_old_we  = 1;
+      nonce_old_new = { nonce_a_reg, nonce_b_reg };
     end
     else if (nonce_generate_reg) begin
       if (i_noncegen_ready) begin
@@ -526,6 +599,8 @@ module nts_cookie_handler #(
     cookie_c2s_we = 0;
     key_we = 0;
     key_addr = 0;
+    key_id_we = 0;
+    key_id_new = 0;
     key_length_we = 0;
     key_length_new = 0;
     //-------- AES-SIV regs ---------
@@ -555,6 +630,8 @@ module nts_cookie_handler #(
             key_we = 1;
             key_new = i_key_data;
             key_addr = i_key_word;
+            key_id_we = 1;
+            key_id_new = i_key_id;
             key_length_we = 1;
             key_length_new = i_key_length;
           end
@@ -578,9 +655,9 @@ module nts_cookie_handler #(
             tag_in_addr = i_cookie_word[1:0];
             tag_in_new = i_cookie_data;
           end
-          if (i_op_unwrap) begin
+          if (i_op_unwrap || i_op_gencookie) begin
             config_we = 1;
-            config_encdec_new = MODE_DECRYPT;
+            config_encdec_new = i_op_unwrap ? MODE_DECRYPT : MODE_ENCRYPT;
             config_mode_new = key_length_reg ? AEAD_AES_SIV_CMAC_512 : AEAD_AES_SIV_CMAC_256;
 
             ad_start_we = 1;
@@ -608,11 +685,78 @@ module nts_cookie_handler #(
           unwrap_tag_ok_we = 1;
           unwrap_tag_ok_new = core_tag_ok;
         end
+      STATE_WRAP_PROCESSING_START:
+        begin
+          start_new = 1;
+        end
       STATE_ERROR:
         begin
         end
       default: ;
     endcase
+  end
+
+  always @*
+  begin : cookie_out_ctrl
+    wrapped_cookie_valid = 0;
+    wrapped_cookie_data  = 0;
+    wrapped_cookie_word  = 0;
+    ct_out_we = 0;
+    ct_out_new = 0;
+    ct_out_active_new = 0;
+    if (state_reg == STATE_WRAP_OK) begin
+      ct_out_we = 1;
+      ct_out_new = 0;
+      ct_out_active_new = 1;
+    end else if (ct_out_active_reg) begin
+      ct_out_we = 1;
+      ct_out_new = ct_out_reg + 1;
+      ct_out_active_new = 1;
+      wrapped_cookie_valid = 1;
+      wrapped_cookie_word = ct_out_reg;
+      case (ct_out_reg)
+        4'h0: wrapped_cookie_data = { COOKIE_TAG, COOKIE_LEN, key_id_reg };
+        4'h1: wrapped_cookie_data = nonce_old_reg[127:64];
+        4'h2: wrapped_cookie_data = nonce_old_reg[63:0];
+        4'h3: wrapped_cookie_data = core_tag_out[127:64];
+        4'h4: wrapped_cookie_data = core_tag_out[63:0];
+        4'h5: wrapped_cookie_data = ct_reg[1*64+:64];
+        4'h6: wrapped_cookie_data = ct_reg[0*64+:64];
+        4'h7: wrapped_cookie_data = ct_reg[3*64+:64];
+        4'h8: wrapped_cookie_data = ct_reg[2*64+:64];
+        4'h9: wrapped_cookie_data = ct_reg[5*64+:64];
+        4'hA: wrapped_cookie_data = ct_reg[4*64+:64];
+        4'hB: wrapped_cookie_data = ct_reg[7*64+:64];
+        4'hC: wrapped_cookie_data = ct_reg[6*64+:64];
+        default: ;
+      endcase
+      if (ct_out_reg >= 4'hC) begin
+        ct_out_we = 1;
+        ct_out_new = 0;
+        ct_out_active_new = 0;
+      end
+      //$display("%s:%0d CT_OUT[%h]=%h", `__FILE__, `__LINE__, wrapped_cookie_word, wrapped_cookie_data);
+    end
+  end
+
+  always @*
+  begin : copy_ciphertext_from_ram_to_reg
+    ct_we = 1;
+    ct_wr_addr = 0;
+    ct_new = mem_block_rd;
+    case (state_reg)
+      STATE_WRAP_MEMLOAD_CT_0: ct_wr_addr = 0;
+      STATE_WRAP_MEMLOAD_CT_1: ct_wr_addr = 1;
+      STATE_WRAP_MEMLOAD_CT_2: ct_wr_addr = 2;
+      STATE_WRAP_MEMLOAD_CT_3: ct_wr_addr = 3;
+      default:
+        begin
+          ct_we = 0;
+          ct_new = 0;
+        end
+    endcase
+    //if (ct_we)
+    // $display("%s:%0d CT[%h]=%h", `__FILE__, `__LINE__, ct_wr_addr, ct_new);
   end
 
   always @*
@@ -805,8 +949,120 @@ module nts_cookie_handler #(
           mem_addr = MEMORY_COOKIE_NONCE;
           mem_block_wr = { nonce_a_reg, nonce_b_reg };
           //$display("%s:%0d STATE_UNWRAP_MEMSTORE_NONCE: write mem[%0d]=%h", `__FILE__, `__LINE__, mem_addr, mem_block_wr);
-           state_we = 1;
-           state_new = STATE_IDLE;
+          state_we = 1;
+          state_new = STATE_WRAP_MEMSTORE_S2C_1;
+        end
+      STATE_WRAP_MEMSTORE_S2C_1:
+        begin
+          mem_cs = 1;
+          mem_we = 1;
+          mem_addr = MEMORY_COOKIE_S2C;
+          mem_block_wr = unwrapped_s2c_reg[0];
+          state_we = 1;
+          state_new = STATE_WRAP_MEMSTORE_S2C_2;
+        end
+      STATE_WRAP_MEMSTORE_S2C_2:
+        begin
+          mem_cs = 1;
+          mem_we = 1;
+          mem_addr = MEMORY_COOKIE_S2C + 1;
+          mem_block_wr = unwrapped_s2c_reg[1];
+          state_we = 1;
+          state_new = STATE_WRAP_MEMSTORE_C2S_1;
+        end
+      STATE_WRAP_MEMSTORE_C2S_1:
+        begin
+          mem_cs = 1;
+          mem_we = 1;
+          mem_addr = MEMORY_COOKIE_C2S;
+          mem_block_wr = unwrapped_c2s_reg[0];
+          state_we = 1;
+          state_new = STATE_WRAP_MEMSTORE_C2S_2;
+        end
+      STATE_WRAP_MEMSTORE_C2S_2:
+        begin
+          mem_cs = 1;
+          mem_we = 1;
+          mem_addr = MEMORY_COOKIE_C2S + 1;
+          mem_block_wr = unwrapped_c2s_reg[1];
+          state_we = 1;
+          state_new = STATE_WRAP_PROCESSING_START;
+        end
+      STATE_WRAP_PROCESSING_START:
+        begin
+          //$display("%s:%0d state_reg=%h", `__FILE__, `__LINE__, state_reg);
+          state_we = 1;
+          state_new = STATE_WRAP_PROCESSING_WAIT1;
+        end
+      STATE_WRAP_PROCESSING_WAIT1:
+        begin
+          //$display("%s:%0d state_reg=%h", `__FILE__, `__LINE__, state_reg);
+          state_we = 1;
+          state_new = STATE_WRAP_PROCESSING_WAIT2;
+        end
+      STATE_WRAP_PROCESSING_WAIT2:
+        if (core_ready) begin
+          //$display("%s:%0d state_reg=%h", `__FILE__, `__LINE__, state_reg);
+          state_we = 1;
+          state_new = STATE_WRAP_OK;
+        end else begin
+          //$display("%s:%0d state_reg=%h", `__FILE__, `__LINE__, state_reg);
+          core_ack = mem_ack;
+          core_block_rd = mem_block_rd;
+          mem_cs = core_cs;
+          mem_we = core_we;
+          mem_addr = core_addr[LOCAL_MEMORY_BUS_WIDTH-1:0];
+          mem_block_wr = core_block_wr;
+          if (core_cs) begin
+            if (core_addr[15:LOCAL_MEMORY_BUS_WIDTH] != 0) begin
+              //Illegal memory access
+             //$display("%s:%0d Illegal memory access: %h_%h", `__FILE__, `__LINE__, core_addr[15:LOCAL_MEMORY_BUS_WIDTH], core_addr[LOCAL_MEMORY_BUS_WIDTH-1:0]);
+              state_we = 1;
+              state_new = STATE_ERROR;
+            end
+          end
+        end
+      STATE_WRAP_OK:
+        begin
+          //$display("%s:%0d state_reg=%h", `__FILE__, `__LINE__, state_reg);
+          mem_cs = 1;
+          mem_we = 0;
+          mem_addr = MEMORY_CIPHERTEXT + 0;
+          state_we = 1;
+          state_new = STATE_WRAP_MEMLOAD_CT_0;
+        end
+      STATE_WRAP_MEMLOAD_CT_0:
+        begin
+          //$display("%s:%0d state_reg=%h", `__FILE__, `__LINE__, state_reg);
+          mem_cs = 1;
+          mem_we = 0;
+          mem_addr = MEMORY_CIPHERTEXT + 1;
+          state_we = 1;
+          state_new = STATE_WRAP_MEMLOAD_CT_1;
+        end
+      STATE_WRAP_MEMLOAD_CT_1:
+        begin
+          //$display("%s:%0d state_reg=%h", `__FILE__, `__LINE__, state_reg);
+          mem_cs = 1;
+          mem_we = 0;
+          mem_addr = MEMORY_CIPHERTEXT + 2;
+          state_we = 1;
+          state_new = STATE_WRAP_MEMLOAD_CT_2;
+        end
+      STATE_WRAP_MEMLOAD_CT_2:
+        begin
+          //$display("%s:%0d state_reg=%h", `__FILE__, `__LINE__, state_reg);
+          mem_cs = 1;
+          mem_we = 0;
+          mem_addr = MEMORY_CIPHERTEXT + 3;
+          state_we = 1;
+          state_new = STATE_WRAP_MEMLOAD_CT_3;
+        end
+      STATE_WRAP_MEMLOAD_CT_3:
+        begin
+          //$display("%s:%0d state_reg=%h", `__FILE__, `__LINE__, state_reg);
+          state_we = 1;
+          state_new = STATE_IDLE;
         end
       default:
         begin

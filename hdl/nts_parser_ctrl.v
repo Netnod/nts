@@ -29,7 +29,7 @@
 //
 
 module nts_parser_ctrl #(
-  parameter ADDR_WIDTH = 10,
+  parameter ADDR_WIDTH = 8,
   parameter ACCESS_PORT_WIDTH = 64
 ) (
   input  wire                         i_areset, // async reset

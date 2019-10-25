@@ -29,7 +29,7 @@
 //
 
 module nts_tx_buffer #(
-  parameter ADDR_WIDTH = 10
+  parameter ADDR_WIDTH = 8
 ) (
   input  wire        i_areset, // async reset
   input  wire        i_clk,

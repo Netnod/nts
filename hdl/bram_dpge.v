@@ -33,7 +33,7 @@
 
 module bram_dpge #(
     //Parameters
-    parameter ADDR_WIDTH = 10,
+    parameter ADDR_WIDTH = 8,
     parameter DATA_WIDTH = 64
   ) (
     input i_clk,

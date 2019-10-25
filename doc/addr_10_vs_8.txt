@@ -1,0 +1,152 @@
+
+10-bit addr: 4 RAMB36,           0.59%,0.29% routing, 8871 cells, WNS=0.194, WHS=0.092
+8-bit addr:  2 RAMB18, 2 RAMB36, 0.52%,0.28% routing, 8659 cells, WNS=0.208, WHS=0.093
+
+*************************************************************************************************************************************************
+****************************************************** ADDR= 10 Synthesis & Implementation ******************************************************
+*************************************************************************************************************************************************
+
+
+Report RTL Partitions:
++-+--------------+------------+----------+
+| |RTL Partition |Replication |Instances |
++-+--------------+------------+----------+
++-+--------------+------------+----------+
+---------------------------------------------------------------------------------
+Start ROM, RAM, DSP and Shift Register Reporting
+---------------------------------------------------------------------------------
+
+Block RAM:
++------------+-----------------------+------------------------+---+---+------------------------+---+---+--------------+--------+--------+---------------------------------------------------------+
+|Module Name | RTL Object            | PORT A (Depth x Width) | W | R | PORT B (Depth x Width) | W | R | OUT_REG      | RAMB18 | RAMB36 | Hierarchical Name                                       |
++------------+-----------------------+------------------------+---+---+------------------------+---+---+--------------+--------+--------+---------------------------------------------------------+
+|nts_engine  | rx_buffer/mem/mem_reg | 1 K x 64               | W | R |                        |   |   | Port A       | 0      | 2      | nts_engine/extram__3                                    |
+|nts_engine  | ram/ram_reg           | 1 K x 64(READ_FIRST)   | W | R | 1 K x 64(WRITE_FIRST)  |   | R | Port A and B | 0      | 2      | nts_engine/nts_tx_buffer/Multiple/memory_ctrl/extram__5 |
++------------+-----------------------+------------------------+---+---+------------------------+---+---+--------------+--------+--------+---------------------------------------------------------+
+
+Note: The table shows the Block RAMs at the current stage of the synthesis flow. Some Block RAMs may be reimplemented as non Block RAM primitives later in the synthesis flow. Multiple instantiated Block RAMs are reported only once. "Hierarchical Name" reflects the Block RAM name as it appears in the hierarchical module and only part of it is displayed.
+
+Report Cell Usage:
++------+-----------+------+
+|      |Cell       |Count |
++------+-----------+------+
+|1     |BUFG       |     1|
+|2     |CARRY4     |    98|
+|3     |LUT1       |   108|
+|4     |LUT2       |   343|
+|5     |LUT3       |   362|
+|6     |LUT4       |   180|
+|7     |LUT5       |   833|
+|8     |LUT6       |  2150|
+|9     |MUXF7      |   305|
+|10    |MUXF8      |   108|
+|11    |RAMB36E1   |     2|
+|12    |RAMB36E1_1 |     4|
+|13    |FDCE       |  3902|
+|14    |FDPE       |     1|
+|15    |FDRE       |   177|
+|16    |IBUF       |   188|
+|17    |OBUF       |   109|
++------+-----------+------+
+
+Report Instance Areas:
++------+------------+----------------+------+
+|      |Instance    |Module          |Cells |
++------+------------+----------------+------+
+|1     |top         |                |  8871|
+|2     |  keymem    |keymem          |  3817|
+|3     |  parser    |nts_parser_ctrl |  2242|
+|4     |  rx_buffer |nts_rx_buffer   |   487|
+|5     |    mem     |bram            |   186|
+|6     |  timestamp |nts_timestamp   |   494|
+|7     |  tx_buffer |nts_tx_buffer   |  1519|
+|8     |    mem0    |memory_ctrl     |   707|
+|9     |      ram   |bram_dpge_1     |   438|
+|10    |    mem1    |memory_ctrl_0   |   644|
+|11    |      ram   |bram_dpge       |   375|
++------+------------+----------------+------+
+
+Router Utilization Summary
+  Global Vertical Routing Utilization    = 0.590722 %
+  Global Horizontal Routing Utilization  = 0.299632 %
+  Routable Net Status*
+  *Does not include unroutable nets such as driverless and loadless.
+  Run report_route_status for detailed report.
+  Number of Failed Nets               = 0
+  Number of Unrouted Nets             = 0
+  Number of Partially Routed Nets     = 0
+  Number of Node Overlaps             = 0
+
+Phase 10 Post Router Timing
+INFO: [Route 35-57] Estimated Timing Summary | WNS=0.194  | TNS=0.000  | WHS=0.092  | THS=0.000  |
+
+
+*************************************************************************************************************************************************
+****************************************************** ADDR = 8 Synthesis & Implementation ******************************************************
+*************************************************************************************************************************************************
+
+INFO: [Synth 8-5562] The signal rx_buffer/mem/mem_reg is implemented as block RAM but is better mapped onto distributed LUT RAM for the following reason(s): The *depth (8 address bits)* is shallow. Please use attribute (* ram_style = "distributed" *) to instruct Vivado to infer distributed LUT RAM.
+INFO: [Synth 8-5562] The signal ram/ram_reg is implemented as block RAM but is better mapped onto distributed LUT RAM for the following reason(s): The *depth (8 address bits)* is shallow. Please use attribute (* ram_style = "distributed" *) to instruct Vivado to infer distributed LUT RAM.
+
+Block RAM:
++------------+-----------------------+------------------------+---+---+------------------------+---+---+--------------+--------+--------+---------------------------------------------------------+
+|Module Name | RTL Object            | PORT A (Depth x Width) | W | R | PORT B (Depth x Width) | W | R | OUT_REG      | RAMB18 | RAMB36 | Hierarchical Name                                       |
++------------+-----------------------+------------------------+---+---+------------------------+---+---+--------------+--------+--------+---------------------------------------------------------+
+|nts_engine  | rx_buffer/mem/mem_reg | 256 x 64               | W | R |                        |   |   | Port A       | 2      | 0      | nts_engine/extram__3                                    |
+|nts_engine  | ram/ram_reg           | 256 x 64(READ_FIRST)   | W | R | 256 x 64(WRITE_FIRST)  |   | R | Port A and B | 0      | 2      | nts_engine/nts_tx_buffer/Multiple/memory_ctrl/extram__5 |
++------------+-----------------------+------------------------+---+---+------------------------+---+---+--------------+--------+--------+---------------------------------------------------------+
+
+Report Cell Usage:
++------+---------+------+
+|      |Cell     |Count |
++------+---------+------+
+|1     |BUFG     |     1|
+|2     |CARRY4   |    90|
+|3     |LUT1     |   106|
+|4     |LUT2     |   276|
+|5     |LUT3     |   219|
+|6     |LUT4     |   214|
+|7     |LUT5     |   809|
+|8     |LUT6     |  2209|
+|9     |MUXF7    |   304|
+|10    |MUXF8    |   108|
+|11    |RAMB18E1 |     2|
+|12    |RAMB36E1 |     4|
+|13    |FDCE     |  3848|
+|14    |FDPE     |     1|
+|15    |FDRE     |   171|
+|16    |IBUF     |   188|
+|17    |OBUF     |   109|
++------+---------+------+
+
+Report Instance Areas:
++------+------------+----------------+------+
+|      |Instance    |Module          |Cells |
++------+------------+----------------+------+
+|1     |top         |                |  8659|
+|2     |  keymem    |keymem          |  3817|
+|3     |  parser    |nts_parser_ctrl |  2187|
+|4     |  rx_buffer |nts_rx_buffer   |   473|
+|5     |    mem     |bram            |   186|
+|6     |  timestamp |nts_timestamp   |   526|
+|7     |  tx_buffer |nts_tx_buffer   |  1344|
+|8     |    mem0    |memory_ctrl     |   629|
+|9     |      ram   |bram_dpge_1     |   390|
+|10    |    mem1    |memory_ctrl_0   |   567|
+|11    |      ram   |bram_dpge       |   327|
++------+------------+----------------+------+
+
+Router Utilization Summary
+  Global Vertical Routing Utilization    = 0.51971 %
+  Global Horizontal Routing Utilization  = 0.289409 %
+  Routable Net Status*
+  *Does not include unroutable nets such as driverless and loadless.
+  Run report_route_status for detailed report.
+  Number of Failed Nets               = 0
+  Number of Unrouted Nets             = 0
+  Number of Partially Routed Nets     = 0
+  Number of Node Overlaps             = 0
+
+Phase 10 Post Router Timing
+INFO: [Route 35-57] Estimated Timing Summary | WNS=0.208  | TNS=0.000  | WHS=0.093  | THS=0.000  |
+

@@ -59,15 +59,19 @@ CC_FLAGS = -Wall
 LINT = verilator
 LINT_FLAGS = +1364-2001ext+ --lint-only  -Wall -Wno-fatal -Wno-DECLFILENAME
 
-all: lint output/vvp/nts_cookie_handler_tb.vvp
+all: lint output/vvp/nts_cookie_handler_tb.vvp output/vvp/nts_verify_secure_tb.vvp
 	vvp output/vvp/nts_cookie_handler_tb.vvp
+	vvp output/vvp/nts_verify_secure_tb.vvp
 
 output/vvp/nts_cookie_handler_tb.vvp: tb/nts_cookie_handler_tb.v hdl/nts_cookie_handler.v hdl/bram_with_ack.v $(CORE_SRC)
 	iverilog -o $@ $^
 
+output/vvp/nts_verify_secure_tb.vvp: tb/nts_verify_secure_tb.v hdl/nts_verify_secure.v hdl/bram_dp2w.v $(CORE_SRC)
+	iverilog -o $@ $^
 
 lint:  $(CORE_SRC)
 	$(LINT) $(LINT_FLAGS) -Wno-UNOPTFLAT $(CORE_SRC)
 	$(LINT) $(LINT_FLAGS) hdl/bram_with_ack.v
 	$(LINT) $(LINT_FLAGS) -Wno-UNOPTFLAT hdl/nts_cookie_handler.v hdl/bram_with_ack.v $(CORE_SRC)
 	$(LINT) $(LINT_FLAGS) -Wno-UNOPTFLAT -Wno-STMTDLY tb/nts_cookie_handler_tb.v hdl/nts_cookie_handler.v hdl/bram_with_ack.v $(CORE_SRC)
+	$(LINT) $(LINT_FLAGS) -Wno-STMTDLY tb/nts_verify_secure_tb.v hdl/nts_verify_secure.v hdl/bram_dp2w.v $(CORE_SRC)

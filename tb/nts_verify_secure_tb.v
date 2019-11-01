@@ -33,7 +33,7 @@
 //
 
 module nts_verify_secure_tb #(
-  parameter verbose = 2 // 0: Silent. 1. Informative messages. 2. Traces. 3. Extreme traces.
+  parameter verbose = 1 // 0: Silent. 1. Informative messages. 2. Traces. 3. Extreme traces.
 );
   localparam [255:0] TEST1_C2S = { 128'h2be26209_fdc335d0_13aeb45a_ecd91f1a,
                                    128'ha4e1055b_8f7fdae8_c592b87d_09200b74 };
@@ -62,15 +62,16 @@ module nts_verify_secure_tb #(
   // Inputs and outputs
   //----------------------------------------------------------------
 
-  reg  i_areset; // async reset
-  reg  i_clk;
-  wire o_busy;
-  wire o_verify_tag_ok;
+  reg                    i_areset; // async reset
+  reg                    i_clk;
 
-  reg          i_unrwapped_s2c;
-  reg          i_unwrapped_c2s;
-  reg  [2 : 0] i_unwrapped_word;
-  reg [31 : 0] i_unwrapped_data;
+  wire                   o_busy;
+  wire                   o_verify_tag_ok;
+
+  reg                    i_unwrapped_s2c;
+  reg                    i_unwrapped_c2s;
+  reg            [2 : 0] i_unwrapped_word;
+  reg           [31 : 0] i_unwrapped_data;
 
   reg                    i_op_copy_rx_ad;
   reg                    i_op_copy_rx_nonce;
@@ -78,6 +79,7 @@ module nts_verify_secure_tb #(
   reg                    i_op_verify;
   reg                    i_op_copy_tx_ad;
   reg                    i_op_generate_tag;
+  reg                    i_op_store_tx_nonce_tag;
 
   reg  [ADDR_WIDTH+3-1:0] i_copy_rx_addr;
   reg               [9:0] i_copy_rx_bytes;
@@ -94,11 +96,13 @@ module nts_verify_secure_tb #(
 
   wire                    o_tx_read_en;
   reg              [63:0] i_tx_read_data;
+  wire                    o_tx_write_en;
+  wire             [63:0] o_tx_write_data;
   wire [ADDR_WIDTH+3-1:0] o_tx_address;
 
-  wire          o_noncegen_get;
-  reg  [63 : 0] i_noncegen_nonce;
-  reg           i_noncegen_ready;
+  wire                    o_noncegen_get;
+  reg            [63 : 0] i_noncegen_nonce;
+  reg                     i_noncegen_ready;
 
   //----------------------------------------------------------------
   // Helpful debug variables
@@ -117,7 +121,7 @@ module nts_verify_secure_tb #(
     .i_clk(i_clk),
     .o_busy(o_busy),
     .o_verify_tag_ok(o_verify_tag_ok),
-    .i_unrwapped_s2c(i_unrwapped_s2c),
+    .i_unrwapped_s2c(i_unwrapped_s2c),
     .i_unwrapped_c2s(i_unwrapped_c2s),
     .i_unwrapped_word(i_unwrapped_word),
     .i_unwrapped_data(i_unwrapped_data),
@@ -127,6 +131,7 @@ module nts_verify_secure_tb #(
     .i_op_verify(i_op_verify),
     .i_op_copy_tx_ad(i_op_copy_tx_ad),
     .i_op_generate_tag(i_op_generate_tag),
+    .i_op_store_tx_nonce_tag(i_op_store_tx_nonce_tag),
     .i_copy_rx_addr(i_copy_rx_addr),
     .i_copy_rx_bytes(i_copy_rx_bytes),
     .i_copy_tx_addr(i_copy_tx_addr),
@@ -139,6 +144,8 @@ module nts_verify_secure_tb #(
     .i_rx_rd_data(i_rx_rd_data),
     .o_tx_read_en(o_tx_read_en),
     .i_tx_read_data(i_tx_read_data),
+    .o_tx_write_en(o_tx_write_en),
+    .o_tx_write_data(o_tx_write_data),
     .o_tx_address(o_tx_address),
     .o_noncegen_get(o_noncegen_get),
     .i_noncegen_nonce(i_noncegen_nonce),
@@ -162,7 +169,7 @@ module nts_verify_secure_tb #(
   begin : load_c2s
     integer i;
     reg [2:0] j;
-    if (verbose>0) $display("%s:%0d write_c2s", `__FILE__, `__LINE__);
+    if (verbose>1) $display("%s:%0d write_c2s", `__FILE__, `__LINE__);
     for ( i = 0; i < 8; i = i + 1) begin
       j = i[2:0];
       i_unwrapped_c2s = 1;
@@ -177,36 +184,104 @@ module nts_verify_secure_tb #(
   end
   endtask
 
-  reg [63:0] mem_tmp[0:255];
-  reg [ADDR_WIDTH+3-1:0] mem_tmp_baseaddr;
-
-  function [63:0] mem_func( input [ADDR_WIDTH+3-1:0] addr );
-  begin : mem_func__
-    reg [ADDR_WIDTH+3-1:0] a;
-    a = { 3'b000, addr[ADDR_WIDTH+3-1:3] - mem_tmp_baseaddr[ADDR_WIDTH+3-1:3] };
-    if (verbose>2)
-      $display("%s:%0d mem_func(%h)=mem_tmp[%h]=%h", `__FILE__, `__LINE__, addr, a, mem_tmp[a[7:0]]);
-    mem_func = mem_tmp[a[7:0]];
-  end
-  endfunction
-
-  task init_memory_model ( input [ADDR_WIDTH+3-1:0] addr );
-  begin : init_memory_model
+  task write_s2c(
+    input [255:0] s2c
+  );
+  begin : load_s2c
     integer i;
-
-    mem_tmp_baseaddr = addr;
-
+    reg [2:0] j;
+    if (verbose>1) $display("%s:%0d write_s2c", `__FILE__, `__LINE__);
+    for ( i = 0; i < 8; i = i + 1) begin
+      j = i[2:0];
+      i_unwrapped_s2c = 1;
+      i_unwrapped_word = j;
+      i_unwrapped_data = s2c[j*32+:32];
+      #10;
+    end
+    i_unwrapped_s2c = 0;
+    i_unwrapped_word = 0;
+    i_unwrapped_data = 0;
     #10;
-    for (i = 0; i < 256; i = i + 1)
-      mem_tmp[i] = { 32'hffffffff, i };
   end
   endtask
 
-  task write_ad(
+  reg [63:0] mem_rx[0:255];
+  reg [63:0] mem_tx[0:255];
+  reg [ADDR_WIDTH+3-1:0] mem_rx_baseaddr;
+  reg [ADDR_WIDTH+3-1:0] mem_tx_baseaddr;
+
+  function [63:0] mem_rx_func( input [ADDR_WIDTH+3-1:0] addr );
+  begin : mem_rx_func__
+    reg [ADDR_WIDTH+3-1:0] a;
+    a = { 3'b000, addr[ADDR_WIDTH+3-1:3] - mem_rx_baseaddr[ADDR_WIDTH+3-1:3] };
+    if (verbose>2)
+      $display("%s:%0d mem_rx_func(%h)=mem_rx[%h]=%h", `__FILE__, `__LINE__, addr, a, mem_rx[a[7:0]]);
+    mem_rx_func = mem_rx[a[7:0]];
+  end
+  endfunction
+
+  function [63:0] mem_tx_func( input [ADDR_WIDTH+3-1:0] addr );
+  begin : mem_tx_func__
+    reg [ADDR_WIDTH+3-1:0] a;
+    a = { 3'b000, addr[ADDR_WIDTH+3-1:3] - mem_tx_baseaddr[ADDR_WIDTH+3-1:3] };
+    if (verbose>2)
+      $display("%s:%0d mem_tx_func(%h)=mem_tx[%h]=%h", `__FILE__, `__LINE__, addr, a, mem_tx[a[7:0]]);
+    mem_tx_func = mem_tx[a[7:0]];
+  end
+  endfunction
+
+  task mem_tx_update_delayed( input [ADDR_WIDTH+3-1:0] addr, input [63:0] val );
+  begin : mem_tx_upc__
+    reg [ADDR_WIDTH+3-1:0] a;
+    a = { 3'b000, addr[ADDR_WIDTH+3-1:3] - mem_tx_baseaddr[ADDR_WIDTH+3-1:3] };
+    if (verbose>2)
+      $display("%s:%0d mem_tx_update( addr=%h, val=%h) updates mem_tx[%h]", `__FILE__, `__LINE__, addr, val, a);
+    mem_tx[a[7:0]] <= val;
+  end
+  endtask
+
+  task init_memory_model_rx ( input [ADDR_WIDTH+3-1:0] addr );
+  begin : init_memory_model
+    integer i;
+
+    mem_rx_baseaddr = addr;
+
+    #10;
+    for (i = 0; i < 256; i = i + 1)
+      mem_rx[i] = { 32'hffffffff, i };
+  end
+  endtask
+
+  task init_memory_model_tx ( input [ADDR_WIDTH+3-1:0] addr );
+  begin : init_memory_model
+    integer i;
+
+    mem_tx_baseaddr = addr;
+
+    #10;
+    for (i = 0; i < 256; i = i + 1)
+      mem_tx[i] = { 32'heeeeeeee, i };
+  end
+  endtask
+
+  task wait_busy;
+  begin : wait_busy
+    integer i;
+    i = 0;
+    while (o_busy) begin
+      #10;
+      i = i + 1;
+    end
+    if (verbose>1)
+      $display("%s:%0d wait_busy completed in %0d ticks.", `__FILE__, `__LINE__, i);
+  end
+  endtask
+
+  task write_rx_ad(
     input              [9:0] bytes_count,
     input          [16383:0] ad
   );
-  begin : write_ad
+  begin : write_rx_ad
     integer i;
     integer j;
     if (verbose>2) begin
@@ -219,98 +294,144 @@ module nts_verify_secure_tb #(
     for (i = { 27'h0, bytes_count[7:3] }; i > 0; i = i - 1) begin : offset_calc
       integer offset;
       offset = (64*i) + (8*bytes_count[2:0]) - 1;
-      mem_tmp[j] = ad[offset-:64];
+      mem_rx[j] = ad[offset-:64];
       if (verbose>2) begin
         `dump( "", i );
         `dump( "", offset );
-        `dump( "", mem_tmp[j] );
+        `dump( "", mem_rx[j] );
       end
       j = j + 1;
     end
     case (bytes_count[2:0])
-      1: mem_tmp[j] = { ad[0+:8], 56'h0 };
-      2: mem_tmp[j] = { ad[0+:16], 48'h0 };
-      3: mem_tmp[j] = { ad[0+:24], 40'h0 };
-      4: mem_tmp[j] = { ad[0+:32], 32'h0 };
-      5: mem_tmp[j] = { ad[0+:40], 24'h0 };
-      6: mem_tmp[j] = { ad[0+:48], 16'h0 };
-      7: mem_tmp[j] = { ad[0+:56], 8'h0 };
+      1: mem_rx[j] = { ad[0+:8], 56'h0 };
+      2: mem_rx[j] = { ad[0+:16], 48'h0 };
+      3: mem_rx[j] = { ad[0+:24], 40'h0 };
+      4: mem_rx[j] = { ad[0+:32], 32'h0 };
+      5: mem_rx[j] = { ad[0+:40], 24'h0 };
+      6: mem_rx[j] = { ad[0+:48], 16'h0 };
+      7: mem_rx[j] = { ad[0+:56], 8'h0 };
     endcase
     if (verbose>2)
-      `dump( "", mem_tmp[j] );
+      `dump( "", mem_rx[j] );
 
-    while (o_busy) #10;
+    wait_busy();
     i_op_copy_rx_ad = 1;
-    i_copy_rx_addr = mem_tmp_baseaddr;
+    i_copy_rx_addr = mem_rx_baseaddr;
     i_copy_rx_bytes = bytes_count;
     #10;
     i_op_copy_rx_ad = 0;
     `assert(o_busy);
-    while (o_busy) begin
-      #10;
-    end
-
+    wait_busy();
   end
   endtask
 
-  task write_nonce (
+  task write_tx_ad(
+    input     [9:0] bytes_count,
+    input [16383:0] ad
+  );
+  begin : write_tx_ad
+    integer i;
+    integer j;
+    if (verbose>2) begin
+      `dump( "", ad );
+      `dump( " ", bytes_count );
+      `dump( " ", bytes_count[7:3] );
+      `dump( " ", bytes_count[2:0] );
+    end
+    j = 0;
+    for (i = { 27'h0, bytes_count[7:3] }; i > 0; i = i - 1) begin : tx_offset_calc
+      integer offset;
+      offset = (64*i) + (8*bytes_count[2:0]) - 1;
+      mem_tx[j] = ad[offset-:64];
+      if (verbose>2) begin
+        `dump( "", i );
+        `dump( "", offset );
+        `dump( "", mem_rx[j] );
+      end
+      j = j + 1;
+    end
+    case (bytes_count[2:0])
+      1: mem_tx[j] = { ad[0+:8], 56'h0 };
+      2: mem_tx[j] = { ad[0+:16], 48'h0 };
+      3: mem_tx[j] = { ad[0+:24], 40'h0 };
+      4: mem_tx[j] = { ad[0+:32], 32'h0 };
+      5: mem_tx[j] = { ad[0+:40], 24'h0 };
+      6: mem_tx[j] = { ad[0+:48], 16'h0 };
+      7: mem_tx[j] = { ad[0+:56], 8'h0 };
+    endcase
+    if (verbose>2)
+      `dump( "", mem_tx[j] );
+
+    wait_busy();
+    i_op_copy_tx_ad = 1;
+    i_copy_tx_addr = mem_tx_baseaddr;
+    i_copy_tx_bytes = bytes_count;
+    #10;
+    i_op_copy_tx_ad = 0;
+    `assert(o_busy);
+    wait_busy();
+  end
+  endtask
+
+
+  task write_rx_nonce (
     input [127:0] nonce
   );
   begin
-    mem_tmp[32] = nonce[127:64];
-    mem_tmp[33] = nonce[63:0];
-    while (o_busy) #10;
+    mem_rx[32] = nonce[127:64];
+    mem_rx[33] = nonce[63:0];
+    wait_busy();
     i_op_copy_rx_nonce = 1;
-    i_copy_rx_addr = mem_tmp_baseaddr + (32*8);
+    i_copy_rx_addr = mem_rx_baseaddr + (32*8);
     i_copy_rx_bytes = 16;
     #10;
     i_op_copy_rx_nonce = 0;
     `assert(o_busy);
-    while (o_busy) begin
-      #10;
-    end
+    wait_busy();
   end
   endtask
 
-  task write_tag (
+  task write_rx_tag (
     input [127:0] tag
   );
   begin
-    mem_tmp[35] = tag[127:64];
-    mem_tmp[36] = tag[63:0];
-    while (o_busy) #10;
+    mem_rx[35] = tag[127:64];
+    mem_rx[36] = tag[63:0];
+    wait_busy();
     i_op_copy_rx_tag = 1;
-    i_copy_rx_addr = mem_tmp_baseaddr + (35*8);
+    i_copy_rx_addr = mem_rx_baseaddr + (35*8);
     i_copy_rx_bytes = 16;
     #10;
     i_op_copy_rx_tag = 0;
     `assert(o_busy);
-    while (o_busy) begin
-      #10;
-    end
+    wait_busy();
   end
   endtask
 
   task verify_nonce_ad_tag;
   begin : verify__
-    integer i;
-    while (o_busy) #10;
+    wait_busy();
     i_op_verify = 1;
     #10;
     i_op_verify = 0;
     `assert(o_busy);
-    i = 0;
-    while (o_busy) begin
-      #10;
-      i = i + 1;
-    end
-    if (verbose>1)
-      $display("%s:%0d verify_nonce_ad_tag completed in %0d ticks.", `__FILE__, `__LINE__, i);
+    wait_busy();
+  end
+  endtask
+
+  task generate_tag;
+  begin
+    wait_busy();
+    i_op_generate_tag = 1;
+    #10;
+    i_op_generate_tag = 0;
+    `assert(o_busy);
+    wait_busy();
   end
   endtask
 
   task dump_ram_row ( input [7:0] row);
-    $display("%s:%0d dump_ram, ram[0x%h]=0x%h", `__FILE__, `__LINE__, row, dut.mem.ram[row]);
+    $display("%s:%0d dump_ram_rx, ram[0x%h]=0x%h", `__FILE__, `__LINE__, row, dut.mem.ram[row]);
   endtask
 
   task dump_ram( input [7:0] first, input [7:0] last);
@@ -321,83 +442,11 @@ module nts_verify_secure_tb #(
   end
   endtask
 
-  task test_verify (
-     input    [63:0] description,
-     input           expect_success,
-     input   [255:0] c2s,
-     input     [9:0] ad_bytes_count,
-     input [16383:0] ad,
-     input   [127:0] nonce,
-     input   [127:0] tag
-  );
-  begin : test_verify
-    if (verbose>1)
-      $display("%s:%0d test_verify [ %s ] start.", `__FILE__, `__LINE__, description);
-
-    write_c2s(c2s);
-    write_ad( ad_bytes_count, ad );
-    write_nonce( nonce );
-    write_tag( tag );
-
-    verify_nonce_ad_tag();
-
-    if (expect_success) begin
-      `assert(o_verify_tag_ok);
-    end else begin
-      `assert(o_verify_tag_ok == 'b0);
-    end
-
-    if (verbose>1) begin
-      `dump("", o_verify_tag_ok);
-    end
-    if (verbose>0)
-      $display("%s:%0d test_verify [ %s ] completed with expected result (%b).", `__FILE__, `__LINE__, description, expect_success);
-  end
-  endtask
-
-  //----------------------------------------------------------------
-  // Testbench start
-  //----------------------------------------------------------------
-
-  initial begin
-    $display("Test start: %s:%0d", `__FILE__, `__LINE__);
-    i_clk = 0;
-    i_areset = 1;
-    i_unrwapped_s2c = 0;
-    i_unwrapped_c2s = 0;
-    i_unwrapped_word = 0;
-    i_unwrapped_data = 0;
-    i_op_copy_rx_ad = 0;
-    i_op_copy_rx_nonce = 0;
-    i_op_copy_rx_tag = 0;
-    i_op_verify = 0;
-    i_op_copy_tx_ad = 0;
-    i_op_generate_tag = 0;
-    i_copy_rx_addr = 0;
-    i_copy_rx_bytes = 0;
-    i_copy_tx_addr = 0;
-    i_copy_tx_bytes = 0;
-    i_tx_read_data = 0;
-
-    nonce_set = 0;
-    nonce_set_a = 0;
-    nonce_set_b = 0;
-
-    #10;
-    i_areset = 0;
-    #10;
-    init_memory_model( 11'h080 );
-
-    test_verify("case 1", 1, TEST1_C2S, 188, { 14880'h0, TEST1_AD }, TEST1_NONCE, TEST1_TAG);
-
-    if (verbose>1) begin
-      dump_ram(0,40);
-      `dump("", dut.key_c2s_reg);
-      `dump("", dut.core_tag_reg[0] );
-      `dump("", dut.core_tag_reg[1] );
+  task dump_siv;
+  begin
       `dump("aes-siv.", dut.core_config_encdec_reg);
       `dump("aes-siv.", dut.core_key);
-      `dump("aes-siv.", dut.core_config_mode_reg);
+      `dump("aes-siv.", dut.core_config_mode);
       `dump("aes-siv.", dut.core_start_reg);
       `dump("aes-siv.", dut.core_ad_start);
       `dump("aes-siv.", dut.core_ad_length_reg);
@@ -415,30 +464,166 @@ module nts_verify_secure_tb #(
       `dump("aes-siv.", dut.core_tag_out);
       `dump("aes-siv.", dut.core_tag_ok);
       `dump("aes-siv.", dut.core_ready);
+      `dump("aes-siv.", dut.core_tag_out);
+  end
+  endtask
+
+  task test_verify (
+     input    [63:0] description,
+     input           expect_success,
+     input   [255:0] c2s,
+     input     [9:0] ad_bytes_count,
+     input [16383:0] ad,
+     input   [127:0] nonce,
+     input   [127:0] tag
+  );
+  begin : test_verify
+    if (verbose>1) begin : test_verify_debug
+      $display("%s:%0d test_verify [ %s ] start.", `__FILE__, `__LINE__, description);
+      $display("%s:%0d C2S:   %h", `__FILE__, `__LINE__, c2s);
+      $display("%s:%0d AD:    %h", `__FILE__, `__LINE__, ad);
+      $display("%s:%0d Nonce: %h", `__FILE__, `__LINE__, nonce);
+      $display("%s:%0d Tag:   %h", `__FILE__, `__LINE__, tag);
     end
 
-    init_memory_model( 11'h080 );
+    write_c2s(c2s);
+    write_rx_ad( ad_bytes_count, ad );
+    write_rx_nonce( nonce );
+    write_rx_tag( tag );
+
+    verify_nonce_ad_tag();
+
+    if (expect_success) begin
+      `assert(o_verify_tag_ok);
+    end else begin
+      `assert(o_verify_tag_ok == 'b0);
+    end
+
+    if (verbose>1) begin
+      `dump("", o_verify_tag_ok);
+    end
+    if (verbose>0)
+      $display("%s:%0d test_verify [ %s ] completed with expected result (%b).", `__FILE__, `__LINE__, description, expect_success);
+  end
+  endtask
+
+  task test_generate_tag (
+     input    [63:0] description,
+     input   [255:0] s2c,
+     input     [9:0] ad_bytes_count,
+     input [16383:0] ad,
+     input   [127:0] nonce,
+     input   [127:0] tag
+  );
+  begin
+    if (verbose>1) begin
+      $display("%s:%0d test_generate_tag [ %s ] start.", `__FILE__, `__LINE__, description);
+      $display("%s:%0d S2C:   %h", `__FILE__, `__LINE__, s2c);
+      $display("%s:%0d AD:    %h", `__FILE__, `__LINE__, ad);
+      $display("%s:%0d Nonce: %h", `__FILE__, `__LINE__, nonce);
+      $display("%s:%0d Tag:   %h", `__FILE__, `__LINE__, tag);
+    end
+
+    i_areset = 1; /* needed for nonce generation */
+    nonce_set = 1;
+    nonce_set_a = nonce[127:64];
+    nonce_set_b = nonce[63:0];
+    #10;
+    i_areset = 0;
+
+    write_s2c(s2c);
+    write_tx_ad( ad_bytes_count, ad );
+
+    generate_tag();
+
+    `assert( dut.core_tag_out == tag );
+
+    if (verbose>0)
+      $display("%s:%0d test_generate_tag [ %s ] completed. Good tag! Expected: %h... Calculated: %h...", `__FILE__, `__LINE__, description, tag[127-:32], dut.core_tag_out[127-:32]);
+  end
+  endtask
+
+  //----------------------------------------------------------------
+  // Testbench start
+  //----------------------------------------------------------------
+
+  initial begin
+    $display("Test start: %s:%0d", `__FILE__, `__LINE__);
+    i_clk = 0;
+    i_areset = 1;
+    i_unwrapped_s2c = 0;
+    i_unwrapped_c2s = 0;
+    i_unwrapped_word = 0;
+    i_unwrapped_data = 0;
+    i_op_copy_rx_ad = 0;
+    i_op_copy_rx_nonce = 0;
+    i_op_copy_rx_tag = 0;
+    i_op_verify = 0;
+    i_op_copy_tx_ad = 0;
+    i_op_generate_tag = 0;
+    i_op_store_tx_nonce_tag = 0;
+    i_copy_rx_addr = 0;
+    i_copy_rx_bytes = 0;
+    i_copy_tx_addr = 0;
+    i_copy_tx_bytes = 0;
+    i_tx_read_data = 0;
+
+    nonce_set = 0;
+    nonce_set_a = 0;
+    nonce_set_b = 0;
+
+    #10;
+    i_areset = 0;
+    #10;
+    init_memory_model_rx( 11'h080 );
+    init_memory_model_tx( 11'h040 );
+
+    test_verify("case 1", 1, TEST1_C2S, 188, { 14880'h0, TEST1_AD }, TEST1_NONCE, TEST1_TAG);
+
+    if (verbose>1) begin
+      $display("%s:%0d ---------------------------------- Debug after Verify ----------------------------------", `__FILE__, `__LINE__);
+      dump_ram(0,40);
+      `dump("", dut.key_current_reg);
+      `dump("", dut.key_c2s_reg);
+      `dump("", dut.key_s2c_reg);
+      `dump("", dut.core_tag_reg[0] );
+      `dump("", dut.core_tag_reg[1] );
+      dump_siv();
+    end
+
+    init_memory_model_rx( 11'h080 );
+    init_memory_model_tx( 11'h040 );
     //write_ad( 200, 'h0 );
     if (verbose>1)
       dump_ram(0,40);
 
     i_op_copy_tx_ad = 1;
-    i_copy_tx_addr = mem_tmp_baseaddr;
+    i_copy_tx_addr = mem_tx_baseaddr;
     i_copy_tx_bytes = 188;
     #10;
     i_op_copy_tx_ad = 0;
     `assert(o_busy);
-    while(o_busy) #10;
-    if (verbose>1)
-      dump_ram(0,40);
+    wait_busy();
 
-    i_op_generate_tag = 1;
-    #10;
-    i_op_generate_tag = 0;
-    `assert(o_busy);
-    while(o_busy) #10;
-    if (verbose>1)
+    if (verbose>1) begin
+      $display("%s:%0d ---------------------------------- Debug before Generate Tag ----------------------------------", `__FILE__, `__LINE__);
       dump_ram(0,40);
+      dump_siv();
+   end
+
+    generate_tag();
+    if (verbose>1) begin
+      $display("%s:%0d ---------------------------------- Debug after Generate Tag ----------------------------------", `__FILE__, `__LINE__);
+      dump_ram(0,40);
+      dump_siv();
+    end
+
+    test_generate_tag("case 1", TEST1_C2S, 188, { 14880'h0, TEST1_AD }, TEST1_NONCE, TEST1_TAG); //Gen tag
+
+    i_op_store_tx_nonce_tag = 1;
+    #10;
+    i_op_store_tx_nonce_tag = 0;
+    wait_busy();
 
     $display("Test stop: %s:%0d", `__FILE__, `__LINE__);
     $finish;
@@ -482,7 +667,7 @@ module nts_verify_secure_tb #(
       end else if (o_rx_rd_en) begin : rx_buff
         reg [63:0] tmp;
         `assert(o_rx_wordsize == 3); //64bit
-        tmp = mem_func(o_rx_addr);
+        tmp = mem_rx_func(o_rx_addr);
         i_rx_wait <= 1;
         delay_rx_cnt <= 0;
         delay_rx_value <= tmp;
@@ -503,9 +688,13 @@ module nts_verify_secure_tb #(
       i_tx_read_data <= 0;
       if (o_tx_read_en) begin : tx_buff
         reg [63:0] tmp;
-        tmp = mem_func(o_tx_address);
+        tmp = mem_tx_func(o_tx_address);
         i_tx_read_data <= tmp;
-        if (verbose>1) $display("%s:%0d TX-buff[%h]=%h", `__FILE__, `__LINE__, o_tx_address, tmp);
+        if (verbose>1) $display("%s:%0d TX-buff[%h]=%h (read)", `__FILE__, `__LINE__, o_tx_address, tmp);
+      end
+      if (o_tx_write_en) begin
+        mem_tx_update_delayed(o_tx_address, o_tx_write_data);
+        if (verbose>1) $display("%s:%0d TX-buff[%h]=%h (write)", `__FILE__, `__LINE__, o_tx_address, o_tx_write_data);
       end
     end
   end

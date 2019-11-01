@@ -32,7 +32,9 @@
 // Author: Peter Magnusson, Assured AB
 //
 
-module nts_verify_secure_tb #( parameter verbose = 2 );
+module nts_verify_secure_tb #(
+  parameter verbose = 2 // 0: Silent. 1. Informative messages. 2. Traces. 3. Extreme traces.
+);
   localparam [255:0] TEST1_C2S = { 128'h2be26209_fdc335d0_13aeb45a_ecd91f1a,
                                    128'ha4e1055b_8f7fdae8_c592b87d_09200b74 };
 
@@ -56,10 +58,14 @@ module nts_verify_secure_tb #( parameter verbose = 2 );
   localparam RX_PORT_WIDTH = 64;
   localparam ADDR_WIDTH = 8;
 
+  //----------------------------------------------------------------
+  // Inputs and outputs
+  //----------------------------------------------------------------
 
   reg  i_areset; // async reset
   reg  i_clk;
   wire o_busy;
+  wire o_verify_tag_ok;
 
   reg          i_unrwapped_s2c;
   reg          i_unwrapped_c2s;
@@ -70,9 +76,14 @@ module nts_verify_secure_tb #( parameter verbose = 2 );
   reg                    i_op_copy_rx_nonce;
   reg                    i_op_copy_rx_tag;
   reg                    i_op_verify;
+  reg                    i_op_copy_tx_ad;
+  reg                    i_op_generate_tag;
 
   reg  [ADDR_WIDTH+3-1:0] i_copy_rx_addr;
   reg               [9:0] i_copy_rx_bytes;
+
+  reg  [ADDR_WIDTH+3-1:0] i_copy_tx_addr;
+  reg               [9:0] i_copy_tx_bytes;
 
   reg                     i_rx_wait;
   wire [ADDR_WIDTH+3-1:0] o_rx_addr;
@@ -81,10 +92,31 @@ module nts_verify_secure_tb #( parameter verbose = 2 );
   reg                     i_rx_rd_dv;
   reg [RX_PORT_WIDTH-1:0] i_rx_rd_data;
 
+  wire                    o_tx_read_en;
+  reg              [63:0] i_tx_read_data;
+  wire [ADDR_WIDTH+3-1:0] o_tx_address;
+
+  wire          o_noncegen_get;
+  reg  [63 : 0] i_noncegen_nonce;
+  reg           i_noncegen_ready;
+
+  //----------------------------------------------------------------
+  // Helpful debug variables
+  //----------------------------------------------------------------
+
+  reg         nonce_set;
+  reg  [63:0] nonce_set_a;
+  reg  [63:0] nonce_set_b;
+
+  //----------------------------------------------------------------
+  // Design Under Test (DUT)
+  //----------------------------------------------------------------
+
   nts_verify_secure #(.RX_PORT_WIDTH(RX_PORT_WIDTH), .ADDR_WIDTH(ADDR_WIDTH)) dut (
     .i_areset(i_areset),
     .i_clk(i_clk),
     .o_busy(o_busy),
+    .o_verify_tag_ok(o_verify_tag_ok),
     .i_unrwapped_s2c(i_unrwapped_s2c),
     .i_unwrapped_c2s(i_unwrapped_c2s),
     .i_unwrapped_word(i_unwrapped_word),
@@ -93,18 +125,36 @@ module nts_verify_secure_tb #( parameter verbose = 2 );
     .i_op_copy_rx_nonce(i_op_copy_rx_nonce),
     .i_op_copy_rx_tag(i_op_copy_rx_tag),
     .i_op_verify(i_op_verify),
+    .i_op_copy_tx_ad(i_op_copy_tx_ad),
+    .i_op_generate_tag(i_op_generate_tag),
     .i_copy_rx_addr(i_copy_rx_addr),
     .i_copy_rx_bytes(i_copy_rx_bytes),
+    .i_copy_tx_addr(i_copy_tx_addr),
+    .i_copy_tx_bytes(i_copy_tx_bytes),
     .i_rx_wait(i_rx_wait),
     .o_rx_addr(o_rx_addr),
     .o_rx_wordsize(o_rx_wordsize),
     .o_rx_rd_en(o_rx_rd_en),
     .i_rx_rd_dv(i_rx_rd_dv),
-    .i_rx_rd_data(i_rx_rd_data)
+    .i_rx_rd_data(i_rx_rd_data),
+    .o_tx_read_en(o_tx_read_en),
+    .i_tx_read_data(i_tx_read_data),
+    .o_tx_address(o_tx_address),
+    .o_noncegen_get(o_noncegen_get),
+    .i_noncegen_nonce(i_noncegen_nonce),
+    .i_noncegen_ready(i_noncegen_ready)
   );
+
+  //----------------------------------------------------------------
+  // Macros
+  //----------------------------------------------------------------
 
   `define dump(prefix, x) $display("%s:%0d **** %s%s = %h", `__FILE__, `__LINE__, prefix, `"x`", x)
   `define assert(condition) if(!(condition)) begin $display("ASSERT FAILED: %s:%0d %s", `__FILE__, `__LINE__, `"condition`"); $finish(1); end
+
+  //----------------------------------------------------------------
+  // Tasks
+  //----------------------------------------------------------------
 
   task write_c2s(
     input [255:0] c2s
@@ -133,9 +183,10 @@ module nts_verify_secure_tb #( parameter verbose = 2 );
   function [63:0] mem_func( input [ADDR_WIDTH+3-1:0] addr );
   begin : mem_func__
     reg [ADDR_WIDTH+3-1:0] a;
-    a = addr[ADDR_WIDTH+3-1:3] - mem_tmp_baseaddr[ADDR_WIDTH+3-1:3];
-    $display("%s:%0d mem_func(%h)=mem_tmp[%h]=%h", `__FILE__, `__LINE__, addr, a, mem_tmp[a]);
-    mem_func = mem_tmp[a];
+    a = { 3'b000, addr[ADDR_WIDTH+3-1:3] - mem_tmp_baseaddr[ADDR_WIDTH+3-1:3] };
+    if (verbose>2)
+      $display("%s:%0d mem_func(%h)=mem_tmp[%h]=%h", `__FILE__, `__LINE__, addr, a, mem_tmp[a[7:0]]);
+    mem_func = mem_tmp[a[7:0]];
   end
   endfunction
 
@@ -158,18 +209,22 @@ module nts_verify_secure_tb #( parameter verbose = 2 );
   begin : write_ad
     integer i;
     integer j;
-    `dump( "", ad );
-    `dump( " 160 ? ", bytes_count );
-    `dump( " 160 / 8 ? ", bytes_count[7:3] );
-    `dump( " 160 % 8 ? ", bytes_count[2:0] );
+    if (verbose>2) begin
+      `dump( "", ad );
+      `dump( " ", bytes_count );
+      `dump( " ", bytes_count[7:3] );
+      `dump( " ", bytes_count[2:0] );
+    end
     j = 0;
-    for (i = bytes_count[7:3]; i > 0; i = i - 1) begin : offset_calc
+    for (i = { 27'h0, bytes_count[7:3] }; i > 0; i = i - 1) begin : offset_calc
       integer offset;
       offset = (64*i) + (8*bytes_count[2:0]) - 1;
       mem_tmp[j] = ad[offset-:64];
-      `dump( "", i );
-      `dump( "", offset );
-      `dump( "", mem_tmp[j] );
+      if (verbose>2) begin
+        `dump( "", i );
+        `dump( "", offset );
+        `dump( "", mem_tmp[j] );
+      end
       j = j + 1;
     end
     case (bytes_count[2:0])
@@ -181,7 +236,8 @@ module nts_verify_secure_tb #( parameter verbose = 2 );
       6: mem_tmp[j] = { ad[0+:48], 16'h0 };
       7: mem_tmp[j] = { ad[0+:56], 8'h0 };
     endcase
-    `dump( "", mem_tmp[j] );
+    if (verbose>2)
+      `dump( "", mem_tmp[j] );
 
     while (o_busy) #10;
     i_op_copy_rx_ad = 1;
@@ -265,6 +321,44 @@ module nts_verify_secure_tb #( parameter verbose = 2 );
   end
   endtask
 
+  task test_verify (
+     input    [63:0] description,
+     input           expect_success,
+     input   [255:0] c2s,
+     input     [9:0] ad_bytes_count,
+     input [16383:0] ad,
+     input   [127:0] nonce,
+     input   [127:0] tag
+  );
+  begin : test_verify
+    if (verbose>1)
+      $display("%s:%0d test_verify [ %s ] start.", `__FILE__, `__LINE__, description);
+
+    write_c2s(c2s);
+    write_ad( ad_bytes_count, ad );
+    write_nonce( nonce );
+    write_tag( tag );
+
+    verify_nonce_ad_tag();
+
+    if (expect_success) begin
+      `assert(o_verify_tag_ok);
+    end else begin
+      `assert(o_verify_tag_ok == 'b0);
+    end
+
+    if (verbose>1) begin
+      `dump("", o_verify_tag_ok);
+    end
+    if (verbose>0)
+      $display("%s:%0d test_verify [ %s ] completed with expected result (%b).", `__FILE__, `__LINE__, description, expect_success);
+  end
+  endtask
+
+  //----------------------------------------------------------------
+  // Testbench start
+  //----------------------------------------------------------------
+
   initial begin
     $display("Test start: %s:%0d", `__FILE__, `__LINE__);
     i_clk = 0;
@@ -277,89 +371,178 @@ module nts_verify_secure_tb #( parameter verbose = 2 );
     i_op_copy_rx_nonce = 0;
     i_op_copy_rx_tag = 0;
     i_op_verify = 0;
+    i_op_copy_tx_ad = 0;
+    i_op_generate_tag = 0;
     i_copy_rx_addr = 0;
     i_copy_rx_bytes = 0;
+    i_copy_tx_addr = 0;
+    i_copy_tx_bytes = 0;
+    i_tx_read_data = 0;
+
+    nonce_set = 0;
+    nonce_set_a = 0;
+    nonce_set_b = 0;
 
     #10;
     i_areset = 0;
     #10;
-    write_c2s(TEST1_C2S);
-    if (verbose>1) begin
-      `dump("", dut.key_c2s_reg);
-    end
-    `assert( TEST1_C2S == dut.key_c2s_reg );
-
     init_memory_model( 11'h080 );
 
-    write_ad( 188, { 14880'h0, TEST1_AD } );
-    write_nonce( TEST1_NONCE );
-    write_tag( TEST1_TAG );
+    test_verify("case 1", 1, TEST1_C2S, 188, { 14880'h0, TEST1_AD }, TEST1_NONCE, TEST1_TAG);
 
-    dump_ram(0,40);
-    `dump("", dut.core_tag_reg[0] );
-    `dump("", dut.core_tag_reg[1] );
+    if (verbose>1) begin
+      dump_ram(0,40);
+      `dump("", dut.key_c2s_reg);
+      `dump("", dut.core_tag_reg[0] );
+      `dump("", dut.core_tag_reg[1] );
+      `dump("aes-siv.", dut.core_config_encdec_reg);
+      `dump("aes-siv.", dut.core_key);
+      `dump("aes-siv.", dut.core_config_mode_reg);
+      `dump("aes-siv.", dut.core_start_reg);
+      `dump("aes-siv.", dut.core_ad_start);
+      `dump("aes-siv.", dut.core_ad_length_reg);
+      `dump("aes-siv.", dut.core_nonce_start);
+      `dump("aes-siv.", dut.core_nonce_length);
+      `dump("aes-siv.", dut.core_pc_start);
+      `dump("aes-siv.", dut.core_pc_length);
+      `dump("aes-siv.", dut.core_cs);
+      `dump("aes-siv.", dut.core_we);
+      `dump("aes-siv.", dut.core_ack_reg);
+      `dump("aes-siv.", dut.core_addr);
+      `dump("aes-siv.", dut.core_block_rd);
+      `dump("aes-siv.", dut.core_block_wr);
+      `dump("aes-siv.", dut.core_tag_in);
+      `dump("aes-siv.", dut.core_tag_out);
+      `dump("aes-siv.", dut.core_tag_ok);
+      `dump("aes-siv.", dut.core_ready);
+    end
 
-    verify_nonce_ad_tag();
+    init_memory_model( 11'h080 );
+    //write_ad( 200, 'h0 );
+    if (verbose>1)
+      dump_ram(0,40);
 
-    `dump("aes-siv.", dut.core_config_encdec_reg);
-    `dump("aes-siv.", dut.core_key);
-    `dump("aes-siv.", dut.core_config_mode_reg);
-    `dump("aes-siv.", dut.core_start_reg);
-    `dump("aes-siv.", dut.core_ad_start);
-    `dump("aes-siv.", dut.core_ad_length_reg);
-    `dump("aes-siv.", dut.core_nonce_start);
-    `dump("aes-siv.", dut.core_nonce_length);
-    `dump("aes-siv.", dut.core_pc_start);
-    `dump("aes-siv.", dut.core_pc_length);
-    `dump("aes-siv.", dut.core_cs);
-    `dump("aes-siv.", dut.core_we);
-    `dump("aes-siv.", dut.core_ack_reg);
-    `dump("aes-siv.", dut.core_addr);
-    `dump("aes-siv.", dut.core_block_rd);
-    `dump("aes-siv.", dut.core_block_wr);
-    `dump("aes-siv.", dut.core_tag_in);
-    `dump("aes-siv.", dut.core_tag_out);
-    `dump("aes-siv.", dut.core_tag_ok);
-    `dump("aes-siv.", dut.core_ready);
+    i_op_copy_tx_ad = 1;
+    i_copy_tx_addr = mem_tmp_baseaddr;
+    i_copy_tx_bytes = 188;
+    #10;
+    i_op_copy_tx_ad = 0;
+    `assert(o_busy);
+    while(o_busy) #10;
+    if (verbose>1)
+      dump_ram(0,40);
+
+    i_op_generate_tag = 1;
+    #10;
+    i_op_generate_tag = 0;
+    `assert(o_busy);
+    while(o_busy) #10;
+    if (verbose>1)
+      dump_ram(0,40);
 
     $display("Test stop: %s:%0d", `__FILE__, `__LINE__);
     $finish;
   end
 
+/*
   always @*
   begin
-    if (dut.core_ack_reg)
-      $display("%s:%0d Read: %h", `__FILE__, `__LINE__, dut.core_block_rd);
+    if (verbose>2)
+      if (dut.core_ack_reg)
+        $display("%s:%0d Read: %h", `__FILE__, `__LINE__, dut.core_block_rd);
   end
+*/
 
-  integer delay_cnt;
-  reg [63:0] delay_value;
+  //----------------------------------------------------------------
+  // Testbench model: RX-Buff
+  //----------------------------------------------------------------
+
+  integer delay_rx_cnt;
+  reg [63:0] delay_rx_value;
+
   always @(posedge i_clk or posedge i_areset)
   begin
     if (i_areset) begin
       i_rx_wait <= 0;
       i_rx_rd_dv <= 0;
       i_rx_rd_data <= 0;
-      delay_cnt <= 0;
-      delay_value <= 0;
+      delay_rx_cnt <= 0;
+      delay_rx_value <= 0;
     end else begin
       i_rx_rd_dv <= 0;
       i_rx_rd_data <= 0;
       if (i_rx_wait) begin
-        if (delay_cnt < 3) begin
-          delay_cnt <= delay_cnt+1;
+        if (delay_rx_cnt < 3) begin
+          delay_rx_cnt <= delay_rx_cnt+1;
         end else begin
           i_rx_wait <= 0;
           i_rx_rd_dv <= 1;
-          i_rx_rd_data <= delay_value;
+          i_rx_rd_data <= delay_rx_value;
         end
-      end else if (o_rx_rd_en) begin
+      end else if (o_rx_rd_en) begin : rx_buff
+        reg [63:0] tmp;
+        `assert(o_rx_wordsize == 3); //64bit
+        tmp = mem_func(o_rx_addr);
         i_rx_wait <= 1;
-        delay_cnt <= 0;
-        delay_value <= mem_func(o_rx_addr);
+        delay_rx_cnt <= 0;
+        delay_rx_value <= tmp;
+        if (verbose>1) $display("%s:%0d RX-buff[%h]=%h", `__FILE__, `__LINE__, o_rx_addr, tmp);
       end
     end
   end
+
+  //----------------------------------------------------------------
+  // Testbench model: TX-Buff
+  //----------------------------------------------------------------
+
+  always @(posedge i_clk or posedge i_areset)
+  begin
+    if (i_areset) begin
+      i_tx_read_data <= 0;
+    end else begin
+      i_tx_read_data <= 0;
+      if (o_tx_read_en) begin : tx_buff
+        reg [63:0] tmp;
+        tmp = mem_func(o_tx_address);
+        i_tx_read_data <= tmp;
+        if (verbose>1) $display("%s:%0d TX-buff[%h]=%h", `__FILE__, `__LINE__, o_tx_address, tmp);
+      end
+    end
+  end
+
+  //----------------------------------------------------------------
+  // Testbench model: Nonce Generator
+  //----------------------------------------------------------------
+
+  reg   [3:0] nonce_delay;
+
+  always @(posedge i_clk or posedge i_areset)
+  begin
+    if (i_areset) begin
+      i_noncegen_nonce <= 64'h0;
+      i_noncegen_ready <= 0;
+      nonce_delay <= 0;
+    end else begin
+      i_noncegen_ready <= 0;
+      if (nonce_delay == 4'hF) begin
+        nonce_delay <= 0;
+        if (nonce_set) begin
+          i_noncegen_nonce <= (i_noncegen_nonce == nonce_set_a) ? nonce_set_b : nonce_set_a;
+        end else begin
+          i_noncegen_nonce <= i_noncegen_nonce + 1;
+        end
+        i_noncegen_ready <= 1;
+      end else if (nonce_delay > 0) begin
+        nonce_delay <= nonce_delay + 1;
+      end else if (o_noncegen_get) begin
+        nonce_delay <= 1;
+      end
+    end
+  end
+
+  //----------------------------------------------------------------
+  // Testbench System Clock Generator
+  //----------------------------------------------------------------
 
   always begin
     #5 i_clk = ~i_clk;

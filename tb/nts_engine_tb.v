@@ -464,7 +464,7 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
   always  @(posedge i_clk or posedge i_areset)
   begin
     if (i_areset) begin
-      i_ntp_time = 64'h0000_0001_0000_00000;
+      i_ntp_time = 64'h0000_0001_0000_0000;
     end else begin
       i_ntp_time = i_ntp_time + 1;
     end

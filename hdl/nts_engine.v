@@ -67,7 +67,7 @@ module nts_engine #(
   // Internal constant and parameter definitions.
   //----------------------------------------------------------------
 
-  localparam ACCESS_PORT_WIDTH       = 32;
+  localparam ACCESS_PORT_WIDTH       = 64;
 
   localparam STATE_RESET             = 4'h0;
   localparam STATE_EMPTY             = 4'h1;
@@ -154,6 +154,42 @@ module nts_engine #(
   wire                         parser_muxctrl_timestamp_ipv4;
   wire                         parser_muxctrl_timestamp_ipv6;
 
+
+  wire                    crypto_parser_busy;
+  wire                    crypto_parser_verify_tag_ok;
+  wire                    parser_crypto_rx_op_copy_ad;
+  wire                    parser_crypto_rx_op_copy_nonce;
+  wire                    parser_crypto_rx_op_copy_pc;
+  wire                    parser_crypto_rx_op_copy_tag;
+  wire [ADDR_WIDTH+3-1:0] parser_crypto_rx_addr;
+  wire              [9:0] parser_crypto_rx_bytes;
+  wire                    parser_crypto_tx_op_copy_ad;
+  wire                    parser_crypto_tx_op_store_nonce_tag;
+  wire                    parser_crypto_tx_op_store_cookie;
+  wire [ADDR_WIDTH+3-1:0] parser_crypto_tx_addr;
+  wire              [9:0] parser_crypto_tx_bytes;
+  wire                    parser_crypto_op_cookie_verify;
+  wire                    parser_crypto_op_cookie_loadkeys;
+  wire                    parser_crypto_op_cookie_rencrypt;
+  wire                    parser_crypto_op_c2s_verify_auth;
+  wire                    parser_crypto_op_s2c_generate_auth;
+  wire                    rxbuf_crypto_wait;
+  wire [ADDR_WIDTH+3-1:0] crypto_rxbuf_addr;
+  wire              [2:0] crypto_rxbuf_wordsize;
+  wire                    crypto_rxbuf_rd_en;
+  wire                    crypto_rxbuf_rd_dv;
+  wire             [63:0] crypto_rxbuf_rd_data;
+  wire                    crypto_txbuf_read_en;
+  wire             [63:0] txbuf_crypto_read_data;
+  wire                    crypto_txbuf_write_en;
+  wire             [63:0] crypto_txbuf_write_data;
+  wire [ADDR_WIDTH+3-1:0] crypto_txbuf_address;
+  wire                    crypto_noncegen_get;
+  wire             [63:0] noncegen_crypto_nonce;
+  wire                    noncegen_crypto_ready;
+
+  wire             [31:0] ZERO;
+
   //----------------------------------------------------------------
   // Concurrent connectivity for ports etc.
   //----------------------------------------------------------------
@@ -170,6 +206,8 @@ module nts_engine #(
   assign o_detect_nts_cookie             = detect_nts_cookie;
   assign o_detect_nts_cookie_placeholder = detect_nts_cookie_placeholder;
   assign o_detect_nts_authenticator      = detect_nts_authenticator;
+
+  assign ZERO                            = 0;
 
   //----------------------------------------------------------------
   // API instantiation.
@@ -420,5 +458,68 @@ module nts_engine #(
     .i_api_write_data(api_write_data),
     .o_api_read_data(api_read_data_clock)
   );
+
+  //----------------------------------------------------------------
+  // NTS Verify Secure instantiation.
+  //----------------------------------------------------------------
+
+  nts_verify_secure crypto (
+    .i_areset(i_areset),
+    .i_clk(i_clk),
+
+    .o_busy         ( crypto_parser_busy ),
+
+    .o_verify_tag_ok( crypto_parser_verify_tag_ok ),
+
+    .i_key_word   ( keymem_internal_key_word   ),
+    .i_key_valid  ( keymem_internal_key_valid  ),
+    .i_key_length ( keymem_internal_key_length ),
+    .i_key_data   ( keymem_internal_key_data   ),
+
+    .i_unrwapped_s2c  ( ZERO[ 0:0] ),
+    .i_unwrapped_c2s  ( ZERO[ 0:0] ),
+    .i_unwrapped_word ( ZERO[ 2:0] ),
+    .i_unwrapped_data ( ZERO[31:0] ),
+
+    .i_op_copy_rx_ad    ( parser_crypto_rx_op_copy_ad    ),
+    .i_op_copy_rx_nonce ( parser_crypto_rx_op_copy_nonce ),
+    .i_op_copy_rx_pc    ( parser_crypto_rx_op_copy_pc    ),
+    .i_op_copy_rx_tag   ( parser_crypto_rx_op_copy_tag   ),
+    .i_copy_rx_addr     ( parser_crypto_rx_addr          ), //Specify memory address in RX buf
+    .i_copy_rx_bytes    ( parser_crypto_rx_bytes         ),
+
+    .i_op_copy_tx_ad         ( parser_crypto_tx_op_copy_ad         ), //Read packet stored in TX buff for transfer
+    .i_op_store_tx_nonce_tag ( parser_crypto_tx_op_store_nonce_tag ), //Write raw packet auth: (nonce)(tag)
+    .i_op_store_tx_cookie    ( parser_crypto_tx_op_store_cookie    ), //Write raw cookie: (nonce)(tag)(ciphertext)
+    .i_copy_tx_addr          ( parser_crypto_tx_addr               ), //Specify memory address in TX buf
+    .i_copy_tx_bytes         ( parser_crypto_tx_bytes              ),
+
+    .i_op_cookie_verify      ( parser_crypto_op_cookie_verify   ), //Decipher and authenticate (nonce)(tag)(ciphertext) user server key
+    .i_op_cookie_loadkeys    ( parser_crypto_op_cookie_loadkeys ), //Copy S2C, C2S from RAM to Registers,
+    .i_op_cookie_rencrypt    ( parser_crypto_op_cookie_rencrypt ), //Encrypt (nonce)(plaintext) into (nonce)(tag)(ciphertext)
+
+    .i_op_verify_c2s   ( parser_crypto_op_c2s_verify_auth   ), //Authenticate an incomming packet using C2S key
+    .i_op_generate_tag ( parser_crypto_op_s2c_generate_auth ), //Authenticate an outbound packet using S2C key
+
+    .i_rx_wait     ( rxbuf_crypto_wait     ),
+    .o_rx_addr     ( crypto_rxbuf_addr     ),
+    .o_rx_wordsize ( crypto_rxbuf_wordsize ),
+    .o_rx_rd_en    ( crypto_rxbuf_rd_en    ),
+    .i_rx_rd_dv    ( crypto_rxbuf_rd_dv    ),
+    .i_rx_rd_data  ( crypto_rxbuf_rd_data  ),
+
+    .o_tx_read_en    ( crypto_txbuf_read_en    ),
+    .i_tx_read_data  ( txbuf_crypto_read_data  ),
+    .o_tx_write_en   ( crypto_txbuf_write_en   ),
+    .o_tx_write_data ( crypto_txbuf_write_data ),
+    .o_tx_address    ( crypto_txbuf_address    ),
+
+    .o_noncegen_get   ( crypto_noncegen_get   ),
+    .i_noncegen_nonce ( noncegen_crypto_nonce ),
+    .i_noncegen_ready ( noncegen_crypto_ready )
+
+  );
+
+  //----------------------------------------------------------------
 
 endmodule

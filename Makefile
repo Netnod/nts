@@ -80,6 +80,8 @@ lint-submodules:
 	make -C sub/aes-siv/toolruns lint
 	make -C sub/cmac/toolruns lint
 	make -C sub/keymem/toolruns lint
+	make -C sub/nts_noncegen/toolruns lint
+	make -C sub/siphash/toolruns lint
 
 DIRS: output/vvp
 

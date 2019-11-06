@@ -14,3 +14,11 @@
 	path = sub/aes
 	url = https://gitlab.netnod.se/tid-och-takt/aes.git
         ignore = dirty
+[submodule "sub/nts_noncegen"]
+	path = sub/nts_noncegen
+	url = https://gitlab.netnod.se/tid-och-takt/nts_noncegen.git
+        ignore = dirty
+[submodule "sub/siphash"]
+	path = sub/siphash
+	url = https://gitlab.netnod.se/tid-och-takt/siphash.git
+        ignore = dirty

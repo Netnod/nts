@@ -40,6 +40,11 @@ module nts_verify_secure #(
 
   output wire                         o_verify_tag_ok,
 
+  input wire                  [3 : 0] i_key_word,
+  input wire                          i_key_valid,
+  input wire                          i_key_length,
+  input wire                 [31 : 0] i_key_data,
+
   input  wire                         i_unrwapped_s2c,
   input  wire                         i_unwrapped_c2s,
   input  wire                 [2 : 0] i_unwrapped_word,
@@ -47,17 +52,23 @@ module nts_verify_secure #(
 
   input  wire                         i_op_copy_rx_ad,
   input  wire                         i_op_copy_rx_nonce,
+  input  wire                         i_op_copy_rx_pc,
   input  wire                         i_op_copy_rx_tag,
-  input  wire                         i_op_verify,
-  input  wire                         i_op_copy_tx_ad,
-  input  wire                         i_op_generate_tag,
-  input  wire                         i_op_store_tx_nonce_tag,
-
   input  wire      [ADDR_WIDTH+3-1:0] i_copy_rx_addr,
   input  wire                   [9:0] i_copy_rx_bytes,
 
+  input  wire                         i_op_copy_tx_ad,
+  input  wire                         i_op_store_tx_nonce_tag,
+  input  wire                         i_op_store_tx_cookie,
   input  wire      [ADDR_WIDTH+3-1:0] i_copy_tx_addr,
   input  wire                   [9:0] i_copy_tx_bytes,
+
+  input  wire                         i_op_cookie_verify,
+  input  wire                         i_op_cookie_loadkeys,
+  input  wire                         i_op_cookie_rencrypt,
+
+  input  wire                         i_op_verify_c2s,
+  input  wire                         i_op_generate_tag,
 
   input  wire                         i_rx_wait,
   output wire      [ADDR_WIDTH+3-1:0] o_rx_addr,
@@ -82,28 +93,31 @@ module nts_verify_secure #(
   // Local parameters
   //----------------------------------------------------------------
 
-  localparam BITS_STATE = 4;
+  localparam BITS_STATE = 5;
   localparam [BITS_STATE-1:0] STATE_IDLE               = 0;
-  localparam [BITS_STATE-1:0] STATE_COPY_RX_INIT_AD    = 1;
+  localparam [BITS_STATE-1:0] STATE_COPY_RX_INIT_PC    = 1;
   localparam [BITS_STATE-1:0] STATE_COPY_RX_INIT_NONCE = 2;
-  localparam [BITS_STATE-1:0] STATE_COPY_RX_INIT_TAG   = 3;
-  localparam [BITS_STATE-1:0] STATE_COPY_RX            = 4;
-  localparam [BITS_STATE-1:0] STATE_COPY_RX_TAG        = 5;
-  localparam [BITS_STATE-1:0] STATE_SIV_VERIFY_WAIT_0  = 6;
-  localparam [BITS_STATE-1:0] STATE_SIV_VERIFY_WAIT_1  = 7;
-  localparam [BITS_STATE-1:0] STATE_COPY_TX_INIT_AD    = 8;
-  localparam [BITS_STATE-1:0] STATE_COPY_TX            = 9;
-  localparam [BITS_STATE-1:0] STATE_AUTH_MEMSTORE_NONCE= 10;
-  localparam [BITS_STATE-1:0] STATE_SIV_AUTH_WAIT_0    = 11;
-  localparam [BITS_STATE-1:0] STATE_SIV_AUTH_WAIT_1    = 12;
-  localparam [BITS_STATE-1:0] STATE_STORE_TX_AUTH_INIT = 13;
-  localparam [BITS_STATE-1:0] STATE_STORE_TX_AUTH      = 14;
-  localparam [BITS_STATE-1:0] STATE_ERROR              = 15;
+  localparam [BITS_STATE-1:0] STATE_COPY_RX_INIT_AD    = 3;
+  localparam [BITS_STATE-1:0] STATE_COPY_RX_INIT_TAG   = 4;
+  localparam [BITS_STATE-1:0] STATE_COPY_RX            = 5;
+  localparam [BITS_STATE-1:0] STATE_COPY_RX_TAG        = 6;
+  localparam [BITS_STATE-1:0] STATE_SIV_VERIFY_WAIT_0  = 7;
+  localparam [BITS_STATE-1:0] STATE_SIV_VERIFY_WAIT_1  = 8;
+  localparam [BITS_STATE-1:0] STATE_COPY_TX_INIT_AD    = 9;
+  localparam [BITS_STATE-1:0] STATE_COPY_TX            = 10;
+  localparam [BITS_STATE-1:0] STATE_AUTH_MEMSTORE_NONCE= 11;
+  localparam [BITS_STATE-1:0] STATE_SIV_AUTH_WAIT_0    = 12;
+  localparam [BITS_STATE-1:0] STATE_SIV_AUTH_WAIT_1    = 13;
+  localparam [BITS_STATE-1:0] STATE_STORE_TX_AUTH_INIT = 14;
+  localparam [BITS_STATE-1:0] STATE_STORE_TX_AUTH      = 15;
+  localparam [BITS_STATE-1:0] STATE_STORE_TX_COOKIE    = 16;
+  localparam [BITS_STATE-1:0] STATE_LOAD_KEYS_FROM_MEM = 17;
+  localparam [BITS_STATE-1:0] STATE_ERROR              = 31;
 
   /* MEM8 addresses must be lsb=0 */
-  localparam [7:0] MEM8_ADDR_AD    = 8;
-  localparam [7:0] MEM8_ADDR_PC    = 0;
-  localparam [7:0] MEM8_ADDR_NONCE = 4;
+  localparam [7:0] MEM8_ADDR_NONCE =  0;
+  localparam [7:0] MEM8_ADDR_PC    =  2; // 0 + 64sizeof(nonce)                 Nonce is 128 bit, 2x64 blocks
+  localparam [7:0] MEM8_ADDR_AD    = 10; // 0 + 64sizeof(nonce) + 64sizeof(PC). PC is 512 bit, 8x64 blocks
 
   localparam MODE_DECRYPT = 0;
   localparam MODE_ENCRYPT = 1;
@@ -126,6 +140,11 @@ module nts_verify_secure #(
   reg  [255:0] key_current_new;
   reg  [255:0] key_current_reg;
 
+  reg          key_master_we;
+  reg    [2:0] key_master_addr;
+  reg   [31:0] key_master_new;
+  reg  [255:0] key_master_reg;
+
   reg          key_c2s_we;
   reg    [2:0] key_c2s_addr;
   reg   [31:0] key_c2s_new;
@@ -135,6 +154,11 @@ module nts_verify_secure #(
   reg    [2:0] key_s2c_addr;
   reg   [31:0] key_s2c_new;
   reg  [255:0] key_s2c_reg;
+
+  reg          load_c2s_we;
+  reg          load_s2c_we;
+  reg    [0:0] load_addr;
+  reg  [127:0] load_new;            //128bit interface for reloading key_c2s, key_s2c
 
   reg          core_tag_we   [0:1];
   reg   [63:0] core_tag_new;
@@ -152,6 +176,10 @@ module nts_verify_secure #(
   reg [19 : 0] core_ad_length_reg;
   reg [19 : 0] core_ad_length_new;
   reg          core_ad_length_we;
+
+  reg          core_pc_length_mux_reg;
+  reg          core_pc_length_mux_new;
+  reg          core_pc_length_mux_we;
 
   //----------------------------------------------------------------
   // Registers - RX buffer access related
@@ -188,6 +216,18 @@ module nts_verify_secure #(
   reg                    tx_addr_next_we;
   reg [ADDR_WIDTH+3-1:0] tx_addr_next_new;
   reg [ADDR_WIDTH+3-1:0] tx_addr_next_reg; //Memory address in RX buffer.
+
+  reg                    tx_ctr_we;
+  reg              [3:0] tx_ctr_new;
+  reg              [3:0] tx_ctr_reg;
+
+  //----------------------------------------------------------------
+  // Registers - Self references. Load C2S, S2C from RAM
+  //----------------------------------------------------------------
+
+  reg                    ramld_addr_we;
+  reg              [7:0] ramld_addr_new;
+  reg              [7:0] ramld_addr_reg; //Memory address in internal mem.
 
   //----------------------------------------------------------------
   // Registers - Misc.
@@ -242,6 +282,8 @@ module nts_verify_secure #(
   //----------------------------------------------------------------
   // Wires - RAM related
   //----------------------------------------------------------------
+
+  reg          ramld_en;    // Load unwrapped key from RAM wire (mux input)
 
   reg          ramrx_en;    // RX access logic RAM wires (mux input)
   reg          ramrx_we;    // RX access logic RAM wires (mux input)
@@ -309,7 +351,7 @@ module nts_verify_secure #(
   assign core_nonce_length = 16;
 
   assign core_pc_start = { 9'h0, MEM8_ADDR_PC[7:1] };
-  assign core_pc_length = 0;
+  assign core_pc_length = core_pc_length_mux_reg ? 64 /* 512 = 2x256 C2S, S2C, 128+128bits keys */ : 0;
 
   assign core_tag_in = { core_tag_reg[0], core_tag_reg[1] };
 
@@ -389,10 +431,12 @@ module nts_verify_secure #(
       core_ack_reg <= 0;
       core_ad_length_reg <= 0;
       core_config_encdec_reg <= 0;
+      core_pc_length_mux_reg <= 0;
       core_start_reg <= 0;
       core_tag_reg[0] <= 0;
       core_tag_reg[1] <= 0;
       key_current_reg <= 0;
+      key_master_reg <= 0;
       key_c2s_reg <= 0;
       key_s2c_reg <= 0;
       nonce_a_reg <= 0;
@@ -400,6 +444,7 @@ module nts_verify_secure #(
       nonce_b_reg <= 0;
       nonce_b_valid_reg <= 0;
       nonce_generate_reg <= 0;
+      ramld_addr_reg <= 0;
       ramrx_addr_reg <= 0;
       ramtx_addr_reg <= 0;
       rx_addr_last_reg <= 0;
@@ -408,6 +453,7 @@ module nts_verify_secure #(
       state_reg <= 0;
       tx_addr_last_reg <= 0;
       tx_addr_next_reg <= 0;
+      tx_ctr_reg <= 0;
       verify_tag_ok_reg <= 0;
     end else begin
       core_ack_reg <= core_cs; // Memory always responds next cycle
@@ -421,6 +467,9 @@ module nts_verify_secure #(
 
       core_start_reg <= core_start_new;
 
+      if (core_pc_length_mux_we)
+       core_pc_length_mux_reg <= core_pc_length_mux_new;
+
       if (core_tag_we[0])
         core_tag_reg[0] <= core_tag_new;
 
@@ -430,11 +479,18 @@ module nts_verify_secure #(
       if (key_current_we)
         key_current_reg <= key_current_new;
 
+      if (key_master_we)
+        key_master_reg[key_master_addr*32+:32] <= key_master_new;
+
       if (key_c2s_we)
         key_c2s_reg[key_c2s_addr*32+:32] <= key_c2s_new;
+      else if (load_c2s_we)
+        key_c2s_reg[load_addr*128+:128] <= load_new;
 
       if (key_s2c_we)
         key_s2c_reg[key_s2c_addr*32+:32] <= key_s2c_new;
+      else if (load_s2c_we)
+        key_s2c_reg[load_addr*128+:128] <= load_new;
 
       if (nonce_a_we) begin
         nonce_a_reg <= nonce_new;
@@ -448,6 +504,9 @@ module nts_verify_secure #(
 
       if (nonce_generate_we)
         nonce_generate_reg <= nonce_generate_new;
+
+      if (ramld_addr_we)
+        ramld_addr_reg <= ramld_addr_new;
 
       if (ramrx_addr_we)
         ramrx_addr_reg <= ramrx_addr_new;
@@ -473,6 +532,9 @@ module nts_verify_secure #(
       if (tx_addr_next_we)
         tx_addr_next_reg <= tx_addr_next_new;
 
+      if (tx_ctr_we)
+        tx_ctr_reg <= tx_ctr_new;
+
       if (verify_tag_ok_we)
         verify_tag_ok_reg <= verify_tag_ok_new;
     end
@@ -488,7 +550,7 @@ module nts_verify_secure #(
     verify_tag_ok_new = 0;
     case (state_reg)
       STATE_IDLE:
-        if (i_op_verify) begin
+        if (i_op_verify_c2s || i_op_cookie_verify) begin
           verify_tag_ok_we = 1;
           verify_tag_ok_new = 0;
         end
@@ -559,6 +621,24 @@ module nts_verify_secure #(
           ram_a_addr = ramtx_addr_reg;
           ram_a_wdata = ramtx_wdata;
         end
+      STATE_STORE_TX_COOKIE:
+        begin
+          ram_a_en = ramtx_en;
+          ram_a_we = ramtx_we;
+          ram_a_addr = ramtx_addr_reg;
+          ram_a_wdata = ramtx_wdata;
+        end
+      STATE_LOAD_KEYS_FROM_MEM:
+        begin
+          ram_a_en = ramld_en;
+          ram_a_we = 0;
+          ram_a_addr = ramld_addr_reg;
+          ram_a_wdata = 0;
+          ram_b_en = ramld_en;
+          ram_b_we = 0;
+          ram_b_addr = ramld_addr_reg + 1;
+          ram_b_wdata = 0;
+        end
       default:
         begin
           ram_a_en = core_cs;
@@ -570,6 +650,91 @@ module nts_verify_secure #(
           ram_b_addr = { core_addr[6:0], 1'b1 }; //1'b1: 64bit LSB
           ram_b_wdata = core_block_wr[63:0];
         end
+    endcase
+  end
+
+  //----------------------------------------------------------------
+  // Master key handler
+  // Receives server keys from keymem (server keys)
+  //----------------------------------------------------------------
+
+  always @*
+  begin : master_key_receiver
+    key_master_we = 0;
+    key_master_addr = 0;
+    key_master_new = 0;
+    if (state_reg == STATE_IDLE) begin
+      if (i_key_valid) begin
+        if (i_key_length) begin
+          $display("%s:%0d ERROR, 512 (256+256) bit detected, only 256 (128+128) bit keys currently supported", `__FILE__, `__LINE__);
+          //TODO set a bad key bit to indicate system in error state.
+        end else if (i_key_word[3]) begin
+          $display("%s:%0d ERROR, 512 (256+256) bit detected when i_key_length==0, invalid input!", `__FILE__, `__LINE__);
+          //TODO set a bad key bit to indicate system in error state.
+        end else begin
+          key_master_we = 1;
+          key_master_new = i_key_data;
+          key_master_addr = i_key_word[2:0];
+        end
+      end
+    end
+  end
+
+  //----------------------------------------------------------------
+  // Load C2S, S2C keys from RAM
+  //----------------------------------------------------------------
+
+  always @*
+  begin : load_keys_from_ram
+    load_addr = 0;
+    load_new = { ram_a_rdata, ram_b_rdata };
+    load_c2s_we = 0;
+    load_s2c_we = 0;
+    ramld_en = 0;
+    ramld_addr_we = 0;
+    ramld_addr_new = 0;
+    case (state_reg)
+      STATE_IDLE:
+        if (i_op_cookie_loadkeys) begin
+          ramld_addr_we = 1;
+          ramld_addr_new = MEM8_ADDR_PC;
+        end
+      STATE_LOAD_KEYS_FROM_MEM:
+        begin
+          ramld_addr_we = 1;
+          ramld_addr_new = ramld_addr_reg + 2;
+          case (ramld_addr_reg)
+            MEM8_ADDR_PC + 0:
+              begin
+                ramld_en = 1;
+              end
+            MEM8_ADDR_PC + 2:
+              begin
+                load_addr = 1; // msb
+                load_c2s_we = 1;
+                ramld_en = 1;
+              end
+            MEM8_ADDR_PC + 4:
+              begin
+                load_addr = 0; // lsb
+                load_c2s_we = 1;
+                ramld_en = 1;
+              end
+            MEM8_ADDR_PC + 6:
+              begin
+                load_addr = 1; // msb
+                load_s2c_we = 1;
+                ramld_en = 1;
+              end
+            MEM8_ADDR_PC + 8:
+              begin
+                load_addr = 0; // lsb
+                load_s2c_we = 1;
+              end
+            default: ;
+          endcase
+        end
+      default: ;
     endcase
   end
 
@@ -627,11 +792,21 @@ module nts_verify_secure #(
     rx_tag_new = 0;
     case (state_reg)
       STATE_IDLE:
-        if (i_op_copy_rx_ad || i_op_copy_rx_nonce || i_op_copy_rx_tag) begin
+        if (i_op_copy_rx_pc || i_op_copy_rx_ad || i_op_copy_rx_nonce || i_op_copy_rx_tag) begin
           rx_addr_last_we = 1;
           rx_addr_last_new = i_copy_rx_addr + i_copy_rx_bytes;
           rx_addr_next_we = 1;
           rx_addr_next_new = i_copy_rx_addr;
+        end
+      STATE_COPY_RX_INIT_PC:
+        if (i_rx_wait == 'b0) begin
+          ramrx_addr_we = 1;
+          ramrx_addr_new = MEM8_ADDR_PC;
+          rx_addr = rx_addr_next_reg;
+          rx_rd_en = 1;
+          rx_addr_next_we = 1;
+          rx_addr_next_new = rx_addr_next_reg + 8;
+          //$display("%s:%0d RX READ ADDR: %h", `__FILE__, `__LINE__, rx_addr);
         end
       STATE_COPY_RX_INIT_AD:
         if (i_rx_wait == 'b0) begin
@@ -701,6 +876,27 @@ module nts_verify_secure #(
   end
 
   //----------------------------------------------------------------
+  // TX Handler Helper tasks
+  // Tasks for:
+  //  * Communicateing with TX buffer.
+  //  * Sets RAMTX access
+  // Without these it is a bit too much repetitivive code in TX
+  // handler.
+  //----------------------------------------------------------------
+
+  task tx_load_ram_and_emit (
+    input        ramload,
+    input [63:0] data_out
+  );
+  begin
+    ramtx_en = ramload;
+    ramtx_we = 0;
+    tx_wr_en = 1;
+    tx_wr_data = data_out;
+  end
+  endtask
+
+  //----------------------------------------------------------------
   // TX Handler
   // Communicates with TX buffer.
   // Sets RAMTX access for storing AD, nonce to local memory.
@@ -712,6 +908,9 @@ module nts_verify_secure #(
     ramtx_we = 0;
     ramtx_addr_we = 0;
     ramtx_addr_new = 0;
+    ramtx_wdata = 0;
+    tx_ctr_we = 0;
+    tx_ctr_new = 0;
     tx_wr_en = 0;
     tx_wr_data = 0;
     tx_rd_en = 0;
@@ -730,9 +929,19 @@ module nts_verify_secure #(
         end
         else if (i_op_store_tx_nonce_tag) begin
           tx_addr_last_we = 1;
-          tx_addr_last_new = i_copy_tx_addr + 'h20;
+          tx_addr_last_new = i_copy_tx_addr + 'h20; //Nonce,Tag
           tx_addr_next_we = 1;
           tx_addr_next_new = i_copy_tx_addr;
+          ramtx_addr_we = 1;
+          ramtx_addr_new = MEM8_ADDR_NONCE;
+        end
+        else if (i_op_store_tx_cookie) begin
+          tx_addr_last_we = 1;
+          tx_addr_last_new = i_copy_tx_addr + 'h60; //Nonce,Tag,C2S,S2C
+          tx_addr_next_we = 1;
+          tx_addr_next_new = i_copy_tx_addr;
+          tx_ctr_we = 1;
+          tx_ctr_new = 0;
           ramtx_addr_we = 1;
           ramtx_addr_new = MEM8_ADDR_NONCE;
         end
@@ -798,6 +1007,43 @@ module nts_verify_secure #(
           endcase
           //$display("%s:%0d %h %h %h", `__FILE__, `__LINE__, ramtx_addr_reg, tx_wr_en, tx_wr_data);
         end
+      STATE_STORE_TX_COOKIE:
+        begin
+          ramtx_addr_we = 1;
+          ramtx_addr_new = ramtx_addr_reg + 1; //MEM8_ADDR_NONCE, +1, ... then MEM8_ADDR_PC, +1, +2, ...
+          tx_addr = tx_addr_next_reg;
+          tx_addr_next_we = 1;
+          tx_addr_next_new = tx_addr_next_reg + 8;
+          tx_ctr_we = 1;
+          tx_ctr_new = tx_ctr_reg + 1;
+          case (tx_ctr_reg)
+            'h0: //Load only
+              begin
+                tx_addr_next_we = 0; // Do not update tx_addr on first out
+                ramtx_en = 1;
+                ramtx_we = 0;
+              end
+            'h1: tx_load_ram_and_emit(1, ram_a_rdata); //Nonce MSB from previous cycle
+            'h2: tx_load_ram_and_emit(0, ram_a_rdata); //Nonce LSB from previous cycle
+            'h3: //Tag0
+              begin
+                ramtx_addr_we = 1;
+                ramtx_addr_new = MEM8_ADDR_PC;
+                tx_load_ram_and_emit(0, core_tag_out[127:64]); 
+              end
+            'h4: tx_load_ram_and_emit(1, core_tag_out[63:0]); //Load from MEM8_ADDR_PC
+            'h5: tx_load_ram_and_emit(1, ram_a_rdata); //C0 (C2S 0)
+            'h6: tx_load_ram_and_emit(1, ram_a_rdata); //C1 (C2S 1)
+            'h7: tx_load_ram_and_emit(1, ram_a_rdata); //C2 (C2S 2)
+            'h8: tx_load_ram_and_emit(1, ram_a_rdata); //C3 (C2S 3)
+            'h9: tx_load_ram_and_emit(1, ram_a_rdata); //C4 (S2C 0)
+            'ha: tx_load_ram_and_emit(1, ram_a_rdata); //C5 (S2C 1)
+            'hb: tx_load_ram_and_emit(1, ram_a_rdata); //C6 (S2C 2)
+            'hc: tx_load_ram_and_emit(0, ram_a_rdata); //C7 (S2C 3)
+            default: ;
+          endcase;
+          //$display("%s:%0d tx_ctr_reg=%h tx_wr_en=%h tx_addr=%h tx_wr_data=%h", `__FILE__, `__LINE__, tx_ctr_reg, tx_wr_en, tx_addr, tx_wr_data);
+        end
       default: ;
     endcase
   end
@@ -809,6 +1055,8 @@ module nts_verify_secure #(
 
   always @*
   begin : aes_siv_core_ctrl
+    core_pc_length_mux_we = 0;
+    core_pc_length_mux_new = 0;
     core_ad_length_we = 0;
     core_ad_length_new = 0;
     core_config_we = 0;
@@ -828,21 +1076,50 @@ module nts_verify_secure #(
             core_ad_length_we = 1;
             core_ad_length_new = { 10'b0, i_copy_tx_bytes };
           end
-          if (i_op_verify) begin
+          if (i_op_verify_c2s) begin
             core_config_we = 1;
             core_config_encdec_new = MODE_DECRYPT;
+            core_pc_length_mux_we = 1;
+            core_pc_length_mux_new = 0;
             core_start_new = 1;
             key_current_we = 1;
             key_current_new = key_c2s_reg;
           end
+          if (i_op_generate_tag) begin
+            core_config_we = 1;
+            core_config_encdec_new = MODE_ENCRYPT;
+            core_pc_length_mux_we = 1;
+            core_pc_length_mux_new = 0;
+            core_start_new = 0; //Occurs later, in STATE_AUTH_MEMSTORE_NONCE
+            key_current_we = 1;
+            key_current_new = key_s2c_reg;
+          end
+          if (i_op_cookie_verify) begin
+            core_ad_length_we = 1;
+            core_ad_length_new = 0; // Chrony format, No AD
+            core_config_we = 1;
+            core_config_encdec_new = MODE_DECRYPT;
+            core_pc_length_mux_we = 1;
+            core_pc_length_mux_new = 1;
+            core_start_new = 1;
+            key_current_we = 1;
+            key_current_new = key_master_reg;
+          end
+          if (i_op_cookie_rencrypt) begin
+            core_ad_length_we = 1;
+            core_ad_length_new = 0; // Chrony format, No AD
+            core_config_we = 1;
+            core_config_encdec_new = MODE_ENCRYPT;
+            core_pc_length_mux_we = 1;
+            core_pc_length_mux_new = 1;
+            core_start_new = 0; //Occurs later, in STATE_AUTH_MEMSTORE_NONCE
+            key_current_we = 1;
+            key_current_new = key_master_reg;
+          end
         end
       STATE_AUTH_MEMSTORE_NONCE:
         begin
-          core_config_we = 1;
-          core_config_encdec_new = MODE_ENCRYPT;
           core_start_new = 1;
-          key_current_we = 1;
-          key_current_new = key_s2c_reg;
         end
       default: ;
     endcase
@@ -915,12 +1192,29 @@ module nts_verify_secure #(
         end else if (i_op_copy_rx_nonce) begin
           state_we = 1;
           state_new = STATE_COPY_RX_INIT_NONCE;
+        end else if (i_op_copy_rx_pc) begin
+          state_we = 1;
+          state_new = STATE_COPY_RX_INIT_PC;
         end else if (i_op_copy_rx_tag) begin
           state_we = 1;
           state_new = STATE_COPY_RX_INIT_TAG;
-        end else if (i_op_verify) begin
+        end else if (i_op_verify_c2s) begin
           state_we = 1;
           state_new = STATE_SIV_VERIFY_WAIT_0;
+        end else if (i_op_cookie_verify) begin
+          state_we = 1;
+          state_new = STATE_SIV_VERIFY_WAIT_0;
+        end else if (i_op_cookie_loadkeys) begin
+          state_we = 1;
+          state_new = STATE_LOAD_KEYS_FROM_MEM;
+        end else if (i_op_cookie_rencrypt) begin
+          if (nonce_a_valid_reg && nonce_b_valid_reg) begin
+            state_we = 1;
+            state_new = STATE_AUTH_MEMSTORE_NONCE;
+          end else begin
+            state_we = 1;
+            state_new = STATE_ERROR;
+          end
         end else if (i_op_copy_tx_ad) begin
           state_we = 1;
           state_new = STATE_COPY_TX_INIT_AD;
@@ -935,6 +1229,14 @@ module nts_verify_secure #(
         end else if (i_op_store_tx_nonce_tag) begin
           state_we = 1;
           state_new = STATE_STORE_TX_AUTH_INIT;
+        end else if (i_op_store_tx_cookie) begin
+          state_we = 1;
+          state_new = STATE_STORE_TX_COOKIE;
+        end
+      STATE_COPY_RX_INIT_PC:
+        if (i_rx_wait == 'b0) begin
+          state_we = 1;
+          state_new = STATE_COPY_RX;
         end
       STATE_COPY_RX_INIT_AD:
         if (i_rx_wait == 'b0) begin
@@ -1003,6 +1305,16 @@ module nts_verify_secure #(
         end
       STATE_STORE_TX_AUTH:
         if (tx_addr >= tx_addr_last_reg) begin
+          state_we = 1;
+          state_new = STATE_IDLE;
+        end
+      STATE_STORE_TX_COOKIE:
+        if (tx_ctr_reg >= 12) begin //TODO replace with a named constant (128+128+256+256) / 64  ...
+          state_we = 1;
+          state_new = STATE_IDLE;
+        end
+      STATE_LOAD_KEYS_FROM_MEM:
+        if (ramld_addr_reg >= MEM8_ADDR_PC + 8) begin //TODO replace with named constant.
           state_we = 1;
           state_new = STATE_IDLE;
         end

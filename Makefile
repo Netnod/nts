@@ -39,6 +39,14 @@ AES_SRC = $(AES_SRC_PATH)/aes_core.v $(AES_SRC_PATH)/aes_decipher_block.v $(AES_
 CMAC_SRC = sub/cmac/src/rtl/cmac_core.v $(AES_SRC)
 SIV_SRC = sub/aes-siv/src/rtl/aes_siv_core.v $(CMAC_SRC)
 
+ifeq ($(VLINT),)
+VLINT=tools/verilator-4.018/bin/verilator
+endif
+
+ifeq ($(VLINT_FLAGS),)
+VLINT_FLAGS= --lint-only
+endif
+
 all: DIRS VVPS
 
 sim-api: output/vvp/nts_api_tb.vvp
@@ -66,26 +74,26 @@ clean:
 
 lint: lint_hdl lint_tb
 lint_hdl:
-	verilator --lint-only hdl/bram.v
-	verilator --lint-only hdl/bram_dpge.v
-	verilator --lint-only hdl/memory_ctrl.v hdl/bram_dpge.v
-	verilator --lint-only hdl/nts_api.v
-	verilator --lint-only hdl/nts_parser_ctrl.v
-	verilator --lint-only hdl/nts_timestamp.v
-	verilator --lint-only hdl/nts_dispatcher.v hdl/bram.v
-	verilator --lint-only hdl/nts_rx_buffer.v hdl/bram.v
-	verilator --lint-only hdl/nts_tx_buffer.v hdl/memory_ctrl.v hdl/bram_dpge.v
-	verilator --lint-only -Wno-UNOPTFLAT hdl/nts_verify_secure.v hdl/bram_dp2w.v $(SIV_SRC)
-	verilator --lint-only hdl/nts_engine.v hdl/nts_tx_buffer.v hdl/nts_verify_secure.v hdl/nts_rx_buffer.v hdl/nts_parser_ctrl.v hdl/nts_api.v hdl/nts_timestamp.v hdl/memory_ctrl.v hdl/bram.v hdl/bram_dpge.v hdl/bram_dp2w.v sub/keymem/src/rtl/keymem.v $(SIV_SRC)
+	$(VLINT) $(VLINT_FLAGS) hdl/bram.v
+	$(VLINT) $(VLINT_FLAGS) hdl/bram_dpge.v
+	$(VLINT) $(VLINT_FLAGS) hdl/memory_ctrl.v hdl/bram_dpge.v
+	$(VLINT) $(VLINT_FLAGS) hdl/nts_api.v
+	$(VLINT) $(VLINT_FLAGS) hdl/nts_parser_ctrl.v
+	$(VLINT) $(VLINT_FLAGS) hdl/nts_timestamp.v
+	$(VLINT) $(VLINT_FLAGS) hdl/nts_dispatcher.v hdl/bram.v
+	$(VLINT) $(VLINT_FLAGS) hdl/nts_rx_buffer.v hdl/bram.v
+	$(VLINT) $(VLINT_FLAGS) hdl/nts_tx_buffer.v hdl/memory_ctrl.v hdl/bram_dpge.v
+	$(VLINT) $(VLINT_FLAGS) -Wno-UNOPTFLAT hdl/nts_verify_secure.v hdl/bram_dp2w.v $(SIV_SRC)
+	$(VLINT) $(VLINT_FLAGS) hdl/nts_engine.v hdl/nts_tx_buffer.v hdl/nts_verify_secure.v hdl/nts_rx_buffer.v hdl/nts_parser_ctrl.v hdl/nts_api.v hdl/nts_timestamp.v hdl/memory_ctrl.v hdl/bram.v hdl/bram_dpge.v hdl/bram_dp2w.v sub/keymem/src/rtl/keymem.v $(SIV_SRC)
 lint_tb:
-	verilator --lint-only -Wno-STMTDLY tb/bram_tb.v hdl/bram.v
-	verilator --lint-only -Wno-STMTDLY tb/nts_dispatcher_tb.v hdl/nts_dispatcher.v hdl/bram.v
-	verilator --lint-only -Wno-STMTDLY tb/nts_api_tb.v hdl/nts_api.v
-	verilator --lint-only -Wno-STMTDLY tb/nts_rx_buffer_tb.v hdl/nts_rx_buffer.v hdl/bram.v
-	verilator --lint-only -Wno-STMTDLY tb/nts_tx_buffer_tb.v hdl/nts_tx_buffer.v hdl/memory_ctrl.v hdl/bram_dpge.v
-	verilator --lint-only -Wno-STMTDLY -Wno-UNOPTFLAT tb/nts_parser_ctrl_tb.v hdl/nts_parser_ctrl.v
-	verilator --lint-only -Wno-STMTDLY -Wno-UNOPTFLAT tb/nts_verify_secure_tb.v hdl/nts_verify_secure.v hdl/bram_dp2w.v $(SIV_SRC)
-	verilator --lint-only -Wno-STMTDLY -Wno-UNOPTFLAT tb/nts_engine_tb.v hdl/nts_engine.v hdl/nts_verify_secure.v hdl/nts_tx_buffer.v hdl/nts_rx_buffer.v hdl/nts_parser_ctrl.v hdl/nts_api.v hdl/nts_timestamp.v hdl/memory_ctrl.v hdl/bram.v hdl/bram_dpge.v hdl/bram_dp2w.v sub/keymem/src/rtl/keymem.v $(SIV_SRC)
+	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY tb/bram_tb.v hdl/bram.v
+	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY tb/nts_dispatcher_tb.v hdl/nts_dispatcher.v hdl/bram.v
+	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY tb/nts_api_tb.v hdl/nts_api.v
+	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY tb/nts_rx_buffer_tb.v hdl/nts_rx_buffer.v hdl/bram.v
+	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY tb/nts_tx_buffer_tb.v hdl/nts_tx_buffer.v hdl/memory_ctrl.v hdl/bram_dpge.v
+	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY -Wno-UNOPTFLAT tb/nts_parser_ctrl_tb.v hdl/nts_parser_ctrl.v
+	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY -Wno-UNOPTFLAT tb/nts_verify_secure_tb.v hdl/nts_verify_secure.v hdl/bram_dp2w.v $(SIV_SRC)
+	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY -Wno-UNOPTFLAT tb/nts_engine_tb.v hdl/nts_engine.v hdl/nts_verify_secure.v hdl/nts_tx_buffer.v hdl/nts_rx_buffer.v hdl/nts_parser_ctrl.v hdl/nts_api.v hdl/nts_timestamp.v hdl/memory_ctrl.v hdl/bram.v hdl/bram_dpge.v hdl/bram_dp2w.v sub/keymem/src/rtl/keymem.v $(SIV_SRC)
 
 lint-submodules:
 	make -C sub/aes/toolruns lint
@@ -113,50 +121,50 @@ output/vvp:
 	mkdir -p $@
 
 output/vvp/memory_ctrl_tb.vvp: tb/memory_ctrl_tb.v hdl/memory_ctrl.v hdl/bram_dpge.v
-ifeq (,$(NO_LINT))
-	verilator --lint-only -Wno-STMTDLY $^
+ifeq (,$(NO_VLINT))
+	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY $^
 endif
 	iverilog -o $@ $^
 
 output/vvp/nts_api_tb.vvp: tb/nts_api_tb.v hdl/nts_api.v
-ifeq (,$(NO_LINT))
-	verilator --lint-only -Wno-STMTDLY $^
+ifeq (,$(NO_VLINT))
+	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY $^
 endif
 	iverilog -o $@ $^
 
 output/vvp/nts_timestamp_tb.vvp: tb/nts_timestamp_tb.v hdl/nts_timestamp.v
-ifeq (,$(NO_LINT))
-	verilator --lint-only -Wno-STMTDLY -Wno-UNOPTFLAT $^
+ifeq (,$(NO_VLINT))
+	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY -Wno-UNOPTFLAT $^
 endif
 	iverilog -o $@ $^
 
 output/vvp/nts_parser_ctrl_tb.vvp: tb/nts_parser_ctrl_tb.v hdl/nts_parser_ctrl.v
-ifeq (,$(NO_LINT))
-	verilator --lint-only -Wno-STMTDLY -Wno-UNOPTFLAT $^
+ifeq (,$(NO_VLINT))
+	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY -Wno-UNOPTFLAT $^
 endif
 	iverilog -o $@ $^
 
 output/vvp/nts_dispatcher_tb.vvp: tb/nts_dispatcher_tb.v hdl/nts_dispatcher.v hdl/bram.v
-ifeq (,$(NO_LINT))
-	verilator --lint-only -Wno-STMTDLY $^
+ifeq (,$(NO_VLINT))
+	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY $^
 endif
 	iverilog -o $@ $^
 
 output/vvp/nts_rx_buffer_tb.vvp: tb/nts_rx_buffer_tb.v hdl/nts_rx_buffer.v hdl/bram.v
-ifeq (,$(NO_LINT))
-	verilator --lint-only -Wno-STMTDLY $^
+ifeq (,$(NO_VLINT))
+	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY $^
 endif
 	iverilog -o $@ $^
 
 output/vvp/nts_tx_buffer_tb.vvp: tb/nts_tx_buffer_tb.v hdl/nts_tx_buffer.v hdl/memory_ctrl.v hdl/bram_dpge.v
-ifeq (,$(NO_LINT))
-	verilator --lint-only -Wno-STMTDLY $^
+ifeq (,$(NO_VLINT))
+	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY $^
 endif
 	iverilog -o $@ $^
 
 output/vvp/nts_verify_secure_tb.vvp: tb/nts_verify_secure_tb.v hdl/nts_verify_secure.v hdl/bram_dp2w.v $(SIV_SRC)
-ifeq (,$(NO_LINT))
-	verilator --lint-only -Wno-STMTDLY -Wno-UNOPTFLAT $^
+ifeq (,$(NO_VLINT))
+	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY -Wno-UNOPTFLAT $^
 endif
 	iverilog -o $@ $^
 
@@ -164,13 +172,13 @@ output/vvp/nts_engine_tb.vvp: tb/nts_engine_tb.v hdl/nts_engine.v \
  hdl/nts_verify_secure.v hdl/nts_tx_buffer.v hdl/nts_rx_buffer.v hdl/nts_parser_ctrl.v hdl/nts_api.v hdl/nts_timestamp.v hdl/memory_ctrl.v \
  hdl/bram_dp2w.v hdl/bram_dpge.v hdl/bram.v \
  sub/keymem/src/rtl/keymem.v $(SIV_SRC)
-ifeq (,$(NO_LINT))
-	verilator --lint-only -Wno-STMTDLY -Wno-UNOPTFLAT $^
+ifeq (,$(NO_VLINT))
+	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY -Wno-UNOPTFLAT $^
 endif
 	iverilog -o $@ $^
 
 output/vvp/%_tb.vvp: tb/%_tb.v hdl/%.v
-ifeq (,$(NO_LINT))
-	verilator --lint-only -Wno-STMTDLY $^
+ifeq (,$(NO_VLINT))
+	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY $^
 endif
 	iverilog -o $@ $^

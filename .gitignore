@@ -1,2 +1,4 @@
 *.sw?
 output
+tools/verilator-4.018/**
+tools/verilator-4.018.tgz

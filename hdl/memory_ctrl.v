@@ -89,11 +89,9 @@ module memory_ctrl #(
   wire                  global_enable;
   wire                  write;
 
-  wire                  write_op_aligned;
   wire                  write_op_unaligned;
 
 
-  assign write_op_aligned   = i_write_64 && (i_addr_lo == 3'b000);
   assign write_op_unaligned = i_write_64 && (i_addr_lo != 3'b000);
 
   assign addr_hi_p1    = i_addr_hi + 1;
@@ -101,7 +99,7 @@ module memory_ctrl #(
   assign addr_a        = (state_reg == STATE_IDLE) ? i_addr_hi                 : addr_a_reg;
   assign addr_b        = (state_reg == STATE_IDLE) ? addr_hi_p1                : addr_b_reg;
   assign global_enable = (state_reg == STATE_IDLE) ? (i_write_64 || i_read_64) : 1;
-  assign write         = tmp_write; //(state_reg == STATE_IDLE) ? write_op_aligned          : (state_reg == STATE_UNALIGNED_WRITE64 ? 1 : 0);
+  assign write         = tmp_write;
 
   assign o_busy  = state_reg != STATE_IDLE;
   assign o_error = state_reg == STATE_ERROR;

@@ -44,8 +44,13 @@ VLINT=tools/verilator-4.018/bin/verilator
 endif
 
 ifeq ($(VLINT_FLAGS),)
-VLINT_FLAGS= --lint-only
+VLINT_FLAGS= --lint-only -Wwarn-style -Wno-BLKSEQ -Wno-VARHIDDEN
 endif
+
+ifeq ($(VLINT_TESTS_FLAGS),)
+VLINT_TESTS_FLAGS= --lint-only
+endif
+
 
 all: DIRS VVPS
 
@@ -86,14 +91,14 @@ lint_hdl:
 	$(VLINT) $(VLINT_FLAGS) -Wno-UNOPTFLAT hdl/nts_verify_secure.v hdl/bram_dp2w.v $(SIV_SRC)
 	$(VLINT) $(VLINT_FLAGS) hdl/nts_engine.v hdl/nts_tx_buffer.v hdl/nts_verify_secure.v hdl/nts_rx_buffer.v hdl/nts_parser_ctrl.v hdl/nts_api.v hdl/nts_timestamp.v hdl/memory_ctrl.v hdl/bram.v hdl/bram_dpge.v hdl/bram_dp2w.v sub/keymem/src/rtl/keymem.v $(SIV_SRC)
 lint_tb:
-	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY tb/bram_tb.v hdl/bram.v
-	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY tb/nts_dispatcher_tb.v hdl/nts_dispatcher.v hdl/bram.v
-	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY tb/nts_api_tb.v hdl/nts_api.v
-	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY tb/nts_rx_buffer_tb.v hdl/nts_rx_buffer.v hdl/bram.v
-	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY tb/nts_tx_buffer_tb.v hdl/nts_tx_buffer.v hdl/memory_ctrl.v hdl/bram_dpge.v
-	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY -Wno-UNOPTFLAT tb/nts_parser_ctrl_tb.v hdl/nts_parser_ctrl.v
-	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY -Wno-UNOPTFLAT tb/nts_verify_secure_tb.v hdl/nts_verify_secure.v hdl/bram_dp2w.v $(SIV_SRC)
-	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY -Wno-UNOPTFLAT tb/nts_engine_tb.v hdl/nts_engine.v hdl/nts_verify_secure.v hdl/nts_tx_buffer.v hdl/nts_rx_buffer.v hdl/nts_parser_ctrl.v hdl/nts_api.v hdl/nts_timestamp.v hdl/memory_ctrl.v hdl/bram.v hdl/bram_dpge.v hdl/bram_dp2w.v sub/keymem/src/rtl/keymem.v $(SIV_SRC)
+	$(VLINT) $(VLINT_TESTS_FLAGS) -Wno-STMTDLY tb/bram_tb.v hdl/bram.v
+	$(VLINT) $(VLINT_TESTS_FLAGS) -Wno-STMTDLY tb/nts_dispatcher_tb.v hdl/nts_dispatcher.v hdl/bram.v
+	$(VLINT) $(VLINT_TESTS_FLAGS) -Wno-STMTDLY tb/nts_api_tb.v hdl/nts_api.v
+	$(VLINT) $(VLINT_TESTS_FLAGS) -Wno-STMTDLY tb/nts_rx_buffer_tb.v hdl/nts_rx_buffer.v hdl/bram.v
+	$(VLINT) $(VLINT_TESTS_FLAGS) -Wno-STMTDLY tb/nts_tx_buffer_tb.v hdl/nts_tx_buffer.v hdl/memory_ctrl.v hdl/bram_dpge.v
+	$(VLINT) $(VLINT_TESTS_FLAGS) -Wno-STMTDLY -Wno-UNOPTFLAT tb/nts_parser_ctrl_tb.v hdl/nts_parser_ctrl.v
+	$(VLINT) $(VLINT_TESTS_FLAGS) -Wno-STMTDLY -Wno-UNOPTFLAT tb/nts_verify_secure_tb.v hdl/nts_verify_secure.v hdl/bram_dp2w.v $(SIV_SRC)
+	$(VLINT) $(VLINT_TESTS_FLAGS) -Wno-STMTDLY -Wno-UNOPTFLAT tb/nts_engine_tb.v hdl/nts_engine.v hdl/nts_verify_secure.v hdl/nts_tx_buffer.v hdl/nts_rx_buffer.v hdl/nts_parser_ctrl.v hdl/nts_api.v hdl/nts_timestamp.v hdl/memory_ctrl.v hdl/bram.v hdl/bram_dpge.v hdl/bram_dp2w.v sub/keymem/src/rtl/keymem.v $(SIV_SRC)
 
 lint-submodules:
 	make -C sub/aes/toolruns lint

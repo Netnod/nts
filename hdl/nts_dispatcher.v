@@ -28,7 +28,7 @@
 // Author: Peter Magnusson, Assured AB
 //
 
-module nts_dispatcher_front #(
+module nts_dispatcher #(
   parameter ADDR_WIDTH = 8
 ) (
   input  wire        i_areset, // async reset

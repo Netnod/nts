@@ -28,7 +28,7 @@
 // Author: Peter Magnusson, Assured AB
 //
 
-module nts_dispatcher_front_tb;
+module nts_dispatcher_tb;
 
   localparam ADDR_WIDTH=3;
 
@@ -47,7 +47,7 @@ module nts_dispatcher_front_tb;
   reg                   i_dispatch_fifo_rd_en;
   wire [63:0]           o_dispatch_fifo_rd_data;
 
-  nts_dispatcher_front #(.ADDR_WIDTH(ADDR_WIDTH)) dut (
+  nts_dispatcher #(.ADDR_WIDTH(ADDR_WIDTH)) dut (
     .i_areset(i_areset),
     .i_clk(i_clk),
     .i_rx_data_valid(i_rx_data_valid),

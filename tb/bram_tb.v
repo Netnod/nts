@@ -28,7 +28,7 @@
 // Author: Peter Magnusson, Assured AB
 //
 
-module bram_testbench;
+module bram_tb;
   parameter AW = 8;
   parameter DW = 64;
 

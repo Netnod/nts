@@ -72,7 +72,8 @@ module nts_api #(
   wire        select_keymem;
   wire        select_debug;
   wire [11:0] addr_offset;
-  wire [11:0] addr_calculated;
+//wire [11:0] addr_calculated;
+  reg   [7:0] addr_calculated;
 
 
   assign select_engine             = /*(i_external_api_address >= ADDR_ENGINE_BASE) && */ (i_external_api_address <= ADDR_ENGINE_STOP);
@@ -87,10 +88,11 @@ module nts_api #(
                                      select_keymem ? ADDR_KEYMEM_BASE  : (
                                      select_debug  ? ADDR_DEBUG_BASE : 0 ))));
 
-  assign addr_calculated           = i_external_api_address - addr_offset;
+//assign addr_calculated           = i_external_api_address - addr_offset;
 
   assign o_internal_api_we         = i_external_api_we;
-  assign o_internal_api_address    = addr_calculated[7:0];
+//assign o_internal_api_address    = addr_calculated[7:0];
+  assign o_internal_api_address    = addr_calculated;
   assign o_internal_api_write_data = i_external_api_write_data;
 
   assign o_internal_engine_api_cs  = i_external_api_cs && select_engine;
@@ -108,5 +110,12 @@ module nts_api #(
                                        0 ))))
                                      ) : 0;
 
+  always @*
+  begin : locals
+    reg [11:0] a;
+    a = i_external_api_address;
+    a = a - addr_offset;
+    addr_calculated = a[7:0];
+  end
 
 endmodule

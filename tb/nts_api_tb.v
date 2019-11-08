@@ -145,4 +145,7 @@ module nts_api_tb;
     $finish;
   end
 
+  always @*
+    $display("%s:%0d o_internal_api_write_data = %h", `__FILE__, `__LINE__, o_internal_api_write_data);
+
 endmodule

@@ -1,5 +1,25 @@
 # TODO
 
+
+## Ciphertext in NTS Authenticator and Encrypted Extension Fields 
+
+NTS auth may include ciphertext.
+
+ * Should be deciphered.
+ * Should be acessible to parser.
+ * Should be read back and checked for extensions.
+ * Cookie placeholders are allowed to be included i ciphertext.
+
+## Ignore (but allow) extensions after NTS Authenticator and Encrypted Extension
+
+ * Its valid
+ * But should be ignored.
+ * CW thinks there is a use-case for this; Client -> NTP Server 1 -> NTP Server 2, in which NTP Server 1 may append extensions at the end of packet.
+
+## Kiss of Death
+
+Signal Kiss of Death after receiving bad packet.
+
 ## Server Keys: Current Key
 
 Many (0-4) Keys are valid for unwrapping old cookies from clients.

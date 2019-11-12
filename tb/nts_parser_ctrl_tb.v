@@ -106,8 +106,29 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
   reg                         i_keymem_key_valid;
   reg                         i_keymem_ready;
 
+  wire                        i_crypto_busy;
+  reg                         i_crypto_verify_tag_ok;
+  wire                        o_crypto_rx_op_copy_ad;
+  wire                        o_crypto_rx_op_copy_nonce;
+  wire                        o_crypto_rx_op_copy_pc;
+  wire                        o_crypto_rx_op_copy_tag;
+  wire     [ADDR_WIDTH+3-1:0] o_crypto_rx_addr;
+  wire                  [9:0] o_crypto_rx_bytes;
+  wire                        o_crypto_tx_op_copy_ad;
+  wire                        o_crypto_tx_op_store_nonce_tag;
+  wire                        o_crypto_tx_op_store_cookie;
+  wire     [ADDR_WIDTH+3-1:0] o_crypto_tx_addr;
+  wire                  [9:0] o_crypto_tx_bytes;
+  wire                        o_crypto_op_cookie_verify;
+  wire                        o_crypto_op_cookie_loadkeys;
+  wire                        o_crypto_op_cookie_rencrypt;
+  wire                        o_crypto_op_c2s_verify_auth;
+  wire                        o_crypto_op_s2c_generate_auth;
+
   wire                        o_muxctrl_timestamp_ipv4;
   wire                        o_muxctrl_timestamp_ipv6;
+
+  wire                        o_muxctrl_crypto; //Crypto is in charge of RX, TX
 
   wire                        o_detect_unique_identifier;
   wire                        o_detect_nts_cookie;
@@ -133,7 +154,7 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
   task send_packet (
     input [65535:0] source,
     input    [31:0] length,
-    output    [3:0] detect_bits
+    output    [3:0] detect_bits__
   );
     integer i;
     integer packet_ptr;
@@ -217,8 +238,8 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
       `assert(o_busy);
       while(o_busy)
       begin
-        detect_bits = { o_detect_unique_identifier, o_detect_nts_cookie, o_detect_nts_cookie_placeholder, o_detect_nts_authenticator};
-        if (verbose_output >= 4) $display("%s:%0d detect_bits=%b (%h)", `__FILE__, `__LINE__, detect_bits, detect_bits);
+        detect_bits__ = { o_detect_unique_identifier, o_detect_nts_cookie, o_detect_nts_cookie_placeholder, o_detect_nts_authenticator};
+        if (verbose_output >= 4) $display("%s:%0d detect_bits=%b (%h)", `__FILE__, `__LINE__, detect_bits__, detect_bits__);
         #10;
       end
 
@@ -269,8 +290,29 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
     .o_timestamp_version_number(o_timestamp_version_number),
     .o_timestamp_poll(o_timestamp_poll),
 
+    .i_crypto_busy(i_crypto_busy),
+    .i_crypto_verify_tag_ok(i_crypto_verify_tag_ok),
+    .o_crypto_rx_op_copy_ad(o_crypto_rx_op_copy_ad),
+    .o_crypto_rx_op_copy_nonce(o_crypto_rx_op_copy_nonce),
+    .o_crypto_rx_op_copy_pc(o_crypto_rx_op_copy_pc),
+    .o_crypto_rx_op_copy_tag(o_crypto_rx_op_copy_tag),
+    .o_crypto_rx_addr(o_crypto_rx_addr),
+    .o_crypto_rx_bytes(o_crypto_rx_bytes),
+    .o_crypto_tx_op_copy_ad(o_crypto_tx_op_copy_ad),
+    .o_crypto_tx_op_store_nonce_tag(o_crypto_tx_op_store_nonce_tag),
+    .o_crypto_tx_op_store_cookie(o_crypto_tx_op_store_cookie),
+    .o_crypto_tx_addr(o_crypto_tx_addr),
+    .o_crypto_tx_bytes(o_crypto_tx_bytes),
+    .o_crypto_op_cookie_verify(o_crypto_op_cookie_verify),
+    .o_crypto_op_cookie_loadkeys(o_crypto_op_cookie_loadkeys),
+    .o_crypto_op_cookie_rencrypt(o_crypto_op_cookie_rencrypt),
+    .o_crypto_op_c2s_verify_auth(o_crypto_op_c2s_verify_auth),
+    .o_crypto_op_s2c_generate_auth(o_crypto_op_s2c_generate_auth),
+
     .o_muxctrl_timestamp_ipv4(o_muxctrl_timestamp_ipv4),
     .o_muxctrl_timestamp_ipv6(o_muxctrl_timestamp_ipv6),
+
+    .o_muxctrl_crypto(o_muxctrl_crypto),
 
     .o_detect_unique_identifier(o_detect_unique_identifier),
     .o_detect_nts_cookie(o_detect_nts_cookie),
@@ -356,6 +398,10 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
     $finish;
   end
 
+  //----------------------------------------------------------------
+  // Testbench model: KeyMem
+  //----------------------------------------------------------------
+
   always @(posedge i_clk, posedge i_areset)
   begin
     if (i_areset) begin
@@ -363,20 +409,28 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
       i_keymem_ready <= 1;
       i_keymem_key_valid <= 0;
       i_keymem_key_length <= 0;
-    end else if (keymem_state) begin
-      keymem_state <= 0;
-      i_keymem_ready <= 1;
-      i_keymem_key_valid <= 1;
-      i_keymem_key_length <= 1;
-    end else if (o_keymem_get_key_with_id) begin
-      keymem_state <= 1;
-      i_keymem_ready <= 0;
+    end else begin
       i_keymem_key_valid <= 0;
       i_keymem_key_length <= 0;
+      i_keymem_ready <= 1;
+      if (keymem_state) begin
+        keymem_state <= 0;
+        i_keymem_ready <= 1;
+        i_keymem_key_valid <= 1;
+        i_keymem_key_length <= 0;
+      end else if (o_keymem_get_key_with_id) begin
+        keymem_state <= 1;
+        i_keymem_ready <= 0;
+        $display("%s:%0d KEYMEM[%h.%h]", `__FILE__, `__LINE__, o_keymem_server_id, o_keymem_key_word);
+      end
     end
   end
 
-  always @(posedge i_clk)
+  //----------------------------------------------------------------
+  // Testbench model: RX-Buff
+  //----------------------------------------------------------------
+
+  always @(posedge i_clk or posedge i_areset)
   begin
     if (verbose_output >= 4) $display("%s:%0d o_access_port_rd_en=%h", `__FILE__, `__LINE__, o_access_port_rd_en);
     if (i_areset) begin
@@ -385,14 +439,10 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
       reg [ADDR_WIDTH-1:0] addr_hi;
       reg            [2:0] addr_lo;
       reg           [87:0] tmp;
-      reg           [63:0] tmp_hi;
-      reg           [63:0] tmp_lo;
       `assert(o_access_port_wordsize == 2);
       addr_hi = o_access_port_addr[ADDR_WIDTH+3-1:3];
       addr_lo = o_access_port_addr[2:0];
-      tmp_hi = rx_buf[addr_hi];
-      tmp_lo = rx_buf[addr_hi+1];
-      tmp = { tmp_hi, tmp_lo[63:40] };
+      tmp = { rx_buf[addr_hi], rx_buf[addr_hi+1][63:40] };
       case (addr_lo)
         0: i_access_port_rd_data = tmp[87:56];
         1: i_access_port_rd_data = tmp[79:48];
@@ -412,10 +462,35 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
     end
   end
 
+  //----------------------------------------------------------------
+  // Testbench model: TX-Buff
+  //----------------------------------------------------------------
+
+  always @(posedge i_clk or posedge i_areset)
+  begin
+    if (i_areset) begin
+      ;
+    end else begin
+      if (o_tx_clear) begin
+        $display("%s:%0d TX_CLEAR", `__FILE__, `__LINE__);
+      end else if (o_tx_w_en) begin
+        $display("%s:%0d TX_WRITE: %h", `__FILE__, `__LINE__, o_tx_w_data);
+      end else if (o_tx_ipv4_done) begin
+        $display("%s:%0d TX_TRANSMIT IPv4", `__FILE__, `__LINE__);
+      end else if (o_tx_ipv6_done) begin
+        $display("%s:%0d TX_TRANSMIT IPv6", `__FILE__, `__LINE__);
+      end
+    end
+  end
+
+  //----------------------------------------------------------------
+  // Testbench model: Timestamp
+  //----------------------------------------------------------------
 
   always @*
   begin
     if (o_timestamp_transmit) begin
+      $display("%s:%0d TIMESTAMP.Transmit. Origin: %h Version: %h Poll: %h", `__FILE__, `__LINE__, o_timestamp_origin_timestamp, o_timestamp_version_number, o_timestamp_poll);
       i_timestamp_busy = 1;
       #100;
       i_timestamp_busy = 0;
@@ -424,8 +499,104 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
 
   always @*
   begin
-    if (verbose_output >= 1) $display("%s:%0d o_muxctrl_timestamp_ipv4=%h o_muxctrl_timestamp_ipv6=%h", `__FILE__, `__LINE__, o_muxctrl_timestamp_ipv4, o_muxctrl_timestamp_ipv6);
+    if (o_timestamp_record_receive_timestamp)
+      $display("%s:%0d TIMESTAMP.Record_Recieve_TimeStamp", `__FILE__, `__LINE__);
+  end
 
+
+  always @*
+  begin
+    //if (verbose_output >= 1) $display("%s:%0d o_muxctrl_timestamp_ipv4=%h o_muxctrl_timestamp_ipv6=%h", `__FILE__, `__LINE__, o_muxctrl_timestamp_ipv4, o_muxctrl_timestamp_ipv6);
+    $display("%s:%0d MUX: ipv4=%h ipv6=%h", `__FILE__, `__LINE__, o_muxctrl_timestamp_ipv4, o_muxctrl_timestamp_ipv6);
+  end
+
+
+  //----------------------------------------------------------------
+  // Testbench model: Crypto Engine for verifying NTS auth
+  //----------------------------------------------------------------
+
+  localparam CRYPTO_STATE_IDLE = 0;
+  localparam CRYPTO_STATE_DELAY = 1;
+
+  localparam [10:0] CRYPTO_MAGIC_CONSTANT_SMALL_DELAY = 42;
+  localparam [10:0] CRYPTO_MAGIC_CONSTANT_LONG_DELAY = 500;
+
+  reg  [1:0] crypto_state;
+  reg [10:0] crypto_delay;
+  reg        crypto_verify_tag_ok_set;
+  reg        crypto_verify_tag_ok_value;
+
+  assign i_crypto_busy = crypto_state != CRYPTO_STATE_IDLE;
+
+  always @(posedge i_clk or posedge i_areset)
+  begin
+    if (i_areset) begin
+      i_crypto_verify_tag_ok <= 0;
+      crypto_state <= CRYPTO_STATE_DELAY;
+      crypto_delay <= CRYPTO_MAGIC_CONSTANT_SMALL_DELAY;
+      crypto_verify_tag_ok_set <= 0;
+      crypto_verify_tag_ok_value <= 0;
+    end else begin
+      case (crypto_state)
+        CRYPTO_STATE_IDLE:
+          begin
+            crypto_verify_tag_ok_set <= 0;
+            crypto_verify_tag_ok_value <= 0;
+            if (o_crypto_rx_op_copy_ad || o_crypto_rx_op_copy_nonce || o_crypto_rx_op_copy_pc || o_crypto_rx_op_copy_tag) begin
+              $display("%s:%0d CRYPTO RX OP %b Addr: %h Bytes: %h", `__FILE__, `__LINE__,
+                { o_crypto_rx_op_copy_ad, o_crypto_rx_op_copy_nonce, o_crypto_rx_op_copy_pc, o_crypto_rx_op_copy_tag },
+                o_crypto_rx_addr, o_crypto_rx_bytes);
+              `assert ( o_muxctrl_crypto );
+              `assert ( o_crypto_rx_bytes != 0 );
+              crypto_delay <= CRYPTO_MAGIC_CONSTANT_SMALL_DELAY + { 1'b0, o_crypto_rx_bytes };
+              crypto_state <= CRYPTO_STATE_DELAY;
+            end else if (o_crypto_tx_op_copy_ad || o_crypto_tx_op_store_nonce_tag || o_crypto_tx_op_store_cookie) begin
+              $display("%s:%0d CRYPTO TX OP %b Addr: %h Bytes: %h", `__FILE__, `__LINE__,
+                { o_crypto_tx_op_copy_ad, o_crypto_tx_op_store_nonce_tag, o_crypto_tx_op_store_cookie },
+                o_crypto_tx_addr, o_crypto_tx_bytes );
+              `assert ( o_muxctrl_crypto );
+              `assert ( o_crypto_tx_bytes != 0 );
+              crypto_delay <= CRYPTO_MAGIC_CONSTANT_SMALL_DELAY + { 1'b0, o_crypto_tx_bytes };
+              crypto_state <= CRYPTO_STATE_DELAY;
+            end else if ( o_crypto_op_cookie_verify ) begin
+              i_crypto_verify_tag_ok <= 0;
+              crypto_delay <= CRYPTO_MAGIC_CONSTANT_LONG_DELAY;
+              crypto_state <= CRYPTO_STATE_DELAY;
+              crypto_verify_tag_ok_set <= 1;
+              crypto_verify_tag_ok_value <= 1;
+            end else if ( o_crypto_op_cookie_loadkeys ) begin
+              crypto_delay <= CRYPTO_MAGIC_CONSTANT_LONG_DELAY;
+              crypto_state <= CRYPTO_STATE_DELAY;
+            end else if ( o_crypto_op_cookie_rencrypt ) begin
+              crypto_delay <= CRYPTO_MAGIC_CONSTANT_LONG_DELAY;
+              crypto_state <= CRYPTO_STATE_DELAY;
+            end else if ( o_crypto_op_c2s_verify_auth ) begin
+              crypto_verify_tag_ok_set <= 1;
+              crypto_verify_tag_ok_value <= 1;
+              crypto_delay <= CRYPTO_MAGIC_CONSTANT_LONG_DELAY;
+              crypto_state <= CRYPTO_STATE_DELAY;
+            end else if ( o_crypto_op_s2c_generate_auth ) begin
+              crypto_delay <= CRYPTO_MAGIC_CONSTANT_LONG_DELAY;
+              crypto_state <= CRYPTO_STATE_DELAY;
+            end
+          end
+         CRYPTO_STATE_DELAY:
+           if (crypto_delay == 0) begin
+             if (crypto_verify_tag_ok_set) begin
+               i_crypto_verify_tag_ok <= crypto_verify_tag_ok_value;
+             end
+             crypto_state <= CRYPTO_STATE_IDLE;
+           end else begin
+             crypto_delay <= crypto_delay - 1;
+           end
+      endcase
+    end
+  end
+
+  always @*
+  begin
+    if (dut.nts_valid_placeholders_reg > 0)
+      $display( "%s:%0d placeholders: %h.", `__FILE__, `__LINE__, dut.nts_valid_placeholders_reg );
   end
 
   always begin

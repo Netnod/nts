@@ -28,12 +28,11 @@
 // Author: Peter Magnusson, Assured AB
 //
 
-module nts_rx_buffer_testbench;
+module nts_rx_buffer_tb;
   parameter ADDR_WIDTH = 8;
 
   reg                     i_areset;
   reg                     i_clk;
-  reg                     i_clear;
   reg                     i_parser_busy;
   reg                     dispatch_packet_avialable;
   wire                    dispatch_packet_read;
@@ -51,7 +50,6 @@ module nts_rx_buffer_testbench;
   nts_rx_buffer #(ADDR_WIDTH) buffer (
      .i_areset(i_areset),
      .i_clk(i_clk),
-     .i_clear(i_clear),
      .i_parser_busy(i_parser_busy),
      .i_dispatch_packet_available(dispatch_packet_avialable),
      .o_dispatch_packet_read(dispatch_packet_read),
@@ -68,7 +66,7 @@ module nts_rx_buffer_testbench;
 
   `define assert(condition) if(!(condition)) begin $display("ASSERT FAILED: %s:%0d %s", `__FILE__, `__LINE__, `"condition`"); $finish(1); end
 
-  task read ( input [10:0] addr, [2:0] ws );
+  task read ( input [10:0] addr, input [2:0] ws );
     begin
       #10
       `assert(access_port_wait == 'b0);
@@ -92,7 +90,6 @@ module nts_rx_buffer_testbench;
         $display("Test start: %s:%0d.", `__FILE__, `__LINE__);
         i_clk = 1;
         i_areset = 1;
-        i_clear = 1;
         i_parser_busy = 1;
         access_port_addr = 'b0;
         access_port_wordsize = 'b0;
@@ -101,7 +98,6 @@ module nts_rx_buffer_testbench;
         dispatch_fifo_rd_data = 'b00;
 
         #10 i_areset = 0;
-        #10 i_clear = 0;
 
         #10
         dispatch_packet_avialable = 'b1;
@@ -211,6 +207,9 @@ module nts_rx_buffer_testbench;
         $display("Test stop: %s:%0d.", `__FILE__, `__LINE__);
         #40 $finish;
       end
+
+  always @(posedge i_clk)
+    if (dispatch_packet_read==1) $display("%s:%0d dispatch_packet_read.", `__FILE__, `__LINE__);
 
   always begin
     #5 i_clk = ~i_clk;

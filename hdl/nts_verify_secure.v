@@ -30,13 +30,15 @@
 
 module nts_verify_secure #(
   parameter RX_PORT_WIDTH = 64,
-  parameter ADDR_WIDTH = 8
+  parameter ADDR_WIDTH = 8,
+  parameter DEBUG_OUTPUT = 0
 )
 (
   input  wire                         i_areset, // async reset
   input  wire                         i_clk,
 
   output wire                         o_busy,
+  output wire                         o_error,
 
   output wire                         o_verify_tag_ok,
 
@@ -270,6 +272,9 @@ module nts_verify_secure #(
   reg [ADDR_WIDTH+3-1:0] rx_addr;  //Address out
   reg                    rx_rd_en; //Read enable out
 
+  reg [ADDR_WIDTH+3-1:0] rx_addr_reg;  //Address out
+  reg                    rx_rd_en_reg; //Read enable out
+
   //----------------------------------------------------------------
   // Wires - TX-Buff related
   //----------------------------------------------------------------
@@ -357,10 +362,12 @@ module nts_verify_secure #(
 
   assign o_busy = (state_reg != STATE_IDLE) || (nonce_a_valid_reg==1'b0) || (nonce_b_valid_reg==1'b0);
 
+  assign o_error = (state_reg == STATE_ERROR) || (core_addr[15:ADDR_WIDTH-1] != 0);
+
   assign o_noncegen_get = nonce_generate_reg;
 
-  assign o_rx_addr = rx_addr;
-  assign o_rx_rd_en = rx_rd_en;
+  assign o_rx_addr = rx_addr_reg;
+  assign o_rx_rd_en = rx_rd_en_reg;
   assign o_rx_wordsize = 3; // 3: 64bit, 2: 32bit, 1: 16bit, 0: 8bit
 
   assign o_tx_read_en = tx_rd_en;
@@ -447,6 +454,8 @@ module nts_verify_secure #(
       ramld_addr_reg <= 0;
       ramrx_addr_reg <= 0;
       ramtx_addr_reg <= 0;
+      rx_addr_reg <= 0;
+      rx_rd_en_reg <= 0;
       rx_addr_last_reg <= 0;
       rx_addr_next_reg <= 0;
       rx_tag_reg <= 0;
@@ -522,6 +531,9 @@ module nts_verify_secure #(
 
       if (rx_tag_we)
         rx_tag_reg <= rx_tag_new;
+
+      rx_addr_reg <= rx_addr;
+      rx_rd_en_reg <= rx_rd_en;
 
       if (state_we)
         state_reg <= state_new;
@@ -669,7 +681,8 @@ module nts_verify_secure #(
           $display("%s:%0d ERROR, 512 (256+256) bit detected, only 256 (128+128) bit keys currently supported", `__FILE__, `__LINE__);
           //TODO set a bad key bit to indicate system in error state.
         end else if (i_key_word[3]) begin
-          $display("%s:%0d ERROR, 512 (256+256) bit detected when i_key_length==0, invalid input!", `__FILE__, `__LINE__);
+          if (i_key_data != 32'h0 )
+            $display("%s:%0d ERROR, 512 (256+256) bit detected when i_key_length==0, invalid input!", `__FILE__, `__LINE__);
           //TODO set a bad key bit to indicate system in error state.
         end else begin
           key_master_we = 1;
@@ -1322,7 +1335,6 @@ module nts_verify_secure #(
         begin
           state_we = 1;
           state_new = STATE_IDLE;
-          $display("%s:%0d state==ERROR!", `__FILE__, `__LINE__);
         end
       default:
         begin
@@ -1332,4 +1344,19 @@ module nts_verify_secure #(
     endcase
   end
 
+  generate
+    if (DEBUG_OUTPUT) begin
+      always @(posedge i_clk) begin
+        if (ram_a_en && ram_b_en && ram_a_we && ram_b_we) begin
+          $display("%s:%0d RAM port AB addr[%h,%h] wdata: %h%h", `__FILE__, `__LINE__, ram_a_addr, ram_b_addr, ram_a_wdata, ram_b_wdata);
+        end else if (ram_a_en && ram_b_en && ram_a_we==0 && ram_b_we==0) begin
+          $display("%s:%0d RAM port AB addr[%h,%h] (read)", `__FILE__, `__LINE__, ram_a_addr, ram_b_addr);
+        end else begin
+          if (ram_a_en) $display("%s:%0d RAM port A, en: %h we: %h addr: %h wdata: %h", `__FILE__, `__LINE__, ram_a_en, ram_a_we, ram_a_addr, ram_a_wdata);
+          if (ram_b_en) $display("%s:%0d RAM port B, en: %h we: %h addr: %h wdata: %h", `__FILE__, `__LINE__, ram_b_en, ram_b_we, ram_b_addr, ram_b_wdata);
+        end
+        if (state_reg == STATE_ERROR) $display("%s:%0d state==ERROR!", `__FILE__, `__LINE__);
+      end
+    end
+  endgenerate
 endmodule

@@ -34,7 +34,6 @@ module nts_rx_buffer #(
 ) (
   input  wire                         i_areset, // async reset
   input  wire                         i_clk,
-  input  wire                         i_clear,
 
   input  wire                         i_parser_busy,
 
@@ -168,7 +167,9 @@ module nts_rx_buffer #(
       integer i;
       //$display("%s:%0d copy_from_ram_to_accessout_locals(dst, %0d, src, %0d, %0d)", `__FILE__, `__LINE__, dst_start, src_start, bits);
       for (i = 0; i < bits; i=i+1) begin : copy_from_ram_to_accessout_loop_locals
-        integer ram_offset;
+        /* verilator lint_off UNUSED */
+        integer ram_offset;               //TODO clean up this, not very readable, and lint warns
+        /* verilator lint_on UNUSED */
         integer access_out_offset;
         ram_offset = src_start + i;
         access_out_offset = dst_start + i;
@@ -222,17 +223,19 @@ module nts_rx_buffer #(
       if (access_addr_lo_we)
         access_addr_lo_reg     <= access_addr_lo_new;
 
-     if (fifo_addr_we)
-       fifo_addr_reg           <= fifo_addr_new;
+      if (fifo_addr_we)
+        fifo_addr_reg           <= fifo_addr_new;
 
-     if (dispatch_fifo_rd_en_we)
-       dispatch_fifo_rd_en_reg <= dispatch_fifo_rd_en_new;
+      if (dispatch_fifo_rd_en_we)
+        dispatch_fifo_rd_en_reg <= dispatch_fifo_rd_en_new;
 
-     if (dispatch_packet_read_we)
-       dispatch_packet_read_reg <= dispatch_packet_read_new;
+      if (dispatch_packet_read_we)
+        dispatch_packet_read_reg <= dispatch_packet_read_new;
 
-     if (memctrl_we)
-       memctrl_reg             <= memctrl_new;
+      if (memctrl_we) begin
+        memctrl_reg <= memctrl_new;
+        //$display("%s:%0d memctrl %h => %h", `__FILE__, `__LINE__, memctrl_reg, memctrl_new);
+      end
     end
   end
 
@@ -245,7 +248,9 @@ module nts_rx_buffer #(
 
   always @ (posedge i_clk)
   begin : ram_reg_update
+    /* verilator lint_off SYNCASYNCNET */
     if (i_areset == 1'b1 /* used synchroniously here */) begin
+    /* verilator lint_on SYNCASYNCNET */
      ram_addr_reg       <= 'b0;
      ram_wr_en_reg      <= 'b0;
      ram_wr_data_reg    <= 'b0;
@@ -270,6 +275,16 @@ module nts_rx_buffer #(
   begin : FSM
     memctrl_we              = 'b0;
     memctrl_new             = MEMORY_CTRL_IDLE;
+/*
+    $display("%s:%0d AP ADDR: %h WS: %h RD_EN: %h", `__FILE__, `__LINE__,
+      //i_access_port_wait,
+      i_access_port_addr,
+      i_access_port_wordsize,
+      i_access_port_rd_en
+      //ccess_port_rd_dv,
+      //access_port_rd_data
+    );
+*/
 
     case (memctrl_reg)
       MEMORY_CTRL_IDLE:
@@ -310,6 +325,7 @@ module nts_rx_buffer #(
                 memctrl_new      = MEMORY_CTRL_ERROR;
               end
           endcase
+          //$display("%s:%0d memctrl_we: %h memctrl_new: %h", `__FILE__, `__LINE__, memctrl_we, memctrl_new);
         end
       MEMORY_CTRL_FIFO_WRITE:
         if (i_dispatch_fifo_empty == 'b0) begin

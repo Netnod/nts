@@ -38,7 +38,8 @@ module nts_parser_ctrl #(
   parameter [15:0] TAG_NTS_AUTHENTICATOR      = 'h0404,
   parameter [15:0] LEN_NTS_COOKIE             = 'h0068,
   parameter [15:0] LEN_NTS_MIN_UNIQUE_IDENT   = 'h0024, //5.3. The string MUST be at least 32 octets long.
-  parameter [15:0] LEN_NTS_AUTHENTICATOR      = 'h0028  //TL 4h + KeyId 4h + SIV nonce 10h + SIV tag 10h
+  parameter [15:0] LEN_NTS_AUTHENTICATOR      = 'h0028, //TL 4h + KeyId 4h + SIV nonce 10h + SIV tag 10h
+  parameter DEBUG_OUTPUT = 1
 ) (
   input  wire                         i_areset, // async reset
   input  wire                         i_clk,
@@ -153,14 +154,18 @@ module nts_parser_ctrl #(
   localparam BYTES_COOKIE_TAG        = 16;
   localparam BYTES_COOKIE_CIPHERTEXT = 64;
 
-  localparam BYTES_AUTH_NONCE = 16;
-  localparam BYTES_AUTH_TAG   = 16;
-
   localparam OFFSET_COOKIE_NONCE      = BYTES_COOKIE_OVERHEAD;
   localparam OFFSET_COOKIE_TAG        = BYTES_COOKIE_NONCE     + OFFSET_COOKIE_NONCE;
   localparam OFFSET_COOKIE_CIPHERTEXT = BYTES_COOKIE_TAG       + OFFSET_COOKIE_TAG;
 
-  localparam OFFSET_AUTH_NONCE = BYTES_TAG_LEN;
+  localparam BYTES_AUTH_NONCE_LEN_FIELD      = 2;
+  localparam BYTES_AUTH_CIPHERTEXT_LEN_FIELD = 2;
+  localparam BYTES_AUTH_OVERHEAD             = BYTES_TAG_LEN + BYTES_AUTH_NONCE_LEN_FIELD + BYTES_AUTH_CIPHERTEXT_LEN_FIELD; //8 = 4*2
+
+  localparam BYTES_AUTH_NONCE = 16; //TODO hardcoded, not OK in the future.
+  localparam BYTES_AUTH_TAG   = 16;
+
+  localparam OFFSET_AUTH_NONCE = BYTES_AUTH_OVERHEAD;
   localparam OFFSET_AUTH_TAG   = BYTES_AUTH_TAG + OFFSET_AUTH_NONCE;
 
   localparam NTP_EXTENSION_BITS          = 4;
@@ -172,8 +177,10 @@ module nts_parser_ctrl #(
   localparam [3:0] IP_V4        =  4'h4;
   localparam [3:0] IP_V6        =  4'h6;
 
-  localparam ADDR_IPV4_START_NTP = 6 * 8 + 2;
-  localparam ADDR_IPV6_START_NTP = 8 * 8 + 6;
+  //localparam ADDR_IPV4_START_NTP = 6 * 8 + 2;
+  //localparam ADDR_IPV6_START_NTP = 8 * 8 + 6;
+  localparam ADDR_IPV4_START_NTP = 5 * 8 + 2;
+  localparam ADDR_IPV6_START_NTP = 7 * 8 + 6;
 
   //----------------------------------------------------------------
   // Registers including update variables and write enable.
@@ -279,7 +286,9 @@ module nts_parser_ctrl #(
   reg                          nts_basic_sanity_check_packet_ok_new;
   reg                          nts_basic_sanity_check_packet_ok_reg;
   reg [NTP_EXTENSION_BITS-1:0] nts_valid_placeholders_new;
-  reg [NTP_EXTENSION_BITS-1:0] nts_valid_placeholders_reg;
+  /* verilator lint_off UNUSED */
+  reg [NTP_EXTENSION_BITS-1:0] nts_valid_placeholders_reg; //TODO implement
+  /* verilator lint_on UNUSED */
   reg       [ADDR_WIDTH+3-1:0] nts_cookie_start_addr_new;
   reg       [ADDR_WIDTH+3-1:0] nts_cookie_start_addr_reg;
 
@@ -812,15 +821,15 @@ module nts_parser_ctrl #(
 
   always @*
   begin
+    access_port_addr_we        = 'b0;
+    access_port_addr_new       = 'b0;
     access_port_rd_en_we       = 'b0;
     access_port_rd_en_new      = 'b0;
     access_port_wordsize_we    = 'b0;
     access_port_wordsize_new   = 'b0;
-    access_port_addr_we        = 'b0;
-    access_port_addr_new       = 'b0;
 
-    if (i_clear) begin : SYNC_RESET_FROM_TOP_MODULE
-      access_port_addr_we      = 'b1; //write zeros
+    if (i_clear) begin : addr_port_sync_reset_from_top_module
+      access_port_addr_we      = 'b1; //write zeros if top module requests reset
       access_port_rd_en_we     = 'b1;
       access_port_wordsize_we  = 'b1;
 
@@ -1010,6 +1019,9 @@ module nts_parser_ctrl #(
     crypto_rx_op_copy_tag = 0;
     crypto_rx_addr = 0;
     crypto_rx_bytes = 0;
+    crypto_op_cookie_verify = 0;
+    crypto_op_cookie_loadkeys = 0;
+    crypto_op_c2s_verify_auth = 0;
 
     if (crypto_fsm_reg == CRYPTO_FSM_IDLE)
       muxctrl_crypto = 0;
@@ -1053,7 +1065,7 @@ module nts_parser_ctrl #(
         if (i_crypto_busy == 1'b0) begin
           crypto_fsm_we  = 1;
           crypto_fsm_new = CRYPTO_FSM_RX_AUTH_COOKIE_W3;
-          crypto_rx_op_copy_tag = 1;
+          crypto_rx_op_copy_pc = 1;
           crypto_rx_addr = nts_cookie_start_addr_reg + OFFSET_COOKIE_CIPHERTEXT;
           crypto_rx_bytes = BYTES_COOKIE_CIPHERTEXT;
         end
@@ -1151,10 +1163,6 @@ module nts_parser_ctrl #(
            crypto_fsm_new = CRYPTO_FSM_DONE_FAILURE;
          end
     endcase
-    //if (crypto_fsm_we == 1)
-    //  $display("%s:%0d CRYPTO_FSM state %h => %h",`__FILE__,`__LINE__, crypto_fsm_reg, crypto_fsm_new);
-    if (crypto_fsm_we == 1)
-      $display("%s:%0d State: %h CRYPTO_FSM state %h => %h (we: %h)",`__FILE__,`__LINE__, state_reg, crypto_fsm_reg, crypto_fsm_new, crypto_fsm_we);
   end
 
   //----------------------------------------------------------------
@@ -1481,6 +1489,18 @@ module nts_parser_ctrl #(
   // Debug messages
   // Only emits messages that are useful for running local debug
   //----------------------------------------------------------------
+
+  generate
+    if (DEBUG_OUTPUT) begin
+      always @(posedge i_clk)
+        if (crypto_fsm_we == 1)
+          $display("%s:%0d State: %h CRYPTO_FSM state %h => %h [%s]",`__FILE__,`__LINE__,
+            state_reg,
+            crypto_fsm_reg,
+            crypto_fsm_new,
+           (crypto_fsm_new==CRYPTO_FSM_DONE_SUCCESS) ? "Win!" : ((crypto_fsm_new==CRYPTO_FSM_DONE_FAILURE)?"Fail":"...."));
+    end
+  endgenerate
 /*
   always @ (posedge i_clk, posedge i_areset)
   begin : debug_messages

@@ -73,6 +73,7 @@ module nts_verify_secure_tb #(
   reg                    i_clk;
 
   wire                   o_busy;
+  wire                   o_error;
   wire                   o_verify_tag_ok;
 
   reg            [3 : 0] i_key_word;
@@ -137,6 +138,7 @@ module nts_verify_secure_tb #(
     .i_areset(i_areset),
     .i_clk(i_clk),
     .o_busy(o_busy),
+    .o_error(o_error),
     .o_verify_tag_ok(o_verify_tag_ok),
 
     .i_key_word(i_key_word),
@@ -1022,6 +1024,15 @@ module nts_verify_secure_tb #(
       end
     end
   end
+
+  always @(posedge i_clk or posedge i_areset)
+    if (i_areset)
+      ;
+    else begin
+      if (o_error)
+        $display("%s:%0d =====> ERROR!!! <====",  `__FILE__, `__LINE__);
+      `assert( o_error == 'b0 );
+     end
 
   //----------------------------------------------------------------
   // Testbench model: TX-Buff

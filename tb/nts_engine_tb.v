@@ -28,14 +28,30 @@
 // Author: Peter Magnusson, Assured AB
 //
 
-module nts_engine_tb #( parameter integer verbose_output = 'h0);
+module nts_engine_tb #( parameter integer verbose_output = 'h2);
 
   //----------------------------------------------------------------
   // Test bench constants
   //----------------------------------------------------------------
 
+  localparam        ADDR_WIDTH                  = 7;
+
   localparam [31:0] NTS_TESTKEY0                = 32'h2b3076b5;
   localparam [31:0] NTS_TESTKEY1                = 32'h2b30d49a;
+
+  localparam [11:0] API_ADDR_ENGINE_BASE        = 12'h000;
+  localparam [11:0] API_ADDR_ENGINE_NAME0       = API_ADDR_ENGINE_BASE;
+  localparam [11:0] API_ADDR_ENGINE_NAME1       = API_ADDR_ENGINE_BASE + 1;
+  localparam [11:0] API_ADDR_ENGINE_VERSION     = API_ADDR_ENGINE_BASE + 2;
+
+  localparam [11:0] API_ADDR_DEBUG_BASE         = 12'h180;
+  localparam [11:0] API_ADDR_DEBUG_ERR_CRYPTO   = API_ADDR_DEBUG_BASE + 'h20;
+  localparam [11:0] API_ADDR_DEBUG_ERR_TXBUF    = API_ADDR_DEBUG_BASE + 'h22;
+
+  localparam [11:0] API_ADDR_CLOCK_BASE         = 12'h010;
+  localparam [11:0] API_ADDR_CLOCK_NAME0        = API_ADDR_CLOCK_BASE + 0;
+  localparam [11:0] API_ADDR_CLOCK_NAME1        = API_ADDR_CLOCK_BASE + 1;
+
   localparam [11:0] API_ADDR_KEYMEM_BASE        = 12'h080;
   localparam [11:0] API_ADDR_KEYMEM_NAME0       = API_ADDR_KEYMEM_BASE + 0;
   localparam [11:0] API_ADDR_KEYMEM_NAME1       = API_ADDR_KEYMEM_BASE + 1;
@@ -48,13 +64,19 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
   localparam [11:0] API_ADDR_KEYMEM_KEY1_LENGTH = API_ADDR_KEYMEM_BASE + 12'h13;
   localparam [11:0] API_ADDR_KEYMEM_KEY1_START  = API_ADDR_KEYMEM_BASE + 12'h50;
   localparam [11:0] API_ADDR_KEYMEM_KEY1_END    = API_ADDR_KEYMEM_BASE + 12'h5f;
+  localparam [11:0] API_ADDR_KEYMEM_KEY2_ID     = API_ADDR_KEYMEM_BASE + 12'h14;
+  localparam [11:0] API_ADDR_KEYMEM_KEY2_LENGTH = API_ADDR_KEYMEM_BASE + 12'h15;
+  localparam [11:0] API_ADDR_KEYMEM_KEY2_START  = API_ADDR_KEYMEM_BASE + 12'h60;
+  localparam [11:0] API_ADDR_KEYMEM_KEY2_END    = API_ADDR_KEYMEM_BASE + 12'h6f;
+  localparam [11:0] API_ADDR_KEYMEM_KEY3_ID     = API_ADDR_KEYMEM_BASE + 12'h16;
+  localparam [11:0] API_ADDR_KEYMEM_KEY3_LENGTH = API_ADDR_KEYMEM_BASE + 12'h17;
+  localparam [11:0] API_ADDR_KEYMEM_KEY3_START  = API_ADDR_KEYMEM_BASE + 12'h70;
+  localparam [11:0] API_ADDR_KEYMEM_KEY3_END    = API_ADDR_KEYMEM_BASE + 12'h7f;
 
-  localparam [11:0] API_ADDR_CLOCK_BASE         = 12'h010;
-  localparam [11:0] API_ADDR_CLOCK_NAME0        = API_ADDR_CLOCK_BASE + 0;
-  localparam [11:0] API_ADDR_CLOCK_NAME1        = API_ADDR_CLOCK_BASE + 1;
 
   localparam integer ETHIPV4_NTS_TESTPACKETS_BITS=5488;
   localparam integer ETHIPV6_NTS_TESTPACKETS_BITS=5648;
+
 
   localparam  [719:0] ntp_legacy_packet = { 64'h2c768aadf786902b, 64'h3431273408004500, 64'h004c000040004011, 64'h1573c0a80101a0b1, 64'hc2d30abc007b0038, 64'h453e23000a001215, 64'h3524bbbbbbbb0000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h00000123456789ab, 16'hcdef };
 
@@ -82,8 +104,24 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
 
   localparam [ETHIPV6_NTS_TESTPACKETS_BITS-1:0] nts_packet_ipv6_response2 = { 64'h0000000000000000, 64'h0000000086dd6000, 64'h0000028c11400000, 64'h0000000000000000, 64'h0000000000010000, 64'h0000000000000000, 64'h000000000001101e, 64'ha481028c029f2405, 64'h00f6000000000000, 64'h000000000000e120, 64'h90f4652ed0009006, 64'h7ae76b0e7c8fe120, 64'h90f4652ed000e120, 64'h90f4652ed0000104, 64'h002442c6f064b709, 64'h5020fe86a9a3ee40, 64'h24873e09427a8bda, 64'h42913ac7a4210292, 64'h5605040402300010, 64'h021887a2b4e0cc9c, 64'h6743ff66ca1d8bcd, 64'h4a6737b70f40b3a7, 64'ha66d21066344d1ab, 64'h092442ae690fc3bb, 64'h1c6a5f6a62780a55, 64'h40f2c2532af4f355, 64'h7d75d32faa38f7f6, 64'hb3ea3516495ceeac, 64'h08a690372263f28d, 64'h23c1f545fea99cea, 64'hdf133abac6ee742a, 64'h828af076e710277b, 64'h8d3c79334ec3a7fd, 64'h2cf4ab961195f3f1, 64'hf0dffb092f6c360f, 64'h5a7b5fed3d484854, 64'hf6ce5b7451f2d8b4, 64'h29f20fa911a5890b, 64'hf5c87290a1ceec6d, 64'h039b833857d1885d, 64'hb36dc72db9e76b37, 64'h48c043fd18b7c0b8, 64'h44ee4183ca9982bb, 64'h84e9f7e92580a660, 64'ha3f6400e1961d5ba, 64'h5461da1178e97737, 64'h1f24aab8be3b04b2, 64'h305452d6dafde4fe, 64'hd347caee01e9c81d, 64'haee47b3a35291f75, 64'hf12fcbb2d4e8e35c, 64'hdede4d59a2fd9dc0, 64'hbac3008ef6d82923, 64'hca55b05d7216f8f3, 64'h90b14f60da316597, 64'h7b18458aa95bf4a5, 64'h4b53bb67afdfc42e, 64'he577ae9a0550e5b1, 64'hb6c0f68c835f336c, 64'h8bd28efc7558fb12, 64'he6f6ad21f0e338c1, 64'h267f5dc507ec745c, 64'h301dec40caa76c36, 64'h8b29a2b6b0ac4d29, 64'hd0ca6d3120d232b0, 64'h9c374ab32f35b6a3, 64'hab90a6f23ea6490f, 64'h1efc8550ad51650c, 64'h00ddfc190a0426eb, 64'h67c458317958991d, 64'hc67bdf833740f0a7, 64'h09c28988bba01d78, 64'hf33e314a11650b3b, 64'h3694cc426e48fb0e, 64'hfddff08ee22a9239, 64'hb9f985b2fe487b8e, 64'h91b50274abf25111, 64'h2dc8948e88649119, 64'h0d02f9e1b8b9f3dd, 64'hd33a06c1d427baf7, 64'h95f6278ccf1a2b6f, 64'ha146e7e470b52e0f, 64'h24034578bfe80688, 64'hd88799bd7560e595, 64'h0355c3b79f46ce55, 64'h2fe0307c0a16a603, 64'h93b6b1c2bb59e06a, 64'h480235d64bfdc1a5, 16'hd657 };
 
+  localparam[31:0] NTS_TEST_REQUEST_MASTER_KEY_ID_1=32'h30a8dce1;
+  localparam[255:0] NTS_TEST_REQUEST_MASTER_KEY_1=256'h6d1e7f51_f64876ba_68d4669e_649ad613_402bf7bb_5cf275a9_83a28dab_5e416314;
+  localparam[255:0] NTS_TEST_REQUEST_C2S_KEY_1=256'hf6467017_5420ab7e_2952fc90_fff2649e_e9ae6707_05d32341_94e72f48_6618a5b5;
+  localparam[255:0] NTS_TEST_REQUEST_S2C_KEY_1=256'hfa8ac687_49e3d765_618b2e63_496a5b6f_20baf052_148863bb_49555ac0_88fc5c44;
+  localparam[1839:0] NTS_TEST_REQUEST_WITH_KEY_IPV4_1=1840'h001c7300_00995254_00cdcd23_08004500_00d80001_00004011_bc3f4d48_e37ec23a_cad31267_101b00c4_3a272300_00200000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00002d88_68987dd0_23a60104_0024d406_12b0c40f_353d6afc_d5709668_cd4ebceb_cd8ab0aa_4fd63533_3e8491dc_9f0d0204_006830a8_dce151bd_4e5aa6e3_e577ab41_30e77bc7_cd5ab785_9283e20b_49d8f6bb_89a5b313_4cc92a3d_5eef1f45_3930d7af_f838eec7_99876905_a470e88b_1c57a85a_93fab799_a47c1b7c_8706604f_de780bf9_84394999_d7d59abc_5468cfec_5b261efe_d850618e_91c5;
+  localparam[1999:0] NTS_TEST_REQUEST_WITH_KEY_IPV6_1=2000'h001c7300_00995254_00cdcd23_86dd6000_000000c4_11402a01_03f00001_00085063_d01c72c6_ab922a01_03f70002_00520000_00000000_00111267_101b00c4_5ccc2300_00200000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00002d88_68987dd0_23a60104_0024d406_12b0c40f_353d6afc_d5709668_cd4ebceb_cd8ab0aa_4fd63533_3e8491dc_9f0d0204_006830a8_dce151bd_4e5aa6e3_e577ab41_30e77bc7_cd5ab785_9283e20b_49d8f6bb_89a5b313_4cc92a3d_5eef1f45_3930d7af_f838eec7_99876905_a470e88b_1c57a85a_93fab799_a47c1b7c_8706604f_de780bf9_84394999_d7d59abc_5468cfec_5b261efe_d850618e_91c5;
+
+
+  localparam[31:0] NTS_TEST_REQUEST_MASTER_KEY_ID_2=32'h13fe78e9;
+  localparam[255:0] NTS_TEST_REQUEST_MASTER_KEY_2=256'hfeb10c69_9c6435be_5a9ee521_e40e420c_f665d8f7_a969302a_63b9385d_353ae43e;
+  localparam[255:0] NTS_TEST_REQUEST_C2S_KEY_2=256'h8b61a5d5_b5d13237_2272b0e7_59938580_1cbbdfd6_d2f59fe4_8c11551d_8c724265;
+  localparam[255:0] NTS_TEST_REQUEST_S2C_KEY_2=256'h55b99245_5a4c8089_e6a1281a_f8a2842d_443ea9ac_34646e84_dca14456_6f7b908c;
+  localparam[2159:0] NTS_TEST_REQUEST_WITH_KEY_IPV4_2=2160'h001c7300_00995254_00cdcd23_08004500_01000001_00004011_bc174d48_e37ec23a_cad31267_101b00ec_8c5b2300_00200000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_000071cc_4c8cdb00_980b0104_002492ae_9b06e29f_638497f0_18b58124_85cbef5f_811f516a_620ed802_4546bb3e_db590204_006813fe_78e93426_b1f08926_0a257d85_5c533225_c7540952_f35b63d9_f6f6fb4c_69dbc025_3c869740_6b59c01c_d297755c_960a2532_7d40ad6f_41a636d1_4f8a584e_6414f559_3a0912fd_8a7e4b69_88be44ea_97f6f60f_b3d799f9_293e5852_d40fa062_4038e0fc_a5d90404_00280010_00107812_c6677d04_a1c0ac02_0219687c_17d5ca94_9acd04b0_ac8d8d82_d6c71f3f_8518;
+  localparam[2319:0] NTS_TEST_REQUEST_WITH_KEY_IPV6_2=2320'h001c7300_00995254_00cdcd23_86dd6000_000000ec_11402a01_03f00001_00085063_d01c72c6_ab922a01_03f70002_00520000_00000000_00111267_101b00ec_af002300_00200000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_000071cc_4c8cdb00_980b0104_002492ae_9b06e29f_638497f0_18b58124_85cbef5f_811f516a_620ed802_4546bb3e_db590204_006813fe_78e93426_b1f08926_0a257d85_5c533225_c7540952_f35b63d9_f6f6fb4c_69dbc025_3c869740_6b59c01c_d297755c_960a2532_7d40ad6f_41a636d1_4f8a584e_6414f559_3a0912fd_8a7e4b69_88be44ea_97f6f60f_b3d799f9_293e5852_d40fa062_4038e0fc_a5d90404_00280010_00107812_c6677d04_a1c0ac02_0219687c_17d5ca94_9acd04b0_ac8d8d82_d6c71f3f_8518;
+
+
   //----------------------------------------------------------------
-  // Test bench variables
+  // Test bench input output regs, wires etc
   //----------------------------------------------------------------
 
   reg                  i_areset;
@@ -92,7 +130,7 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
   reg [63:0]           i_ntp_time;
 
   reg                  i_dispatch_rx_packet_available;
-  reg [7:0]            i_dispatch_rx_data_valid;
+  reg [7:0]            i_dispatch_rx_data_last_valid;
   reg                  i_dispatch_rx_fifo_empty;
   reg [63:0]           i_dispatch_rx_fifo_rd_data;
 
@@ -104,13 +142,13 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
   reg [11:0]           i_api_address;
   reg [31:0]           i_api_write_data;
 
+  reg [63:0]           i_noncegen_data;
+  reg                  i_noncegen_ready;
+
+
   reg          [3 : 0] detect_bits;
 
   reg                  tx_receiving;
-
-  //----------------------------------------------------------------
-  // Test bench wires
-  //----------------------------------------------------------------
 
   wire                 detect_unique_identifier;
   wire                 detect_nts_cookie;
@@ -126,8 +164,12 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
 
   wire                 o_dispatch_tx_packet_available;
   wire                 o_dispatch_tx_fifo_empty;
-  wire [63:0]          o_dispatch_tx_fifo_rd_data;
-  wire  [3:0]          o_dispatch_tx_bytes_last_word;
+  /* verilator lint_off UNUSED */
+  wire [63:0]          o_dispatch_tx_fifo_rd_data;    //TODO implement test support
+  wire  [3:0]          o_dispatch_tx_bytes_last_word; //TODO implement test support
+  /* verilator lint_on UNUSED */
+
+  wire                 o_noncegen_get;
 
   //----------------------------------------------------------------
   // Test bench macros
@@ -157,6 +199,7 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
       end
       packet_ptr = 1;
       source_ptr = (length % 64);
+/*
       case (source_ptr)
          56: packet[0] = { 8'b0, source[55:0] };
          48: packet[0] = { 16'b0, source[47:0] };
@@ -164,6 +207,18 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
          24: packet[0] = { 40'b0, source[23:0] };
          16: packet[0] = { 48'b0, source[15:0] };
           8: packet[0] = { 56'b0, source[7:0] };
+          0: packet_ptr = 0;
+        default:
+          `assert(0)
+      endcase
+*/
+      case (source_ptr)
+         56: packet[0] = { source[55:0], 8'b0 };
+         48: packet[0] = { source[47:0], 16'b0 };
+         32: packet[0] = { source[31:0], 32'b0 };
+         24: packet[0] = { source[23:0], 40'b0 };
+         16: packet[0] = { source[15:0], 48'b0 };
+          8: packet[0] = { source[7:0], 56'b0 };
           0: packet_ptr = 0;
         default:
           `assert(0)
@@ -178,7 +233,7 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
 
       #10
       i_dispatch_rx_packet_available = 0;
-      i_dispatch_rx_data_valid       = 'b0;
+      i_dispatch_rx_data_last_valid  = 'b0;
       i_dispatch_rx_fifo_empty       = 'b1;
       i_dispatch_rx_fifo_rd_data     = 'b0;
       `assert( o_busy == 'b0 );
@@ -190,14 +245,14 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
       i_dispatch_rx_packet_available = 'b1;
 
       case ((length/8) % 8)
-        0: i_dispatch_rx_data_valid  = 8'b11111111; //all bytes valid
-        1: i_dispatch_rx_data_valid  = 8'b00000001; //last byte valid
-        2: i_dispatch_rx_data_valid  = 8'b00000011;
-        3: i_dispatch_rx_data_valid  = 8'b00000111;
-        4: i_dispatch_rx_data_valid  = 8'b00001111;
-        5: i_dispatch_rx_data_valid  = 8'b00011111;
-        6: i_dispatch_rx_data_valid  = 8'b00111111;
-        7: i_dispatch_rx_data_valid  = 8'b01111111;
+        0: i_dispatch_rx_data_last_valid  = 8'b11111111; //all bytes valid
+        1: i_dispatch_rx_data_last_valid  = 8'b00000001; //last byte valid
+        2: i_dispatch_rx_data_last_valid  = 8'b00000011;
+        3: i_dispatch_rx_data_last_valid  = 8'b00000111;
+        4: i_dispatch_rx_data_last_valid  = 8'b00001111;
+        5: i_dispatch_rx_data_last_valid  = 8'b00011111;
+        6: i_dispatch_rx_data_last_valid  = 8'b00111111;
+        7: i_dispatch_rx_data_last_valid  = 8'b01111111;
         default:
           begin
             $display("length:%0d", length);
@@ -243,7 +298,7 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
   // Test bench Design Under Test (DUT) instantiation
   //----------------------------------------------------------------
 
-  nts_engine dut (
+  nts_engine #(.ADDR_WIDTH(ADDR_WIDTH)) dut (
     .i_areset(i_areset),
     .i_clk(i_clk),
 
@@ -253,7 +308,7 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
 
     .i_dispatch_rx_packet_available(i_dispatch_rx_packet_available),
     .o_dispatch_rx_packet_read_discard(o_dispatch_rx_packet_read_discard),
-    .i_dispatch_rx_data_valid(i_dispatch_rx_data_valid),
+    .i_dispatch_rx_data_last_valid(i_dispatch_rx_data_last_valid),
     .i_dispatch_rx_fifo_empty(i_dispatch_rx_fifo_empty),
     .o_dispatch_rx_fifo_rd_en(o_dispatch_rx_fifo_rd_en),
     .i_dispatch_rx_fifo_rd_data(i_dispatch_rx_fifo_rd_data),
@@ -270,6 +325,10 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
     .i_api_address(i_api_address),
     .i_api_write_data(i_api_write_data),
     .o_api_read_data(o_api_read_data),
+
+    .o_noncegen_get(o_noncegen_get),
+    .i_noncegen_data(i_noncegen_data),
+    .i_noncegen_ready(i_noncegen_ready),
 
     .o_detect_unique_identifier(detect_unique_identifier),
     .o_detect_nts_cookie(detect_nts_cookie),
@@ -300,6 +359,102 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
   end
   endtask
 
+  function [31:0] api_read32( input [11:0] addr );
+  begin : api_read32_
+    reg [31:0] result;
+    result = 0;
+    api_set(1, 0, addr, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+    #10;
+    result = o_api_read_data;
+    api_set(0, 0, 0, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+    api_read32 = result;
+  end
+  endfunction
+
+  function [63:0] api_read64( input [11:0] addr );
+  begin : api_read64_
+    reg [63:0] result;
+    result = 0;
+    api_set(1, 0, addr, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+    #20;
+    result[63:32] = o_api_read_data;
+    api_set(1, 0, addr + 1, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+    #10;
+    result[31:0] = o_api_read_data;
+    #10;
+    api_set(0, 0, 0, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+    #10;
+    api_read64 = result;
+  end
+  endfunction
+
+  //----------------------------------------------------------------
+  // Install key
+  //----------------------------------------------------------------
+
+  task install_key_256bit(
+    input  [31:0] keyid,
+    input [255:0] key,
+    input   [1:0] key_index );
+  begin : install_key_256bit
+    reg [11:0] addr_key;
+    reg [11:0] addr_keyid;
+    reg [11:0] addr_length;
+    reg [31:0] tmp;
+    reg [3:0] i;
+    reg [2:0] index;
+    case (key_index)
+      0:
+        begin
+          addr_key = API_ADDR_KEYMEM_KEY0_START;
+          addr_keyid = API_ADDR_KEYMEM_KEY0_ID;
+          addr_length = API_ADDR_KEYMEM_KEY0_LENGTH;
+        end
+      1:
+        begin
+          addr_key = API_ADDR_KEYMEM_KEY1_START;
+          addr_keyid = API_ADDR_KEYMEM_KEY1_ID;
+          addr_length = API_ADDR_KEYMEM_KEY1_LENGTH;
+        end
+      2:
+        begin
+          addr_key = API_ADDR_KEYMEM_KEY2_START;
+          addr_keyid = API_ADDR_KEYMEM_KEY2_ID;
+          addr_length = API_ADDR_KEYMEM_KEY2_LENGTH;
+        end
+      3:
+        begin
+          addr_key = API_ADDR_KEYMEM_KEY3_START;
+          addr_keyid = API_ADDR_KEYMEM_KEY3_ID;
+          addr_length = API_ADDR_KEYMEM_KEY3_LENGTH;
+        end
+      default: ;
+    endcase
+    tmp = api_read32(API_ADDR_KEYMEM_ADDR_CTRL);
+    tmp = tmp & ~ (1<<key_index);
+    api_set(1, 1, API_ADDR_KEYMEM_ADDR_CTRL, tmp, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+    #10;
+    api_set(1, 1, addr_keyid, keyid, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+    #10;
+    api_set(1, 1, addr_length, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+    #10;
+    for (i = 0; i < 8; i = i + 1) begin
+      index = i[2:0];
+      api_set(1, 1, addr_key + {8'b00, index}, key[32*index+:32], i_api_cs, i_api_we, i_api_address, i_api_write_data);
+      #10;
+    end
+    for (i = 0; i < 8; i = i + 1) begin
+      index = i[2:0];
+      api_set(1, 1, addr_key + {8'b01, index}, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+      #10;
+    end
+    tmp = tmp | (1<<key_index);
+    api_set(1, 1, API_ADDR_KEYMEM_ADDR_CTRL, tmp, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+    #10;
+    api_set(0, 0, 0, tmp, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+  end
+  endtask
+
   //----------------------------------------------------------------
   // Test bench code
   //----------------------------------------------------------------
@@ -310,7 +465,7 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
     i_areset = 1;
 
     i_dispatch_rx_packet_available = 0;
-    i_dispatch_rx_data_valid       = 'b0;
+    i_dispatch_rx_data_last_valid  = 'b0;
     i_dispatch_rx_fifo_empty       = 'b1;
     i_dispatch_rx_fifo_rd_data     = 'b0;
 
@@ -329,13 +484,17 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
     $display("%s:%0d o_busy=%h", `__FILE__, `__LINE__, o_busy);
     `assert( o_busy == 'b0 );
 
-    // Verify success accessing keymem over API interface
     #10 ;
-    api_set(1, 0, API_ADDR_KEYMEM_NAME0, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
-    #10 `assert( o_api_read_data == 32'h6b65795f); // "key_"
-    api_set(1, 0, API_ADDR_KEYMEM_NAME1, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
-    #10 `assert( o_api_read_data == 32'h6d656d20); // "mem "
-    begin : initilize_keymem
+    `assert( api_read64(API_ADDR_ENGINE_NAME0) == 64'h4e_54_53_5f_45_4e_47_4e ); // "NTS_ENGN"
+    `assert( api_read64(API_ADDR_KEYMEM_NAME0) == 64'h6b_65_79_5f_6d_65_6d_20 ); // "key_mem "
+    `assert( api_read64(API_ADDR_CLOCK_NAME0) == 64'h74_69_6d_65_73_74_6d_70 );  // "timestmp"
+
+    //install_key_256bit( NTS_TEST_REQUEST_MASTER_KEY_ID_1, NTS_TEST_REQUEST_MASTER_KEY_1, 0 );
+    install_key_256bit( NTS_TEST_REQUEST_MASTER_KEY_ID_2, NTS_TEST_REQUEST_MASTER_KEY_2, 3 );
+    //install_key_256bit( NTS_TESTKEY0, 256'h00000000_00000001_00000002_00000003_00000004_00000005_00000006_00000007, 2 );
+    //install_key_256bit( NTS_TESTKEY1, 256'hFF000000_FF000001_FF000002_FF000003_FF000004_FF000005_FF000006_FF000007, 3 );
+/*
+    begin : initilize_keymem_with_dummies
       reg [11:0] i;
       for (i = API_ADDR_KEYMEM_KEY0_START; i <= API_ADDR_KEYMEM_KEY0_END; i = i + 1) begin
         api_set(1, 1, i[11:0], { 28'hdeadbee, i[3:0] }, i_api_cs, i_api_we, i_api_address, i_api_write_data);
@@ -343,7 +502,7 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
       end
       api_set(1, 1, API_ADDR_KEYMEM_KEY0_ID, NTS_TESTKEY0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
       #10;
-      api_set(1, 1, API_ADDR_KEYMEM_KEY0_LENGTH, 32'b1, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+      api_set(1, 1, API_ADDR_KEYMEM_KEY0_LENGTH, 32'b0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
       #10;
       for (i = API_ADDR_KEYMEM_KEY1_START; i <= API_ADDR_KEYMEM_KEY1_END; i = i + 1) begin
         api_set(1, 1, i[11:0], { 28'hdeadbee, i[3:0] }, i_api_cs, i_api_we, i_api_address, i_api_write_data);
@@ -356,14 +515,28 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
     end
     api_set(1, 1, API_ADDR_KEYMEM_ADDR_CTRL, 32'b11, i_api_cs, i_api_we, i_api_address, i_api_write_data);
     #10;
-    api_set(1, 0, API_ADDR_CLOCK_NAME0, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
-    $display("%s:%0d o_api_read_data = %h", `__FILE__, `__LINE__, o_api_read_data);
-    #10 `assert( o_api_read_data == 32'h74696d65); //"time"
-    api_set(1, 0, API_ADDR_CLOCK_NAME1, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
-    #10 `assert( o_api_read_data == 32'h73746d70); //"stmp"
-    api_set(0, 0, 'h000, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
-
-
+*/
+/*
+    begin : initilize_keymem_with_real_keys
+      reg |255:0] key;
+      reg [31:0] key_id;
+      reg [1:0] j;
+      reg [11:0] i;
+      reg [11:0] key_start;
+      reg [11:0] key_end;
+      for (j = 0; j < 2: j = j + 1) begin
+        case (j)
+          0:
+            begin
+            end
+          1:
+            begin
+            end
+          default: ;
+        endcase
+      end
+   end
+*/
     $display("%s:%0d Send legacy NTP", `__FILE__, `__LINE__);
     send_packet({64816'b0, ntp_legacy_packet}, 720, detect_bits);
     `assert(detect_bits == 0);
@@ -431,12 +604,38 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
     send_packet({59888'b0, nts_packet_ipv6_response2}, ETHIPV6_NTS_TESTPACKETS_BITS, detect_bits);
     `assert(detect_bits == 'b1001);
 
+    //----------------------------------------------------------------
+    // Packets with proper keys!
+    //----------------------------------------------------------------
+
+    $display("%s:%0d ===> Send NTS requests missing authenticator <===", `__FILE__, `__LINE__);
+
+    send_packet({63696'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_1}, 1840, detect_bits);
+    `assert(detect_bits == 'b1100);
+
+    $display("%s:%0d ===> Send NTS requests with proper keys <===", `__FILE__, `__LINE__);
+
+    send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160, detect_bits);
+    `assert(detect_bits == 0); //TODO cleared upon success. Add a better detection of success.
+
+    //----------------------------------------------------------------
+    // Human readable Debug
+    //----------------------------------------------------------------
 
     #100 ;
+    $display("%s:%0d: *** CORE: %s %s", `__FILE__, `__LINE__, api_read64(API_ADDR_ENGINE_NAME0), api_read32(API_ADDR_ENGINE_VERSION));
+    $display("%s:%0d: *** CORE: %s", `__FILE__, `__LINE__, api_read64(API_ADDR_CLOCK_NAME0));
+    $display("%s:%0d: *** CORE: %s", `__FILE__, `__LINE__, api_read64(API_ADDR_KEYMEM_NAME0));
+    $display("%s:%0d: *** DEBUG, Errors Crypto: %0d", `__FILE__, `__LINE__, api_read64(API_ADDR_DEBUG_ERR_CRYPTO));
+    $display("%s:%0d: *** DEBUG, Errors TxBuf: %0d", `__FILE__, `__LINE__, api_read64(API_ADDR_DEBUG_ERR_TXBUF));
 
     $display("Test stop: %s:%0d", `__FILE__, `__LINE__);
     $finish;
   end
+
+  //----------------------------------------------------------------
+  // Testbench model: TX
+  //----------------------------------------------------------------
 
   always @(posedge i_clk or posedge i_areset)
   begin
@@ -461,6 +660,10 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
     end
   end
 
+  //----------------------------------------------------------------
+  // Testbench model: NTP clock
+  //----------------------------------------------------------------
+
   always  @(posedge i_clk or posedge i_areset)
   begin
     if (i_areset) begin
@@ -470,8 +673,117 @@ module nts_engine_tb #( parameter integer verbose_output = 'h0);
     end
   end
 
+  //----------------------------------------------------------------
+  // Testbench model: Nonce Generator
+  //----------------------------------------------------------------
+
+  reg   [3:0] nonce_delay;
+
+  always @(posedge i_clk or posedge i_areset)
+  begin
+    if (i_areset) begin
+      i_noncegen_data <= 64'h0;
+      i_noncegen_ready <= 0;
+      nonce_delay <= 0;
+    end else begin
+      i_noncegen_ready <= 0;
+      if (nonce_delay == 4'hF) begin
+        nonce_delay <= 0;
+        i_noncegen_ready <= 1;
+        i_noncegen_data <= i_noncegen_data + 1;
+        //if (nonce_set) begin
+        //  i_noncegen_nonce <= (i_noncegen_nonce == nonce_set_a) ? nonce_set_b : nonce_set_a;
+        //end else begin
+        //  i_noncegen_nonce <= i_noncegen_nonce + 1;
+        //end
+      end else if (nonce_delay > 0) begin
+        nonce_delay <= nonce_delay + 1;
+      end else if (o_noncegen_get) begin
+        nonce_delay <= 1;
+      end
+    end
+  end
+
+  //----------------------------------------------------------------
+  // Debug debug debug
+  //----------------------------------------------------------------
+
+  generate
+    if (verbose_output > 2) begin
+      always @*
+        $display("%s:%0d dut.parser_muxctrl_crypto: %h", `__FILE__, `__LINE__, dut.parser_muxctrl_crypto);
+      always @*
+       $display("%s:%0d rx_buf.memctrl: %h", `__FILE__, `__LINE__, dut.rx_buffer.memctrl_reg);
+      always @*
+        $display("%s:%0d CRYPTO_RX: (AD,NONCE,PC,TAG)=%b %h.%h", `__FILE__, `__LINE__,
+        {
+          dut.parser_crypto_rx_op_copy_ad,
+          dut.parser_crypto_rx_op_copy_nonce,
+          dut.parser_crypto_rx_op_copy_pc,
+          dut.parser_crypto_rx_op_copy_tag
+        },
+        dut.parser_crypto_rx_addr, dut.parser_crypto_rx_bytes);
+      always @*
+        $display("%s:%0d AP WAIT: %h ADDR: %h WS: %h RD_EN: %h, RD_DV: %h RD_DATA: %h (async)", `__FILE__, `__LINE__,
+         dut.access_port_wait,
+         dut.access_port_addr,
+         dut.access_port_wordsize,
+         dut.access_port_rd_en,
+         dut.access_port_rd_dv,
+         dut.access_port_rd_data
+       );
+      always @(posedge i_clk or posedge i_areset)
+        if (i_areset) ; else if (dut.access_port_wait == 0 && dut.access_port_rd_dv == 1)
+        $display("%s:%0d AP WAIT: %h ADDR: %h WS: %h RD_EN: %h, RD_DV: %h RD_DATA: %h (clocked)", `__FILE__, `__LINE__,
+          dut.access_port_wait,
+          dut.access_port_addr,
+          dut.access_port_wordsize,
+          dut.access_port_rd_en,
+          dut.access_port_rd_dv,
+          dut.access_port_rd_data
+        );
+      always @*
+        $display("%s:%0d dut.crypto.key_master_reg: %h", `__FILE__, `__LINE__, dut.crypto.key_master_reg);
+      always @*
+        $display("%s:%0d dut.crypto.key_current_reg: %h", `__FILE__, `__LINE__, dut.crypto.key_current_reg);
+      always @*
+        $display("%s:%0d dut.crypto.key_c2s_reg: %h", `__FILE__, `__LINE__, dut.crypto.key_c2s_reg);
+      always @*
+        $display("%s:%0d dut.crypto.key_s2c_reg: %h", `__FILE__, `__LINE__, dut.crypto.key_s2c_reg);
+      always @*
+        $display("%s:%0d word: %h valid: %h length: %h key: %h", `__FILE__, `__LINE__, dut.keymem_internal_key_word, dut.keymem_internal_key_valid, dut.keymem_internal_key_length, dut.keymem_internal_key_data);
+      always @(posedge i_clk or posedge i_areset)
+        if (i_areset) ;
+        else begin
+          if (dut.crypto.ram_a_en && dut.crypto.ram_a_we && dut.crypto.ram_b_en && dut.crypto.ram_b_we)
+            $display("%s:%0d crypto write128[%h,%h]: %h%h", `__FILE__, `__LINE__, dut.crypto.ram_a_addr, dut.crypto.ram_b_addr, dut.crypto.ram_a_wdata, dut.crypto.ram_b_wdata);
+          else if (dut.crypto.ram_a_en && dut.crypto.ram_a_we==0 && dut.crypto.ram_b_en && dut.crypto.ram_b_we==0)
+            $display("%s:%0d crypto read128[%h,%h]", `__FILE__, `__LINE__, dut.crypto.ram_a_addr, dut.crypto.ram_b_addr);
+          else if (dut.crypto.ram_a_en && dut.crypto.ram_a_we)
+            $display("%s:%0d crypto write64[%h]: %h", `__FILE__, `__LINE__, dut.crypto.ram_a_addr, dut.crypto.ram_a_wdata);
+          else if (dut.crypto.ram_a_en && dut.crypto.ram_a_we==0)
+            $display("%s:%0d crypto read64[%h]", `__FILE__, `__LINE__, dut.crypto.ram_a_addr);
+          else if (dut.crypto.ram_b_en && dut.crypto.ram_b_we)
+            $display("%s:%0d crypto write64: %h", `__FILE__, `__LINE__, dut.crypto.ram_b_wdata);
+          else if (dut.crypto.ram_b_en && dut.crypto.ram_b_we==0)
+            $display("%s:%0d crypto read64[%h]", `__FILE__, `__LINE__, dut.crypto.ram_b_addr);
+        end
+      always @*
+        $display("%s:%0d parser_crypto_op_cookie_loadkeys %h", `__FILE__, `__LINE__, dut.parser_crypto_op_cookie_loadkeys);
+      always @(posedge i_clk)
+        if (dut.parser_crypto_op_cookie_loadkeys)
+          $display("%s:%0d parser_crypto_op_cookie_loadkeys %h (clocked)", `__FILE__, `__LINE__, dut.parser_crypto_op_cookie_loadkeys);
+      always @*
+        $display("%s:%0d crypto.tag_in: %h", `__FILE__, `__LINE__, dut.crypto.core_tag_in);
+    end
+  endgenerate
+
+  //----------------------------------------------------------------
+  // Testbench model: System Clock
+  //----------------------------------------------------------------
 
   always begin
     #5 i_clk = ~i_clk;
   end
+
 endmodule

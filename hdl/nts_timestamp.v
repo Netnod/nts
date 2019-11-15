@@ -152,7 +152,6 @@ module nts_timestamp (
 
   reg  [31:0] api_tmp_read_data;
 
-  reg         tmp_ntp_empty;
   reg  [63:0] tmp_ntp_data;
 
   wire [63:0] ntp_ref_ts;

@@ -34,6 +34,8 @@ module nts_tx_buffer #(
   input  wire        i_areset, // async reset
   input  wire        i_clk,
 
+  output wire        o_error,
+
   output wire        o_dispatch_tx_packet_available,
   input  wire        i_dispatch_tx_packet_read,
   output wire        o_dispatch_tx_fifo_empty,
@@ -111,7 +113,9 @@ module nts_tx_buffer #(
 
   wire           [63:0] ram_rd_data [1:0];
   wire                  ram_error   [1:0];
-  wire                  ram_busy    [1:0];
+  /* verilator lint_off UNUSED */
+  wire                  ram_busy    [1:0]; //TODO handle
+  /* verilator lint_on UNUSED */
 
   wire                  parser;
   wire                  fifo;
@@ -132,6 +136,11 @@ module nts_tx_buffer #(
   assign o_parser_current_memory_full    = (mem_state_reg[ parser ] == STATE_HAS_DATA && ram_addr_hi_reg[ parser ] == ADDRESS_FULL) ||
                                            (mem_state_reg[ parser ] == STATE_HAS_DATA && ram_addr_hi_reg[ parser ] == ADDRESS_ALMOST_FULL && i_write_en) ||
                                            (mem_state_reg[ parser ] > STATE_HAS_DATA); //TODO verify
+
+  assign o_error = (mem_state_reg[0] == STATE_ERROR_GENERAL) ||
+                   (mem_state_reg[1] == STATE_ERROR_GENERAL) ||
+                   ram_error[0] ||
+                   ram_error[1];
 
   //----------------------------------------------------------------
   // Memory holding the Tx buffer
@@ -271,7 +280,7 @@ module nts_tx_buffer #(
 
               ram_wr[parser]  = 1;
 
-              $display("%s:%0d WRITE: %h:%h = %h. wr=%h rd=%h", `__FILE__, `__LINE__, ram_addr_hi[parser], ram_addr_lo[parser], i_write_data, ram_wr[parser], ram_rd[parser] );
+              //$display("%s:%0d WRITE: %h:%h = %h. wr=%h rd=%h", `__FILE__, `__LINE__, ram_addr_hi[parser], ram_addr_lo[parser], i_write_data, ram_wr[parser], ram_rd[parser] );
             end
           end
         STATE_HAS_DATA:
@@ -294,7 +303,7 @@ module nts_tx_buffer #(
                 ram_addr_lo[parser]     = i_address_lo;
                 ram_addr_hi[parser]     = i_address_hi;
               end
-              $display("%s:%0d WRITE: %h:%h = %h. wr=%h rd=%h", `__FILE__, `__LINE__, ram_addr_hi[parser], ram_addr_lo[parser], i_write_data, ram_wr[parser], ram_rd[parser] );
+              //$display("%s:%0d WRITE: %h:%h = %h. wr=%h rd=%h", `__FILE__, `__LINE__, ram_addr_hi[parser], ram_addr_lo[parser], i_write_data, ram_wr[parser], ram_rd[parser] );
             end
             if (i_parser_ipv4_done || i_parser_ipv6_done) begin
               mem_state_we[parser] = 1;

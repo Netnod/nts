@@ -29,7 +29,7 @@
 #
 
 .PHONY: DIRS VVP clean default all \
- lint lint_src/rtl/nts_engine int_tb lint-submodules \
+ lint lint_rtl lint_memory lint_engine lint_dispatcher lint_top int_tb lint-submodules \
  sim-api sim-engine sim-parser sim-rxbuf sim-txbuf sim-secure sim
 
 default: all sim-engine
@@ -38,6 +38,19 @@ AES_SRC_PATH = sub/aes/src/rtl
 AES_SRC = $(AES_SRC_PATH)/aes_core.v $(AES_SRC_PATH)/aes_decipher_block.v $(AES_SRC_PATH)/aes_encipher_block.v $(AES_SRC_PATH)/aes_inv_sbox.v $(AES_SRC_PATH)/aes_key_mem.v  $(AES_SRC_PATH)/aes_sbox.v
 CMAC_SRC = sub/cmac/src/rtl/cmac_core.v $(AES_SRC)
 SIV_SRC = sub/aes-siv/src/rtl/aes_siv_core.v $(CMAC_SRC)
+ENGINE_SRC = src/rtl/nts_engine/nts_engine.v \
+ src/rtl/nts_engine/nts_verify_secure.v \
+ src/rtl/nts_engine/nts_tx_buffer.v \
+ src/rtl/nts_engine/nts_rx_buffer.v \
+ src/rtl/nts_engine/nts_parser_ctrl.v \
+ src/rtl/nts_engine/nts_api.v \
+ src/rtl/nts_engine/nts_timestamp.v \
+ src/rtl/memory/memory_ctrl.v \
+ src/rtl/memory/bram.v \
+ src/rtl/memory/bram_dpge.v \
+ src/rtl/memory/bram_dp2w.v \
+ sub/keymem/src/rtl/keymem.v \
+ $(SIV_SRC)
 
 ifeq ($(VLINT),)
 VLINT=tools/verilator-4.018/bin/verilator
@@ -51,7 +64,6 @@ ifeq ($(VLINT_TESTS_FLAGS),)
 VLINT_TESTS_FLAGS= --lint-only
 endif
 
-
 all: DIRS VVPS
 
 sim-api: output/vvp/nts_api_tb.vvp
@@ -60,10 +72,16 @@ sim-api: output/vvp/nts_api_tb.vvp
 sim-engine: output/vvp/nts_engine_tb.vvp
 	vvp $^
 
+sim-dispatcher: output/vvp/nts_dispatcher_tb.vvp
+	vvp $^
+
 sim-parser: output/vvp/nts_parser_ctrl_tb.vvp
 	vvp $^
 
 sim-rxbuf: output/vvp/nts_rx_buffer_tb.vvp
+	vvp $^
+
+sim-top: output/vvp/nts_top_tb.vvp
 	vvp $^
 
 sim-txbuf: output/vvp/nts_tx_buffer_tb.vvp
@@ -72,18 +90,22 @@ sim-txbuf: output/vvp/nts_tx_buffer_tb.vvp
 sim-secure: output/vvp/nts_verify_secure_tb.vvp
 	vvp $^
 
+
 sim: sim-api sim-engine sim-parser sim-rxbuf sim-secure sim-txbuf
 
 clean:
 	rm -rf output
 
-lint: lint_src/rtl/nts_engine lint_tb
-lint_src/rtl/nts_engine:
-	# Memory
+lint: lint_rtl lint_tb
+
+lint_rtl: lint_memory lint_engine lint_dispatcher lint_top
+
+lint_memory:
 	$(VLINT) $(VLINT_FLAGS) src/rtl/memory/bram.v
 	$(VLINT) $(VLINT_FLAGS) src/rtl/memory/bram_dpge.v
-	$(VLINT) $(VLINT_FLAGS) src/rtl/memory/memory_ctrl.v src/rtl/memory//bram_dpge.v
-	# NTS Engine
+	$(VLINT) $(VLINT_FLAGS) src/rtl/memory/memory_ctrl.v src/rtl/memory/bram_dpge.v
+
+lint_engine:
 	$(VLINT) $(VLINT_FLAGS) src/rtl/nts_engine/nts_api.v
 	-$(VLINT) $(VLINT_FLAGS) src/rtl/nts_engine/nts_parser_ctrl.v
 	$(VLINT) $(VLINT_FLAGS) src/rtl/nts_engine/nts_timestamp.v
@@ -104,8 +126,12 @@ lint_src/rtl/nts_engine:
  src/rtl/memory/bram_dp2w.v \
  sub/keymem/src/rtl/keymem.v \
  $(SIV_SRC)
-	# NTS dispatcher
+
+lint_dispatcher:
 	$(VLINT) $(VLINT_FLAGS) src/rtl/nts_dispatcher.v src/rtl/memory/bram.v
+
+lint_top:
+	$(VLINT) $(VLINT_FLAGS) -Wno-UNOPTFLAT src/rtl/nts_top.v src/rtl/nts_dispatcher.v $(ENGINE_SRC)
 
 lint_tb:
 	# Memory testbenches
@@ -137,20 +163,7 @@ lint_tb:
  src/rtl/nts_engine/nts_verify_secure.v \
  src/rtl/memory/bram_dp2w.v $(SIV_SRC)
 	$(VLINT) $(VLINT_TESTS_FLAGS) -Wno-STMTDLY -Wno-UNOPTFLAT \
- src/tb/nts_engine/nts_engine_tb.v \
- src/rtl/nts_engine/nts_engine.v \
- src/rtl/nts_engine/nts_verify_secure.v \
- src/rtl/nts_engine/nts_tx_buffer.v \
- src/rtl/nts_engine/nts_rx_buffer.v \
- src/rtl/nts_engine/nts_parser_ctrl.v \
- src/rtl/nts_engine/nts_api.v \
- src/rtl/nts_engine/nts_timestamp.v \
- src/rtl/memory/memory_ctrl.v \
- src/rtl/memory/bram.v \
- src/rtl/memory/bram_dpge.v \
- src/rtl/memory/bram_dp2w.v \
- sub/keymem/src/rtl/keymem.v \
- $(SIV_SRC)
+ src/tb/nts_engine/nts_engine_tb.v $(ENGINE_SRC)
 	#
 	$(VLINT) $(VLINT_TESTS_FLAGS) -Wno-STMTDLY src/tb/nts_dispatcher_tb.v src/rtl/nts_dispatcher.v src/rtl/memory/bram.v
 
@@ -243,18 +256,7 @@ endif
 
 output/vvp/nts_engine_tb.vvp: \
  src/tb/nts_engine/nts_engine_tb.v \
- src/rtl/nts_engine/nts_engine.v \
- src/rtl/nts_engine/nts_verify_secure.v \
- src/rtl/nts_engine/nts_tx_buffer.v \
- src/rtl/nts_engine/nts_rx_buffer.v \
- src/rtl/nts_engine/nts_parser_ctrl.v \
- src/rtl/nts_engine/nts_api.v \
- src/rtl/nts_engine/nts_timestamp.v \
- src/rtl/memory/memory_ctrl.v \
- src/rtl/memory/bram_dp2w.v \
- src/rtl/memory/bram_dpge.v \
- src/rtl/memory/bram.v \
- sub/keymem/src/rtl/keymem.v $(SIV_SRC)
+ $(ENGINE_SRC)
 ifeq (,$(NO_VLINT))
 	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY -Wno-UNOPTFLAT $^
 endif
@@ -269,9 +271,13 @@ ifeq (,$(NO_VLINT))
 endif
 	iverilog -o $@ $^
 
-
-#output/vvp/%_tb.vvp: src/tb/%_tb.v src/rtl/nts_engine/%.v
-#ifeq (,$(NO_VLINT))
-#	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY $^
-#endif
-#	iverilog -o $@ $^
+output/vvp/nts_top_tb.vvp: \
+ src/tb/nts_top_tb.v \
+ src/rtl/nts_top.v \
+ src/rtl/nts_dispatcher.v \
+ src/rtl/memory/bram.v \
+ $(ENGINE_SRC)
+ifeq (,$(NO_VLINT))
+	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY -Wno-UNOPTFLAT $^
+endif
+	iverilog -o $@ $^

@@ -28,7 +28,7 @@
 // Author: Peter Magnusson, Assured AB
 //
 
-module nts_engine_tb #( parameter integer verbose_output = 'h2);
+module nts_engine_tb #( parameter integer verbose_output = 'h3);
 
   //----------------------------------------------------------------
   // Test bench constants

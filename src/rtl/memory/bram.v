@@ -50,6 +50,7 @@ module bram #(
   begin
     if (i_write) begin
       mem[i_addr] <= i_data;
+      //$display("mem[%h] <= %h", i_addr, i_data);
     end
     else begin
       o_data <= mem[i_addr];

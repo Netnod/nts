@@ -33,7 +33,7 @@ module nts_top #(
 
   wire [ENGINES-1:0] engine_busy;
   wire [ENGINES-1:0] engine_dispatch_rx_packet_read_discard;
-  wire [ENGINES-1:0] engine_dispatch_rx_fifo_rd_en;
+  wire [ENGINES-1:0] engine_dispatch_rx_fifo_rd_start;
   wire [ENGINES-1:0] engine_debug_detect_nts_cookie;
   wire [ENGINES-1:0] engine_debug_detect_nts_cookie_placeholder;
   wire [ENGINES-1:0] engine_debug_detect_unique_identifier;
@@ -42,6 +42,7 @@ module nts_top #(
   wire [LAST_DATA_VALID_WIDTH * ENGINES - 1 : 0] dispatch_engine_rx_data_last_valid;
   wire                         [ENGINES - 1 : 0] dispatch_engine_rx_fifo_empty;
   wire                         [ENGINES - 1 : 0] dispatch_engine_rx_packet_available;
+  wire                         [ENGINES - 1 : 0] dispatch_engine_rx_fifo_rd_valid;
   wire        [MAC_DATA_WIDTH * ENGINES - 1 : 0] dispatch_engine_rx_fifo_rd_data;
 
   wire                                     [6:0] o_dispatch_counter; //TODO remove
@@ -106,7 +107,8 @@ module nts_top #(
     .o_dispatch_counter(o_dispatch_counter),
     .o_dispatch_data_valid(dispatch_engine_rx_data_last_valid[LAST_DATA_VALID_WIDTH*0+:LAST_DATA_VALID_WIDTH]),
     .o_dispatch_fifo_empty(dispatch_engine_rx_fifo_empty[0]),
-    .i_dispatch_fifo_rd_en(engine_dispatch_rx_fifo_rd_en[0]),
+    .i_dispatch_fifo_rd_start(engine_dispatch_rx_fifo_rd_start[0]),
+    .o_dispatch_fifo_rd_valid(dispatch_engine_rx_fifo_rd_valid[0]),
     .o_dispatch_fifo_rd_data(dispatch_engine_rx_fifo_rd_data[MAC_DATA_WIDTH*0+:MAC_DATA_WIDTH])
   );
 
@@ -138,7 +140,8 @@ module nts_top #(
         .o_dispatch_rx_packet_read_discard(engine_dispatch_rx_packet_read_discard[engine_index]),
         .i_dispatch_rx_data_last_valid(dispatch_engine_rx_data_last_valid[LAST_DATA_VALID_WIDTH*engine_index+:LAST_DATA_VALID_WIDTH]),
         .i_dispatch_rx_fifo_empty(dispatch_engine_rx_fifo_empty[engine_index]),
-        .o_dispatch_rx_fifo_rd_en(engine_dispatch_rx_fifo_rd_en[engine_index]),
+        .o_dispatch_rx_fifo_rd_start(engine_dispatch_rx_fifo_rd_start[engine_index]),
+        .i_dispatch_rx_fifo_rd_valid(dispatch_engine_rx_fifo_rd_valid[engine_index]),
         .i_dispatch_rx_fifo_rd_data(dispatch_engine_rx_fifo_rd_data[MAC_DATA_WIDTH*engine_index+:MAC_DATA_WIDTH]),
 
         .o_dispatch_tx_packet_available(o_dispatch_tx_packet_available_DUMMY),
@@ -193,6 +196,8 @@ module nts_top #(
           $display("%s:%0d engine.parser.detect_ipv4: %b detect_ipv6: %b", `__FILE__, `__LINE__, engine.parser.detect_ipv4, engine.parser.detect_ipv6);
         always @*
           $display("%s:%0d i_dispatch_rx_fifo_rd_data: %h", `__FILE__, `__LINE__, engine.i_dispatch_rx_fifo_rd_data);
+        always @*
+           $display("%s:%0d engine.i_dispatch_rx_fifo_rd_valid: %h",  `__FILE__, `__LINE__, engine.i_dispatch_rx_fifo_rd_valid);
       end
 /*
     end

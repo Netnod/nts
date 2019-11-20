@@ -30,6 +30,7 @@
 
 module nts_rx_buffer_tb;
   parameter ADDR_WIDTH = 8;
+  parameter VERBOSE=1;
 
   reg                     i_areset;
   reg                     i_clk;
@@ -37,7 +38,8 @@ module nts_rx_buffer_tb;
   reg                     dispatch_packet_avialable;
   wire                    dispatch_packet_read;
   reg                     dispatch_fifo_empty;
-  wire                    dispatch_fifo_rd_en;
+  wire                    dispatch_fifo_rd_start;
+  reg                     dispatch_fifo_rd_valid;
   reg  [63:0]             dispatch_fifo_rd_data;
 
   wire                    access_port_wait;
@@ -47,14 +49,18 @@ module nts_rx_buffer_tb;
   wire                    access_port_rd_dv;
   wire  [63:0]            access_port_rd_data;
 
-  nts_rx_buffer #(ADDR_WIDTH) buffer (
+  reg rd_start_recieved;
+  reg rd_read_recieved;
+
+  nts_rx_buffer #(ADDR_WIDTH) dut (
      .i_areset(i_areset),
      .i_clk(i_clk),
      .i_parser_busy(i_parser_busy),
      .i_dispatch_packet_available(dispatch_packet_avialable),
      .o_dispatch_packet_read(dispatch_packet_read),
      .i_dispatch_fifo_empty(dispatch_fifo_empty),
-     .o_dispatch_fifo_rd_en(dispatch_fifo_rd_en),
+     .o_dispatch_fifo_rd_start(dispatch_fifo_rd_start),
+     .i_dispatch_fifo_rd_valid(dispatch_fifo_rd_valid),
      .i_dispatch_fifo_rd_data(dispatch_fifo_rd_data),
      .o_access_port_wait(access_port_wait),
      .i_access_port_addr(access_port_addr),
@@ -85,7 +91,7 @@ module nts_rx_buffer_tb;
     end
   endtask
 
-    initial
+  initial
       begin
         $display("Test start: %s:%0d.", `__FILE__, `__LINE__);
         i_clk = 1;
@@ -95,27 +101,32 @@ module nts_rx_buffer_tb;
         access_port_wordsize = 'b0;
         access_port_rd_en = 'b0;
         dispatch_fifo_empty = 'b0;
+        dispatch_fifo_rd_valid = 0;
         dispatch_fifo_rd_data = 'b00;
+        dispatch_packet_avialable = 0;
 
         #10 i_areset = 0;
 
-        #10
-        dispatch_packet_avialable = 'b1;
-        dispatch_fifo_empty = 'b0;
-        dispatch_fifo_rd_data = 64'hdeadbeef00000000;
-
-        #10 `assert(dispatch_fifo_rd_en == 'b0);
-        #10 `assert(dispatch_fifo_rd_en == 'b0);
+        #10 dispatch_packet_avialable = 'b1;
+        #10 dispatch_fifo_empty = 'b0;
+        #10 `assert(dispatch_fifo_rd_start == 'b0);
+        #10 `assert(dispatch_fifo_rd_start == 'b0);
         i_parser_busy = 0;
-        #10 `assert(dispatch_fifo_rd_en == 'b0);
-        #10 `assert(dispatch_fifo_rd_en);
-        dispatch_fifo_rd_data = 64'habad1deac0fef00d;
-        #10 `assert(dispatch_fifo_rd_en);
-        dispatch_fifo_rd_data = 64'h0123456789abcdef;
-        #10 `assert(dispatch_fifo_rd_en == 'b1);
-        dispatch_fifo_empty = 'b1;
-        #10 `assert(dispatch_fifo_rd_en == 'b0);
+        if (VERBOSE>0) $display("%s:%0d Waiting for dut to signal ready to receive.", `__FILE__, `__LINE__);
+        while (rd_start_recieved == 'b0) #10;
+        dispatch_packet_avialable = 'b0;
 
+        if (VERBOSE>0) $display("%s:%0d Populate test values.", `__FILE__, `__LINE__);
+        #10 { dispatch_fifo_rd_valid, dispatch_fifo_rd_data } = { 1'b1, 64'hdeadbeef00000000 };
+        #10 { dispatch_fifo_rd_valid, dispatch_fifo_rd_data } = { 1'b1, 64'habad1deac0fef00d };
+        #10 { dispatch_fifo_rd_valid, dispatch_fifo_rd_data } = { 1'b1, 64'h0123456789abcdef };
+        #10 { dispatch_fifo_rd_valid, dispatch_fifo_rd_data } = { 1'b0, 64'h0 };
+        #10 dispatch_fifo_empty = 'b1;
+        if (VERBOSE>0) $display("%s:%0d Waiting for dut to signal ACK fifo read.", `__FILE__, `__LINE__);
+        while (rd_read_recieved == 'b0) #10;
+        dispatch_fifo_empty = 'b0;
+
+        if (VERBOSE>0) $display("%s:%0d 64 bit access port tests.", `__FILE__, `__LINE__);
         #100
         read('b00_000, 3);
         `assert(access_port_rd_data == 64'hdeadbeef00000000);
@@ -144,6 +155,7 @@ module nts_rx_buffer_tb;
         read('b01_111, 3);
         `assert(access_port_rd_data == 64'h0d0123456789abcd);
 
+        if (VERBOSE>0) $display("%s:%0d 8 bit access port tests.", `__FILE__, `__LINE__);
         #100
         read('b00_000, 0);
         `assert(access_port_rd_data == 64'hde);
@@ -159,6 +171,7 @@ module nts_rx_buffer_tb;
         `assert(access_port_rd_data == 64'hef);
 
 
+        if (VERBOSE>0) $display("%s:%0d 16 bit access port tests.", `__FILE__, `__LINE__);
         #100
         read('b01_000, 1);
         `assert(access_port_rd_data == 64'habad);
@@ -173,6 +186,7 @@ module nts_rx_buffer_tb;
         read('b01_111, 1);
         `assert(access_port_rd_data == 64'h0d01);
 
+        if (VERBOSE>0) $display("%s:%0d 32 bit access port tests.", `__FILE__, `__LINE__);
         #100
         read('b01_000, 2);
         `assert(access_port_rd_data == 64'habad1dea);
@@ -191,25 +205,36 @@ module nts_rx_buffer_tb;
         read('b01_111, 2);
         `assert(access_port_rd_data == 64'h0d012345);
 
-
-        //$display("%s:%0d access_port_rd_data %h.", `__FILE__, `__LINE__,access_port_rd_data);
-        //$display("%s:%0d.", `__FILE__, `__LINE__);
-        //$display("%s:%0d.", `__FILE__, `__LINE__);
-        //$display("%s:%0d.", `__FILE__, `__LINE__);
-        //$display("%s:%0d.", `__FILE__, `__LINE__);
-        //$display("%s:%0d.", `__FILE__, `__LINE__);
-        //$display("%s:%0d access_port_rd_data %h.", `__FILE__, `__LINE__,access_port_rd_data);
-        //$display("access_port_rd_data == %h", access_port_rd_data);
-        //$display("access_port_rd_data == %h", access_port_rd_data);
-        //$display("access_port_rd_data == %h", access_port_rd_data);
-
-
         $display("Test stop: %s:%0d.", `__FILE__, `__LINE__);
         #40 $finish;
       end
 
-  always @(posedge i_clk)
-    if (dispatch_packet_read==1) $display("%s:%0d dispatch_packet_read.", `__FILE__, `__LINE__);
+  always @(posedge i_clk or posedge i_areset)
+  if (i_areset) begin
+    rd_start_recieved <= 0;
+    rd_read_recieved <= 0;
+  end else if (dispatch_fifo_rd_start) begin
+    rd_start_recieved <= 1;
+  end else if (dispatch_packet_read) begin
+    rd_read_recieved <= 1;
+  end
+
+  if (VERBOSE>1) begin
+    always @(posedge i_clk)
+      if (dispatch_packet_read==1) $display("%s:%0d dispatch_packet_read.", `__FILE__, `__LINE__);
+
+    always @*
+      $display("%s:%0d dispatch_packet_avialable: %b",  `__FILE__, `__LINE__, dispatch_packet_avialable);
+
+    always @*
+      $display("%s:%0d dispatch_fifo_empty: %b",  `__FILE__, `__LINE__, dispatch_fifo_empty);
+
+    always @*
+      $display("%s:%0d dispatch_fifo_rd_start: %b",  `__FILE__, `__LINE__, dispatch_fifo_rd_start);
+
+    always @*
+      $display("%s:%0d dut.memctrl_reg=%h", `__FILE__, `__LINE__, dut.memctrl_reg);
+  end
 
   always begin
     #5 i_clk = ~i_clk;

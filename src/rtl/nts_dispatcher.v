@@ -33,38 +33,41 @@ module nts_dispatcher #(
 ) (
   input  wire        i_areset, // async reset
   input  wire        i_clk,
+
   // MAC
   input  wire [7:0]  i_rx_data_valid,
   input  wire [63:0] i_rx_data,
   input  wire        i_rx_bad_frame,
   input  wire        i_rx_good_frame,
-  // PreProcessor decision
-  input wire         i_process_frame,
-  // NTP Config
-  // -- TBD --
-  // interface to nts_dispatcher_backend
+
   output wire                  o_dispatch_packet_available,
   input  wire                  i_dispatch_packet_read_discard,
   output wire [ADDR_WIDTH-1:0] o_dispatch_counter,
   output wire [7:0]            o_dispatch_data_valid,
   output wire                  o_dispatch_fifo_empty,
-  input  wire                  i_dispatch_fifo_rd_en,
+  input  wire                  i_dispatch_fifo_rd_start,
+  output wire                  o_dispatch_fifo_rd_valid,
   output wire [63:0]           o_dispatch_fifo_rd_data
 );
 
   localparam STATE_EMPTY         = 0;
   localparam STATE_HAS_DATA      = 1;
-  localparam STATE_PROCESS       = 2;
-  localparam STATE_GOOD          = 3;
-  localparam STATE_GOOD_PROCESS  = 4;
-  localparam STATE_FIFO_OUT      = 5;
-  localparam STATE_ERROR_GENERAL = 6;
-  localparam STATE_ERROR_BUFFER_OVERRUN = 7;
+  //localparam STATE_PROCESS       = 2;
+  //localparam STATE_GOOD          = 3;
+  localparam STATE_GOOD_PROCESS  = 2;
+  localparam STATE_FIFO_OUT_INIT_0 = 3;
+  localparam STATE_FIFO_OUT_INIT_1 = 4;
+  localparam STATE_FIFO_OUT_INIT_2 = 5;
+  localparam STATE_FIFO_OUT      = 6;
+  localparam STATE_FIFO_OUT_FIN_0  = 7;
+  localparam STATE_FIFO_OUT_FIN_1  = 8;
+  localparam STATE_ERROR_GENERAL = 9;
+  //localparam STATE_ERROR_BUFFER_OVERRUN = 7;
 
   reg           drop_next_frame;
   reg               current_mem;
   reg                fifo_empty;
-  reg  [2:0]          mem_state [1:0];
+  reg  [3:0]          mem_state [1:0];
   reg                     write [1:0];
   reg  [63:0]            w_data [1:0];
   wire [63:0]            r_data [1:0];
@@ -73,12 +76,15 @@ module nts_dispatcher #(
   reg  [ADDR_WIDTH-1:0] counter [1:0];
   reg  [7:0]         data_valid [1:0];
 
+  reg [63:0] fifo_rd_data;
+  reg        fifo_rd_valid;
 
-  assign o_dispatch_packet_available  = mem_state[ ~ current_mem ] == STATE_FIFO_OUT;
+  assign o_dispatch_packet_available  = mem_state[ ~ current_mem ] == STATE_FIFO_OUT_INIT_0; //STATE_FIFO_OUT;
   assign o_dispatch_counter           = counter[ ~ current_mem ];
   assign o_dispatch_data_valid        = data_valid[ ~ current_mem ];
   assign o_dispatch_fifo_empty        = fifo_empty;
-  assign o_dispatch_fifo_rd_data      = r_data[ ~ current_mem ];
+  assign o_dispatch_fifo_rd_valid     = fifo_rd_valid;
+  assign o_dispatch_fifo_rd_data      = fifo_rd_data; //r_data[ ~ current_mem ];
 
   bram #(ADDR_WIDTH,64) mem0 (
      .i_clk(i_clk),
@@ -96,11 +102,18 @@ module nts_dispatcher #(
      .o_data(r_data[1])
   );
 
+  //reg [63:0] fifo_next_reg;
+  //reg [63:0] fifo_next2_reg;
+
+  //always @*
+  //  fifo_rd_data = i_dispatch_fifo_rd_en ? fifo_next2_reg : fifo_next_reg;
+
   always @ (posedge i_clk, posedge i_areset)
   begin
     if (i_areset == 1'b1) begin
       current_mem   <= 'b0;
       fifo_empty    <= 'b1;
+      fifo_rd_data  <= 'b0;
       r_addr        <= 'b0;
       mem_state[0]  <= STATE_EMPTY;
       mem_state[1]  <= STATE_EMPTY;
@@ -119,26 +132,83 @@ module nts_dispatcher #(
       write[1]    <= 1'b0;
       w_data[0]   <= 64'b0;
       w_data[1]   <= 64'b0;
+
+      //------------------------------------------
+      // Previous (ENGINE RX FIFO) frame handling
+      //------------------------------------------
+
       if (i_dispatch_packet_read_discard) begin
+        $display("%s:%0d i_dispatch_packet_read_discard", `__FILE__, `__LINE__);
         mem_state[ ~ current_mem] <= STATE_EMPTY;
         fifo_empty <= 'b1;
+      end else begin
+        case (mem_state[ ~ current_mem])
+          STATE_FIFO_OUT_INIT_0:
+            begin
+              if (i_dispatch_fifo_rd_start) begin
+                mem_state[ ~ current_mem] <= STATE_FIFO_OUT_INIT_1;
+              end
+              r_addr <= 0;
+              fifo_empty  <= 'b0;
+            end
+          STATE_FIFO_OUT_INIT_1:
+            begin
+              mem_state[ ~ current_mem] <= STATE_FIFO_OUT;
+              r_addr <= 1;
+              fifo_rd_data <= 0;
+            end
+/*
+          STATE_FIFO_OUT_INIT_2:
+            begin
+              mem_state[ ~ current_mem] <= STATE_FIFO_OUT;
+              r_addr <= 2;
+              fifo_next2_reg <= r_data[ ~ current_mem ];
+            end
+*/
+          STATE_FIFO_OUT:
+            begin
+              fifo_rd_data <= r_data[ ~ current_mem ];
+              fifo_rd_valid <= 1;
+              //if (i_dispatch_fifo_rd_en) begin
+                //$display("%s:%0d i_dispatch_fifo_rd_en. Emit: %h ", `__FILE__, `__LINE__, fifo_next_reg);
+                //fifo_rd_data <= fifo_next_reg;
+                //fifo_next_reg <= fifo_next2_reg;
+                //fifo_next2_reg <= r_data[ ~ current_mem ];
+                if (r_addr == counter[ ~ current_mem]) begin
+                  //fifo_empty <= 'b1;
+                  mem_state[ ~ current_mem] <= STATE_FIFO_OUT_FIN_0;
+                end else begin
+                  r_addr <= r_addr + 1;
+                end
+              //end
+            end
+          STATE_FIFO_OUT_FIN_0:
+            begin
+              fifo_rd_data <= r_data[ ~ current_mem ];
+              fifo_rd_valid <= 1;
+              mem_state[ ~ current_mem] <= STATE_FIFO_OUT_FIN_1;
+              $display("%s:%0d Emit: %h ", `__FILE__, `__LINE__, r_data[ ~ current_mem ]);
+            end
+          STATE_FIFO_OUT_FIN_1:
+            begin
+              fifo_rd_valid <= 0;
+              fifo_empty <= 'b1;
+            end
+          default: ;
+        endcase
       end
-      if (i_dispatch_fifo_rd_en) begin
-        if (r_addr == counter[~current_mem]) begin
-          fifo_empty <= 'b1;
-        end else begin
-          r_addr <= r_addr + 1;
-        end
-      end
+
+      //------------------------------------------
+      // Current (MAC RX) frame handling
+      //------------------------------------------
+
       if (i_rx_bad_frame) begin
          mem_state[current_mem]  <= STATE_EMPTY;
          w_addr[current_mem]     <= 'b0;
          counter[current_mem]    <= 'b0;
          data_valid[current_mem] <= 'b0;
        end else begin
-         //$display("Current mem: %h", current_mem);
-         //$display("Current state: %h", mem_state[current_mem]);
-         //$display("i_rx_good_frame: %h", i_rx_good_frame);
+         //$display("%s:%0d Current mem: %h Current state: %h RxDV: %h", `__FILE__, `__LINE__, current_mem, mem_state[current_mem], i_rx_good_frame);
          case (mem_state[current_mem])
            STATE_EMPTY:
              if (i_rx_data_valid == 'hff) begin
@@ -153,34 +223,15 @@ module nts_dispatcher #(
            STATE_HAS_DATA:
              begin
                if (i_rx_good_frame) begin
+                 $display("%s:%0d data_valid: %h (%b)", `__FILE__, `__LINE__, i_rx_data_valid, i_rx_data_valid);
                  data_valid[current_mem] <= i_rx_data_valid;
+                 mem_state[current_mem] <= STATE_GOOD_PROCESS; /* *** */
                end
-               if (i_rx_good_frame && i_process_frame) begin
-                 mem_state[current_mem] <= STATE_GOOD_PROCESS;
-               end else if (i_rx_good_frame) begin
-                 mem_state[current_mem] <= STATE_GOOD;
-               end else if (i_process_frame) begin
-                 mem_state[current_mem] <= STATE_PROCESS;
-               end
-             end
-           STATE_PROCESS:
-             begin
-               if (i_rx_good_frame) begin
-                 mem_state[current_mem] <= STATE_GOOD_PROCESS;
-               end
-               if (counter[current_mem] == ~ 'b0 && i_rx_data_valid != 'b0) begin
-                 mem_state[current_mem] <= STATE_ERROR_BUFFER_OVERRUN;
-               end
-             end
-           STATE_GOOD:
-             if (i_process_frame) begin
-               mem_state[current_mem] <= STATE_GOOD_PROCESS;
              end
            STATE_GOOD_PROCESS:
              if (mem_state[ ~ current_mem] == STATE_EMPTY) begin
-               mem_state[current_mem] <= STATE_FIFO_OUT;
+               mem_state[current_mem] <= STATE_FIFO_OUT_INIT_0;
                current_mem <= ~ current_mem;
-               fifo_empty  <= 'b0;
              end
            default:
              mem_state[current_mem] <= STATE_EMPTY;
@@ -197,13 +248,13 @@ module nts_dispatcher #(
                 w_addr[current_mem]    <= 'b0;
                 counter[current_mem]   <= 'b0;
               end
-            end else if (mem_state[current_mem] == STATE_HAS_DATA || mem_state[current_mem] == STATE_PROCESS) begin
+            end else if (mem_state[current_mem] == STATE_HAS_DATA /* || mem_state[current_mem] == STATE_PROCESS */) begin
               if (counter[current_mem] != ~ 'b0) begin
                 write[current_mem]     <= 1'b1;
                 w_addr[current_mem]    <= counter[current_mem] + 1;
                 counter[current_mem]   <= counter[current_mem] + 1;
               end // not buffer overrun
-            end else if (mem_state[current_mem] == STATE_GOOD || mem_state[current_mem] == STATE_GOOD_PROCESS) begin
+            end else if (/*mem_state[current_mem] == STATE_GOOD ||*/ mem_state[current_mem] == STATE_GOOD_PROCESS) begin
                drop_next_frame  <= 1'b1;
             end
           end //rx_data_valid

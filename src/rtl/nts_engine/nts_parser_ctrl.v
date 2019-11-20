@@ -227,7 +227,7 @@ module nts_parser_ctrl #(
   reg                          memory_address_failure_reg;
   reg                          memory_address_lastbyte_read_reg;
 
-  reg                   [63:0] previous_i_data_reg; //We receive i_data one cycle before process signal
+  //reg                   [63:0] previous_i_data_reg; //We receive i_data one cycle before process signal
   reg                          ipdecode_ethernet_protocol_we;
   reg                   [15:0] ipdecode_ethernet_protocol_new;
   reg                   [15:0] ipdecode_ethernet_protocol_reg;
@@ -350,7 +350,7 @@ module nts_parser_ctrl #(
   assign o_tx_ipv4_done = detect_ipv4 && state_reg == STATE_ERROR_UNIMPLEMENTED; //TODO implement termination logic
   assign o_tx_ipv6_done = detect_ipv6 && state_reg == STATE_ERROR_UNIMPLEMENTED; //TODO implement termination logic
   assign o_tx_w_en      = i_process_initial;   //TODO implement proper write logic
-  assign o_tx_w_data    = previous_i_data_reg; //TODO implement proper write logic
+  assign o_tx_w_data    = i_data;          //TODO implement proper write logic
 
   assign o_timestamp_record_receive_timestamp = timestamp_record_receive_timestamp_reg;
   assign o_timestamp_transmit                 = (state_reg == STATE_TIMESTAMP);
@@ -470,7 +470,7 @@ module nts_parser_ctrl #(
       nts_basic_sanity_check_packet_ok_reg <= 'b0;
       nts_cookie_start_addr_reg  <= 'b0;
       nts_valid_placeholders_reg <= 'b0;
-      previous_i_data_reg        <= 'b0;
+      //previous_i_data_reg        <= 'b0;
       state_reg                  <= 'b0;
       timestamp_record_receive_timestamp_reg <= 'b0;
       timestamp_origin_timestamp_reg         <= 'b0;
@@ -487,7 +487,7 @@ module nts_parser_ctrl #(
         end
       end
     end else begin
-      previous_i_data_reg <= i_data;
+      //previous_i_data_reg <= i_data;
 
       if (access_port_addr_we)
         access_port_addr_reg <= access_port_addr_new;
@@ -1363,22 +1363,22 @@ module nts_parser_ctrl #(
 //      $display("%s:%0d %h %h", `__FILE__, `__LINE__, i_data, previous_i_data_reg);
       if (word_counter_reg == 0) begin
         ipdecode_ethernet_protocol_we  = 'b1;
-        ipdecode_ethernet_protocol_new = previous_i_data_reg[31:16];
+        ipdecode_ethernet_protocol_new = i_data[31:16];
         ipdecode_ip_version_we         = 'b1;
-        ipdecode_ip_version_new        = previous_i_data_reg[15:12];
+        ipdecode_ip_version_new        = i_data[15:12];
         ipdecode_ip4_ihl_we            = 'b1;
-        ipdecode_ip4_ihl_new           = previous_i_data_reg[11:8];
+        ipdecode_ip4_ihl_new           = i_data[11:8];
 //        $display("%s:%0d %h %h %h %h", `__FILE__, `__LINE__, ipdecode_ethernet_protocol_new, ipdecode_ip_version_new, ipdecode_ip4_ihl_new, previous_i_data_reg);
 
       end else if (detect_ipv4 && ipdecode_ip4_ihl_reg == 5) begin
         if (word_counter_reg == 3) begin
           ipdecode_udp_length_we   = 'b1;
-          ipdecode_udp_length_new  = previous_i_data_reg[15:0];
+          ipdecode_udp_length_new  = i_data[15:0];
         end
       end else if (detect_ipv6) begin
         if (word_counter_reg == 6) begin
           ipdecode_udp_length_we   = 'b1;
-          ipdecode_udp_length_new  = previous_i_data_reg[47:32];
+          ipdecode_udp_length_new  = i_data[47:32];
         end
       end
     end
@@ -1403,27 +1403,27 @@ module nts_parser_ctrl #(
       if (detect_ipv4 && detect_ipv4_bad == 'b0) begin
         if (word_counter_reg == 4) begin
           timestamp_version_number_we  = 1;
-          timestamp_version_number_new = previous_i_data_reg[45:43];
+          timestamp_version_number_new = i_data[45:43];
           $display("%s:%0d timestamp_version_number_new=%h", `__FILE__, `__LINE__, timestamp_version_number_new);
         end else if (word_counter_reg == 9) begin
           timestamp_origin_timestamp_we  = 1;
-          timestamp_origin_timestamp_new = { previous_i_data_reg[47:0], 16'h0 };
+          timestamp_origin_timestamp_new = { i_data[47:0], 16'h0 };
         end else if (word_counter_reg == 10) begin
           timestamp_origin_timestamp_we  = 1;
-          timestamp_origin_timestamp_new = { timestamp_origin_timestamp_reg[63:16], previous_i_data_reg[63:48] };
+          timestamp_origin_timestamp_new = { timestamp_origin_timestamp_reg[63:16], i_data[63:48] };
           $display("%s:%0d timestamp_origin_timestamp_new=%h", `__FILE__, `__LINE__, timestamp_origin_timestamp_new);
         end
       end if (detect_ipv6) begin
         if (word_counter_reg == 6) begin
           timestamp_version_number_we  = 1;
-          timestamp_version_number_new = previous_i_data_reg[13:11];
+          timestamp_version_number_new = i_data[13:11];
           $display("%s:%0d timestamp_version_number_new=%h", `__FILE__, `__LINE__, timestamp_version_number_new);
         end else if (word_counter_reg == 11) begin
           timestamp_origin_timestamp_we  = 1;
-          timestamp_origin_timestamp_new = { previous_i_data_reg[15:0], 48'h0 };
+          timestamp_origin_timestamp_new = { i_data[15:0], 48'h0 };
         end else if (word_counter_reg == 12) begin
           timestamp_origin_timestamp_we  = 1;
-          timestamp_origin_timestamp_new = { timestamp_origin_timestamp_reg[63:48], previous_i_data_reg[63:16] };
+          timestamp_origin_timestamp_new = { timestamp_origin_timestamp_reg[63:48], i_data[63:16] };
           $display("%s:%0d timestamp_origin_timestamp_new=%h", `__FILE__, `__LINE__, timestamp_origin_timestamp_new);
         end
       end

@@ -41,7 +41,8 @@ module nts_engine #(
   output wire                  o_dispatch_rx_packet_read_discard,
   input  wire [7:0]            i_dispatch_rx_data_last_valid,
   input  wire                  i_dispatch_rx_fifo_empty,
-  output wire                  o_dispatch_rx_fifo_rd_en,
+  output wire                  o_dispatch_rx_fifo_rd_start,
+  input  wire                  i_dispatch_rx_fifo_rd_valid,
   input  wire [63:0]           i_dispatch_rx_fifo_rd_data,
 
   output wire                  o_dispatch_tx_packet_available,
@@ -417,7 +418,8 @@ module nts_engine #(
      .i_dispatch_packet_available(i_dispatch_rx_packet_available),
      .o_dispatch_packet_read(o_dispatch_rx_packet_read_discard),
      .i_dispatch_fifo_empty(i_dispatch_rx_fifo_empty),
-     .o_dispatch_fifo_rd_en(o_dispatch_rx_fifo_rd_en),
+     .o_dispatch_fifo_rd_start(o_dispatch_rx_fifo_rd_start),
+     .i_dispatch_fifo_rd_valid(i_dispatch_rx_fifo_rd_valid),
      .i_dispatch_fifo_rd_data(i_dispatch_rx_fifo_rd_data),
 
      .o_access_port_wait(access_port_wait),
@@ -567,7 +569,7 @@ module nts_engine #(
 
    .i_clear(1'b0), //currently no soft reset implemented
 
-   .i_process_initial(o_dispatch_rx_fifo_rd_en),
+   .i_process_initial(i_dispatch_rx_fifo_rd_valid),
    .i_last_word_data_valid(i_dispatch_rx_data_last_valid),
    .i_data(i_dispatch_rx_fifo_rd_data),
 

@@ -40,7 +40,8 @@ module nts_rx_buffer #(
   input  wire                         i_dispatch_packet_available,
   output wire                         o_dispatch_packet_read,
   input  wire                         i_dispatch_fifo_empty,
-  output wire                         o_dispatch_fifo_rd_en,
+  output wire                         o_dispatch_fifo_rd_start,
+  input  wire                         i_dispatch_fifo_rd_valid,
   input  wire                  [63:0] i_dispatch_fifo_rd_data,
 
   output wire                         o_access_port_wait,
@@ -74,9 +75,9 @@ module nts_rx_buffer #(
   reg  [3:0]              memctrl_reg;
 
   //--- internal registers for handling input FIFO
-  reg                     dispatch_fifo_rd_en_we;
-  reg                     dispatch_fifo_rd_en_new;
-  reg                     dispatch_fifo_rd_en_reg;
+  //reg                     dispatch_fifo_rd_en_we;
+  //reg                     dispatch_fifo_rd_en_new;
+  //reg                     dispatch_fifo_rd_en_reg;
 
   reg                     dispatch_packet_read_we;
   reg                     dispatch_packet_read_new;
@@ -127,16 +128,19 @@ module nts_rx_buffer #(
   //----------------------------------------------------------------
 
   wire [63:0]             ram_rd_data;
+/* verilator lint_off UNOPTFLAT */
+  reg                     dispatch_fifo_rd_start;
+/* verilator lint_on UNOPTFLAT */
 
   //----------------------------------------------------------------
   // Concurrent connectivity for ports etc.
   //----------------------------------------------------------------
 
-  assign o_access_port_wait     = access_wait_reg;
-  assign o_access_port_rd_dv    = access_dv_reg;
-  assign o_access_port_rd_data  = access_out_reg;
-  assign o_dispatch_packet_read = dispatch_packet_read_reg;
-  assign o_dispatch_fifo_rd_en  = dispatch_fifo_rd_en_reg;
+  assign o_access_port_wait       = access_wait_reg;
+  assign o_access_port_rd_dv      = access_dv_reg;
+  assign o_access_port_rd_data    = access_out_reg;
+  assign o_dispatch_packet_read   = dispatch_packet_read_reg;
+  assign o_dispatch_fifo_rd_start = dispatch_fifo_rd_start;
 
   //----------------------------------------------------------------
   // Memory holding the Receive buffer
@@ -200,7 +204,7 @@ module nts_rx_buffer #(
       access_ws32bit_reg       <= 'b0;
       access_ws64bit_reg       <= 'b0;
       fifo_addr_reg            <= 'b0;
-      dispatch_fifo_rd_en_reg  <= 'b0;
+      //dispatch_fifo_rd_en_reg  <= 'b0;
       dispatch_packet_read_reg <= 'b0;
       memctrl_reg              <= 'b0;
     end else begin
@@ -226,8 +230,8 @@ module nts_rx_buffer #(
       if (fifo_addr_we)
         fifo_addr_reg           <= fifo_addr_new;
 
-      if (dispatch_fifo_rd_en_we)
-        dispatch_fifo_rd_en_reg <= dispatch_fifo_rd_en_new;
+      //if (dispatch_fifo_rd_en_we)
+      //  dispatch_fifo_rd_en_reg <= dispatch_fifo_rd_en_new;
 
       if (dispatch_packet_read_we)
         dispatch_packet_read_reg <= dispatch_packet_read_new;
@@ -435,7 +439,7 @@ module nts_rx_buffer #(
           end
         end
       MEMORY_CTRL_FIFO_WRITE:
-        if (i_dispatch_fifo_empty == 'b0) begin
+        if (i_dispatch_fifo_rd_valid) begin
           ram_addr_we             = 'b1;
           ram_addr_new            = fifo_addr_reg;
           ram_wr_en_we            = 'b1;
@@ -459,30 +463,29 @@ module nts_rx_buffer #(
   always @*
   begin : fifo_control
     fifo_addr_we                  = 'b0;
-    dispatch_fifo_rd_en_we        = 'b0;
+    //dispatch_fifo_rd_en_we        = 'b0;
     dispatch_packet_read_we       = 'b1;
 
     fifo_addr_new                 = 'b0;
-    dispatch_fifo_rd_en_new       = 'b0;
+    //dispatch_fifo_rd_en_new       = 'b0;
     dispatch_packet_read_new      = 'b0;
+
+    dispatch_fifo_rd_start = 0;
 
     case (memctrl_reg)
       MEMORY_CTRL_IDLE:
         begin
-          dispatch_fifo_rd_en_we  = 'b1; // write zero to rd_en
-          if (i_dispatch_packet_available && i_dispatch_fifo_empty == 0) begin
-            fifo_addr_we          = 'b1; // write zero to fifo_addr_reg
+          //dispatch_fifo_rd_en_we  = 'b1; // write zero to rd_en
+          if (i_dispatch_packet_available && i_dispatch_fifo_empty == 0 && i_parser_busy == 0) begin
+            dispatch_fifo_rd_start = 'b1;
+            fifo_addr_we           = 'b1; // write zero to fifo_addr_reg
           end
         end
       MEMORY_CTRL_FIFO_WRITE:
-        if (i_dispatch_fifo_empty == 'b0) begin
-          dispatch_fifo_rd_en_we  = (dispatch_fifo_rd_en_reg == 'b0);
-          dispatch_fifo_rd_en_new = 'b1;
+        if (i_dispatch_fifo_rd_valid) begin
           fifo_addr_we            = 'b1;
           fifo_addr_new           = fifo_addr_reg + 1;
-        end else begin
-          dispatch_fifo_rd_en_we  = 'b1;
-          dispatch_fifo_rd_en_new = 'b0;
+        end else if (i_dispatch_fifo_empty) begin
           dispatch_packet_read_we  = 'b1;
           dispatch_packet_read_new = 'b1;
         end

@@ -47,6 +47,7 @@ module nts_top_tb;
   localparam [2159:0] NTS_TEST_REQUEST_WITH_KEY_IPV4_2=2160'h001c7300_00995254_00cdcd23_08004500_01000001_00004011_bc174d48_e37ec23a_cad31267_101b00ec_8c5b2300_00200000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_000071cc_4c8cdb00_980b0104_002492ae_9b06e29f_638497f0_18b58124_85cbef5f_811f516a_620ed802_4546bb3e_db590204_006813fe_78e93426_b1f08926_0a257d85_5c533225_c7540952_f35b63d9_f6f6fb4c_69dbc025_3c869740_6b59c01c_d297755c_960a2532_7d40ad6f_41a636d1_4f8a584e_6414f559_3a0912fd_8a7e4b69_88be44ea_97f6f60f_b3d799f9_293e5852_d40fa062_4038e0fc_a5d90404_00280010_00107812_c6677d04_a1c0ac02_0219687c_17d5ca94_9acd04b0_ac8d8d82_d6c71f3f_8518;
   localparam [2319:0] NTS_TEST_REQUEST_WITH_KEY_IPV6_2=2320'h001c7300_00995254_00cdcd23_86dd6000_000000ec_11402a01_03f00001_00085063_d01c72c6_ab922a01_03f70002_00520000_00000000_00111267_101b00ec_af002300_00200000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_000071cc_4c8cdb00_980b0104_002492ae_9b06e29f_638497f0_18b58124_85cbef5f_811f516a_620ed802_4546bb3e_db590204_006813fe_78e93426_b1f08926_0a257d85_5c533225_c7540952_f35b63d9_f6f6fb4c_69dbc025_3c869740_6b59c01c_d297755c_960a2532_7d40ad6f_41a636d1_4f8a584e_6414f559_3a0912fd_8a7e4b69_88be44ea_97f6f60f_b3d799f9_293e5852_d40fa062_4038e0fc_a5d90404_00280010_00107812_c6677d04_a1c0ac02_0219687c_17d5ca94_9acd04b0_ac8d8d82_d6c71f3f_8518;
 
+  localparam DEBUG           = 1;
   localparam ENGINES         = 1; //Beware: only ENGINES=1 supported for now
   localparam API_ADDR_WIDTH  = 12;
   localparam API_RW_WIDTH    = 32;
@@ -241,11 +242,12 @@ module nts_top_tb;
     endcase
 
     if (packet_ptr != 0)
-      $display("%s:%0d %h %h", `__FILE__, `__LINE__, 0, packet[0]);
+      if (DEBUG > 2) $display("%s:%0d %h %h", `__FILE__, `__LINE__, 0, packet[0]);
 
     for ( i = 0; i < length/64; i = i + 1) begin
        packet[packet_ptr] = { 8'b1111_1111, source[source_ptr+:64] };
-       $display("%s:%0d %h %h", `__FILE__, `__LINE__, packet_ptr, packet[packet_ptr]);
+       if (DEBUG > 2)
+         $display("%s:%0d %h %h", `__FILE__, `__LINE__, packet_ptr, packet[packet_ptr]);
        source_ptr = source_ptr + 64;
        packet_ptr = packet_ptr + 1;
     end
@@ -255,6 +257,7 @@ module nts_top_tb;
     `assert( rx_busy );
     packet_available = 0;
     while (rx_busy) #10;
+    #20;
   end
   endtask
 
@@ -298,10 +301,17 @@ module nts_top_tb;
     install_key_256bit( NTS_TEST_REQUEST_MASTER_KEY_ID_1, NTS_TEST_REQUEST_MASTER_KEY_1, 0 );
     install_key_256bit( NTS_TEST_REQUEST_MASTER_KEY_ID_2, NTS_TEST_REQUEST_MASTER_KEY_2, 1 );
 
-    //send_packet({63696'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_1}, 1840);
-    send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160);
-
-    #3000;
+    begin : loop
+      integer i;
+      for (i = 0; i < 15; i = i + 1) begin
+        //send_packet({63696'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_1}, 1840);
+        //send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160);
+        //send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160);
+        while (dut.dispatcher.mem_state[dut.dispatcher.current_mem] != 0) #10;
+        send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160);
+      end
+    end
+    #90000;
 
     //----------------------------------------------------------------
     // Human readable Debug

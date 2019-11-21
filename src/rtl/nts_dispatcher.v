@@ -29,7 +29,8 @@
 //
 
 module nts_dispatcher #(
-  parameter ADDR_WIDTH = 8
+  parameter ADDR_WIDTH = 8,
+  parameter DEBUG = 1
 ) (
   input  wire        i_areset, // async reset
   input  wire        i_clk,
@@ -50,19 +51,16 @@ module nts_dispatcher #(
   output wire [63:0]           o_dispatch_fifo_rd_data
 );
 
-  localparam STATE_EMPTY         = 0;
-  localparam STATE_HAS_DATA      = 1;
-  //localparam STATE_PROCESS       = 2;
-  //localparam STATE_GOOD          = 3;
-  localparam STATE_GOOD_PROCESS  = 2;
+  localparam STATE_EMPTY           = 0;
+  localparam STATE_HAS_DATA        = 1;
+  localparam STATE_GOOD_PROCESS    = 2;
   localparam STATE_FIFO_OUT_INIT_0 = 3;
   localparam STATE_FIFO_OUT_INIT_1 = 4;
   localparam STATE_FIFO_OUT_INIT_2 = 5;
-  localparam STATE_FIFO_OUT      = 6;
+  localparam STATE_FIFO_OUT        = 6;
   localparam STATE_FIFO_OUT_FIN_0  = 7;
   localparam STATE_FIFO_OUT_FIN_1  = 8;
-  localparam STATE_ERROR_GENERAL = 9;
-  //localparam STATE_ERROR_BUFFER_OVERRUN = 7;
+  localparam STATE_ERROR_GENERAL   = 9;
 
   reg           drop_next_frame;
   reg               current_mem;
@@ -101,12 +99,6 @@ module nts_dispatcher #(
      .i_data(w_data[1]),
      .o_data(r_data[1])
   );
-
-  //reg [63:0] fifo_next_reg;
-  //reg [63:0] fifo_next2_reg;
-
-  //always @*
-  //  fifo_rd_data = i_dispatch_fifo_rd_en ? fifo_next2_reg : fifo_next_reg;
 
   always @ (posedge i_clk, posedge i_areset)
   begin
@@ -157,30 +149,15 @@ module nts_dispatcher #(
               r_addr <= 1;
               fifo_rd_data <= 0;
             end
-/*
-          STATE_FIFO_OUT_INIT_2:
-            begin
-              mem_state[ ~ current_mem] <= STATE_FIFO_OUT;
-              r_addr <= 2;
-              fifo_next2_reg <= r_data[ ~ current_mem ];
-            end
-*/
           STATE_FIFO_OUT:
             begin
               fifo_rd_data <= r_data[ ~ current_mem ];
               fifo_rd_valid <= 1;
-              //if (i_dispatch_fifo_rd_en) begin
-                //$display("%s:%0d i_dispatch_fifo_rd_en. Emit: %h ", `__FILE__, `__LINE__, fifo_next_reg);
-                //fifo_rd_data <= fifo_next_reg;
-                //fifo_next_reg <= fifo_next2_reg;
-                //fifo_next2_reg <= r_data[ ~ current_mem ];
-                if (r_addr == counter[ ~ current_mem]) begin
-                  //fifo_empty <= 'b1;
-                  mem_state[ ~ current_mem] <= STATE_FIFO_OUT_FIN_0;
-                end else begin
-                  r_addr <= r_addr + 1;
-                end
-              //end
+              if (r_addr == counter[ ~ current_mem]) begin
+                mem_state[ ~ current_mem] <= STATE_FIFO_OUT_FIN_0;
+              end else begin
+                r_addr <= r_addr + 1;
+              end
             end
           STATE_FIFO_OUT_FIN_0:
             begin
@@ -191,6 +168,7 @@ module nts_dispatcher #(
             end
           STATE_FIFO_OUT_FIN_1:
             begin
+              //Remain here until i_dispatch_packet_read_discard (above) takes us out
               fifo_rd_valid <= 0;
               fifo_empty <= 'b1;
             end
@@ -261,4 +239,13 @@ module nts_dispatcher #(
         end // not bad frame
     end //posedge i_clk
   end //always begin
+
+  if (DEBUG>0) begin
+    always @*
+      $display("%s:%0d mem_state[0]: %h", `__FILE__, `__LINE__, mem_state[0]);
+    always @*
+      $display("%s:%0d mem_state[1]: %h", `__FILE__, `__LINE__, mem_state[1]);
+    always @*
+      $display("%s:%0d current_mem: %h", `__FILE__, `__LINE__, current_mem);
+  end
 endmodule

@@ -53,7 +53,7 @@ module nts_dispatcher #(
 
   localparam STATE_EMPTY           = 0;
   localparam STATE_HAS_DATA        = 1;
-  localparam STATE_GOOD_PROCESS    = 2;
+  localparam STATE_PACKET_RECEIVED = 2;
   localparam STATE_FIFO_OUT_INIT_0 = 3;
   localparam STATE_FIFO_OUT_INIT_1 = 4;
   localparam STATE_FIFO_OUT_INIT_2 = 5;
@@ -62,7 +62,6 @@ module nts_dispatcher #(
   localparam STATE_FIFO_OUT_FIN_1  = 8;
   localparam STATE_ERROR_GENERAL   = 9;
 
-  reg           drop_next_frame;
   reg               current_mem;
   reg                fifo_empty;
   reg  [3:0]          mem_state [1:0];
@@ -100,7 +99,27 @@ module nts_dispatcher #(
      .o_data(r_data[1])
   );
 
-  always @ (posedge i_clk, posedge i_areset)
+  reg [7:0] previous_rx_data_valid;
+  reg       detect_start_of_frame;
+
+  always @(posedge i_clk or posedge i_areset)
+  if (i_areset) begin
+    previous_rx_data_valid <= 8'hFF; // Must not be zero as 00FF used to detect start of frame
+  end else begin
+    previous_rx_data_valid <= i_rx_data_valid;
+  end
+
+  always @*
+  begin : sof_detector
+    reg [15:0] rx_valid;
+    rx_valid = {previous_rx_data_valid, i_rx_data_valid};
+    detect_start_of_frame = 0;
+    if ( 16'h00FF == rx_valid) begin
+      detect_start_of_frame = 1;
+    end
+  end
+
+  always @ (posedge i_clk or posedge i_areset)
   begin
     if (i_areset == 1'b1) begin
       current_mem   <= 'b0;
@@ -189,24 +208,18 @@ module nts_dispatcher #(
          //$display("%s:%0d Current mem: %h Current state: %h RxDV: %h", `__FILE__, `__LINE__, current_mem, mem_state[current_mem], i_rx_good_frame);
          case (mem_state[current_mem])
            STATE_EMPTY:
-             if (i_rx_data_valid == 'hff) begin
+             if (detect_start_of_frame) begin
                mem_state[current_mem] <= STATE_HAS_DATA;
-             end else if (i_rx_data_valid != 0) begin
-               //receiving last frame, unexpectedly
-               mem_state[current_mem] <= STATE_ERROR_GENERAL;
-             end else if (i_rx_good_frame) begin
-               //receiving last frame, unexpectedly
-               mem_state[current_mem] <= STATE_ERROR_GENERAL;
              end
            STATE_HAS_DATA:
              begin
                if (i_rx_good_frame) begin
                  $display("%s:%0d data_valid: %h (%b)", `__FILE__, `__LINE__, i_rx_data_valid, i_rx_data_valid);
                  data_valid[current_mem] <= i_rx_data_valid;
-                 mem_state[current_mem] <= STATE_GOOD_PROCESS; /* *** */
+                 mem_state[current_mem] <= STATE_PACKET_RECEIVED;
                end
              end
-           STATE_GOOD_PROCESS:
+           STATE_PACKET_RECEIVED:
              if (mem_state[ ~ current_mem] == STATE_EMPTY) begin
                mem_state[current_mem] <= STATE_FIFO_OUT_INIT_0;
                current_mem <= ~ current_mem;
@@ -214,27 +227,27 @@ module nts_dispatcher #(
            default:
              mem_state[current_mem] <= STATE_EMPTY;
           endcase
+
           if (i_rx_data_valid != 'b0) begin
-            w_data[current_mem] <= i_rx_data;
-            if (mem_state[current_mem] == STATE_EMPTY) begin
-              if (drop_next_frame) begin
-                 if (i_rx_good_frame) begin
-                   drop_next_frame <= 1'b0;
-                 end
-              end else begin // accept frame
-                write[current_mem]     <= 1'b1;
-                w_addr[current_mem]    <= 'b0;
-                counter[current_mem]   <= 'b0;
-              end
-            end else if (mem_state[current_mem] == STATE_HAS_DATA /* || mem_state[current_mem] == STATE_PROCESS */) begin
-              if (counter[current_mem] != ~ 'b0) begin
-                write[current_mem]     <= 1'b1;
-                w_addr[current_mem]    <= counter[current_mem] + 1;
-                counter[current_mem]   <= counter[current_mem] + 1;
-              end // not buffer overrun
-            end else if (/*mem_state[current_mem] == STATE_GOOD ||*/ mem_state[current_mem] == STATE_GOOD_PROCESS) begin
-               drop_next_frame  <= 1'b1;
-            end
+
+            case (mem_state[current_mem])
+              STATE_EMPTY:
+                begin
+                  write[current_mem]   <= 1'b1;
+                  w_addr[current_mem]  <= 'b0;
+                  w_data[current_mem]  <= i_rx_data;
+                  counter[current_mem] <= 'b0;
+                end
+              STATE_HAS_DATA:
+                if (counter[current_mem] != ~ 'b0) begin
+                  write[current_mem]   <= 1'b1;
+                  w_addr[current_mem]  <= counter[current_mem] + 1;
+                  w_data[current_mem]  <= i_rx_data;
+                  counter[current_mem] <= counter[current_mem] + 1;
+                end // not buffer overrun
+              default: ;
+            endcase
+
           end //rx_data_valid
         end // not bad frame
     end //posedge i_clk

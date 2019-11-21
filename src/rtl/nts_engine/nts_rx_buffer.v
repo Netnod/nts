@@ -30,7 +30,8 @@
 
 module nts_rx_buffer #(
   parameter ADDR_WIDTH = 8,
-  parameter ACCESS_PORT_WIDTH = 64
+  parameter ACCESS_PORT_WIDTH = 64,
+  parameter DEBUG = 1
 ) (
   input  wire                         i_areset, // async reset
   input  wire                         i_clk,
@@ -75,9 +76,6 @@ module nts_rx_buffer #(
   reg  [3:0]              memctrl_reg;
 
   //--- internal registers for handling input FIFO
-  //reg                     dispatch_fifo_rd_en_we;
-  //reg                     dispatch_fifo_rd_en_new;
-  //reg                     dispatch_fifo_rd_en_reg;
 
   reg                     dispatch_packet_read_we;
   reg                     dispatch_packet_read_new;
@@ -131,6 +129,7 @@ module nts_rx_buffer #(
 /* verilator lint_off UNOPTFLAT */
   reg                     dispatch_fifo_rd_start;
 /* verilator lint_on UNOPTFLAT */
+  reg                     fifo_start;
 
   //----------------------------------------------------------------
   // Concurrent connectivity for ports etc.
@@ -271,6 +270,24 @@ module nts_rx_buffer #(
   end
 
   //----------------------------------------------------------------
+  // FIFO start wire
+  // Helper reg. Used by FSM and others.
+  //----------------------------------------------------------------
+
+  always @*
+  begin : fifo_reg_start_proc
+    fifo_start = 0;
+    case (memctrl_reg)
+      MEMORY_CTRL_IDLE:
+        if (i_parser_busy == 0)
+          if (i_dispatch_packet_available && i_dispatch_fifo_empty == 0)
+            fifo_start = 1;
+      default: ;
+    endcase
+  end
+
+
+  //----------------------------------------------------------------
   // Finite State Machine
   // Overall functionallity control
   //----------------------------------------------------------------
@@ -279,20 +296,10 @@ module nts_rx_buffer #(
   begin : FSM
     memctrl_we              = 'b0;
     memctrl_new             = MEMORY_CTRL_IDLE;
-/*
-    $display("%s:%0d AP ADDR: %h WS: %h RD_EN: %h", `__FILE__, `__LINE__,
-      //i_access_port_wait,
-      i_access_port_addr,
-      i_access_port_wordsize,
-      i_access_port_rd_en
-      //ccess_port_rd_dv,
-      //access_port_rd_data
-    );
-*/
 
     case (memctrl_reg)
       MEMORY_CTRL_IDLE:
-        if (i_dispatch_packet_available && i_dispatch_fifo_empty == 0 && i_parser_busy == 0) begin
+        if (fifo_start) begin
           memctrl_we              = 'b1;
           memctrl_new             = MEMORY_CTRL_FIFO_WRITE;
 
@@ -332,10 +339,7 @@ module nts_rx_buffer #(
           //$display("%s:%0d memctrl_we: %h memctrl_new: %h", `__FILE__, `__LINE__, memctrl_we, memctrl_new);
         end
       MEMORY_CTRL_FIFO_WRITE:
-        if (i_dispatch_fifo_empty == 'b0) begin
-          memctrl_we            = 'b1;
-          memctrl_new           = MEMORY_CTRL_FIFO_WRITE;
-        end else begin
+        if (i_dispatch_fifo_empty) begin
           memctrl_we            = 'b1;
           memctrl_new           = MEMORY_CTRL_IDLE;
         end
@@ -398,7 +402,7 @@ module nts_rx_buffer #(
         end
       MEMORY_CTRL_ERROR:
         begin
-          $display("%s:%0d WARNING: Memory controller error state detected!", `__FILE__, `__LINE__);
+          //$display("%s:%0d WARNING: Memory controller error state detected!", `__FILE__, `__LINE__);
           memctrl_we            = 'b1;
           memctrl_new           = MEMORY_CTRL_IDLE;
         end
@@ -431,7 +435,7 @@ module nts_rx_buffer #(
           ram_addr_we               = 'b1; //write zero addr
           ram_wr_en_we              = 'b1; //write zero wr (i.e. read)
 
-          if (i_dispatch_packet_available && i_dispatch_fifo_empty == 0) begin
+          if (fifo_start) begin
             ;
           end else if (i_access_port_rd_en) begin
             ram_addr_we             = 'b1;
@@ -476,7 +480,7 @@ module nts_rx_buffer #(
       MEMORY_CTRL_IDLE:
         begin
           //dispatch_fifo_rd_en_we  = 'b1; // write zero to rd_en
-          if (i_dispatch_packet_available && i_dispatch_fifo_empty == 0 && i_parser_busy == 0) begin
+          if (fifo_start) begin
             dispatch_fifo_rd_start = 'b1;
             fifo_addr_we           = 'b1; // write zero to fifo_addr_reg
           end
@@ -521,7 +525,7 @@ module nts_rx_buffer #(
 
           access_dv_new           = 'b0;
 
-          if (i_dispatch_packet_available && i_dispatch_fifo_empty == 0) begin
+          if (fifo_start) begin
             ;
           end else if (i_access_port_rd_en) begin
             access_ws_we          = 'b1;
@@ -647,4 +651,18 @@ module nts_rx_buffer #(
       default ;
     endcase
   end
+
+  if (DEBUG>0) begin
+    always @(posedge i_clk)
+      if (i_areset == 0)
+        if (memctrl_we)
+          if (memctrl_new == MEMORY_CTRL_ERROR) begin
+            $display("%s:%0d WARNING: Memory controller error state detected!", `__FILE__, `__LINE__);
+            $display("%s:%0d          memctrl_reg: %h", `__FILE__, `__LINE__, memctrl_reg);
+            $display("%s:%0d          access_ws{8,16,32,64}bit_reg: %b", `__FILE__, `__LINE__, {access_ws8bit_reg, access_ws16bit_reg, access_ws32bit_reg, access_ws64bit_reg});
+            $display("%s:%0d          access_addr_lo_reg: %h", `__FILE__, `__LINE__, access_addr_lo_reg);
+            $display("%s:%0d          i_parser_busy: %h", `__FILE__, `__LINE__, i_parser_busy);
+          end
+  end
+
 endmodule

@@ -105,7 +105,7 @@ module nts_top_tb;
   endtask
 
   //TODO make this support > 1 engine in the future
-  function [31:0] api_read32( input [11:0] addr );
+  task api_read32( output [31:0] out, input [11:0] addr );
   begin : api_read32_
     reg [31:0] result;
     result = 0;
@@ -113,12 +113,12 @@ module nts_top_tb;
     #10;
     result = o_api_read_data;
     api_set(0, 0, 0, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
-    api_read32 = result;
+    out = result;
   end
-  endfunction
+  endtask
 
   //TODO make this support > 1 engine in the future
-  function [63:0] api_read64( input [11:0] addr );
+  task api_read64( output [63:0] out, input [11:0] addr );
   begin : api_read64_
     reg [63:0] result;
     result = 0;
@@ -131,9 +131,9 @@ module nts_top_tb;
     #10;
     api_set(0, 0, 0, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
     #10;
-    api_read64 = result;
+    out = result;
   end
-  endfunction
+  endtask
 
   //----------------------------------------------------------------
   // Install key
@@ -177,7 +177,7 @@ module nts_top_tb;
         end
       default: ;
     endcase
-    tmp = api_read32(API_ADDR_KEYMEM_ADDR_CTRL);
+    api_read32(tmp, API_ADDR_KEYMEM_ADDR_CTRL);
     tmp = tmp & ~ (1<<key_index);
     api_set(1, 1, API_ADDR_KEYMEM_ADDR_CTRL, tmp, i_api_cs, i_api_we, i_api_address, i_api_write_data);
     #10;
@@ -308,11 +308,25 @@ module nts_top_tb;
     //----------------------------------------------------------------
 
     #100 ;
-    $display("%s:%0d: *** CORE: %s %s", `__FILE__, `__LINE__, api_read64(API_ADDR_ENGINE_NAME0), api_read32(API_ADDR_ENGINE_VERSION));
-    $display("%s:%0d: *** CORE: %s", `__FILE__, `__LINE__, api_read64(API_ADDR_CLOCK_NAME0));
-    $display("%s:%0d: *** CORE: %s", `__FILE__, `__LINE__, api_read64(API_ADDR_KEYMEM_NAME0));
-    $display("%s:%0d: *** DEBUG, Errors Crypto: %0d", `__FILE__, `__LINE__, api_read64(API_ADDR_DEBUG_ERR_CRYPTO));
-    $display("%s:%0d: *** DEBUG, Errors TxBuf: %0d", `__FILE__, `__LINE__, api_read64(API_ADDR_DEBUG_ERR_TXBUF));
+    begin : fin_locals_
+      reg [63:0] engine_name;
+      reg [31:0] engine_version;
+      reg [63:0] clock_name;
+      reg [63:0] keymem_name;
+      reg [63:0] crypto_err;
+      reg [63:0] txbuf_err;
+      api_read64(engine_name, API_ADDR_ENGINE_NAME0);
+      api_read32(engine_version, API_ADDR_ENGINE_VERSION);
+      api_read64(clock_name, API_ADDR_CLOCK_NAME0);
+      api_read64(keymem_name, API_ADDR_KEYMEM_NAME0);
+      api_read64(crypto_err, API_ADDR_DEBUG_ERR_CRYPTO);
+      api_read64(txbuf_err, API_ADDR_DEBUG_ERR_TXBUF);
+      $display("%s:%0d: *** CORE: %s %s", `__FILE__, `__LINE__, engine_name, engine_version);
+      $display("%s:%0d: *** CORE: %s", `__FILE__, `__LINE__, clock_name);
+      $display("%s:%0d: *** CORE: %s", `__FILE__, `__LINE__, keymem_name);
+      $display("%s:%0d: *** DEBUG, Errors Crypto: %0d", `__FILE__, `__LINE__, crypto_err);
+      $display("%s:%0d: *** DEBUG, Errors TxBuf: %0d", `__FILE__, `__LINE__, txbuf_err);
+    end
 
     $display("Test stop: %s:%0d", `__FILE__, `__LINE__);
     $finish;

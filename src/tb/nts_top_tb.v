@@ -33,6 +33,12 @@ module nts_top_tb;
   localparam [11:0] API_ADDR_KEYMEM_KEY3_START  = API_ADDR_KEYMEM_BASE + 12'h70;
   localparam [11:0] API_ADDR_KEYMEM_KEY3_END    = API_ADDR_KEYMEM_BASE + 12'h7f;
 
+  localparam [11:0] API_DISPATCHER_ADDR_NAME0          = 0;
+  localparam [11:0] API_DISPATCHER_ADDR_VERSION        = 2;
+  localparam [11:0] API_DISPATCHER_ADDR_DUMMY          = 3;
+  localparam [11:0] API_DISPATCHER_ADDR_COUNTER_FRAMES = 'h10;
+
+
   localparam   [31:0] NTS_TEST_REQUEST_MASTER_KEY_ID_1=32'h30a8dce1;
   localparam  [255:0] NTS_TEST_REQUEST_MASTER_KEY_1=256'h6d1e7f51_f64876ba_68d4669e_649ad613_402bf7bb_5cf275a9_83a28dab_5e416314;
   localparam  [255:0] NTS_TEST_REQUEST_C2S_KEY_1=256'hf6467017_5420ab7e_2952fc90_fff2649e_e9ae6707_05d32341_94e72f48_6618a5b5;
@@ -70,6 +76,19 @@ module nts_top_tb;
   reg  [API_ADDR_WIDTH * ENGINES - 1:0] i_api_address;
   reg  [API_RW_WIDTH   * ENGINES - 1:0] i_api_write_data;
   wire [API_RW_WIDTH   * ENGINES - 1:0] o_api_read_data;
+/*
+  reg                       i_api_dispatcher_cs;
+  reg                       i_api_dispatcher_we;
+  reg  [API_ADDR_WIDTH-1:0] i_api_dispatcher_address;
+  reg  [API_RW_WIDTH-1:0] i_api_dispatcher_write_data;
+  wire [API_RW_WIDTH-1:0] o_api_dispatcher_read_data;
+*/
+
+  reg i_api_dispatcher_cs;
+  reg i_api_dispatcher_we;
+  reg [11:0] i_api_dispatcher_address;
+  reg [31:0] i_api_dispatcher_write_data;
+  wire [31:0] o_api_dispatcher_read_data;
 
   //----------------------------------------------------------------
   // RX MAC helper regs
@@ -123,15 +142,30 @@ module nts_top_tb;
   begin : api_read64_
     reg [63:0] result;
     result = 0;
-    api_set(1, 0, addr, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
-    #20;
-    result[63:32] = o_api_read_data;
-    api_set(1, 0, addr + 1, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+    api_read32( result[63:32], addr );
+    api_read32( result[31:0], addr+1 );
+    out = result;
+  end
+  endtask
+
+  task dispatcher_read32( output [31:0] out, input [11:0] addr );
+  begin : dispatcher_read32_
+    reg [31:0] result;
+    result = 0;
+    api_set(1, 0, addr, 0, i_api_dispatcher_cs, i_api_dispatcher_we, i_api_dispatcher_address, i_api_dispatcher_write_data);
     #10;
-    result[31:0] = o_api_read_data;
-    #10;
-    api_set(0, 0, 0, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
-    #10;
+    result = o_api_dispatcher_read_data;
+    api_set(0, 0, 0, 0, i_api_dispatcher_cs, i_api_dispatcher_we, i_api_dispatcher_address, i_api_dispatcher_write_data);
+    out = result;
+  end
+  endtask
+
+  task dispatcher_read64( output [63:0] out, input [11:0] addr );
+  begin : dispatcher_read64_
+    reg [63:0] result;
+    result = 0;
+    dispatcher_read32( result[63:32], addr );
+    dispatcher_read32( result[31:0], addr+1 );
     out = result;
   end
   endtask
@@ -278,7 +312,13 @@ module nts_top_tb;
     .i_api_we(i_api_we),
     .i_api_address(i_api_address),
     .i_api_write_data(i_api_write_data),
-    .o_api_read_data(o_api_read_data)
+    .o_api_read_data(o_api_read_data),
+
+    .i_api_dispatcher_cs(i_api_dispatcher_cs),
+    .i_api_dispatcher_we(i_api_dispatcher_we),
+    .i_api_dispatcher_address(i_api_dispatcher_address),
+    .i_api_dispatcher_write_data(i_api_dispatcher_write_data),
+    .o_api_dispatcher_read_data(o_api_dispatcher_read_data)
   );
 
   //----------------------------------------------------------------
@@ -293,6 +333,10 @@ module nts_top_tb;
     i_api_we = 0;
     i_api_address = 0;
     i_api_write_data = 0;
+    i_api_dispatcher_cs = 0;
+    i_api_dispatcher_we = 0;
+    i_api_dispatcher_address = 0;
+    i_api_dispatcher_write_data = 0;
 
     #10;
     i_areset = 0;
@@ -304,9 +348,9 @@ module nts_top_tb;
     begin : loop
       integer i;
       for (i = 0; i < 15; i = i + 1) begin
-        //send_packet({63696'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_1}, 1840);
-        //send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160);
-        //send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160);
+        send_packet({63696'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_1}, 1840);
+        send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160);
+        send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160);
         while (dut.dispatcher.mem_state[dut.dispatcher.current_mem] != 0) #10;
         send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160);
       end
@@ -325,17 +369,25 @@ module nts_top_tb;
       reg [63:0] keymem_name;
       reg [63:0] crypto_err;
       reg [63:0] txbuf_err;
+      reg [63:0] dispatcher_name;
+      reg [31:0] dispatcher_version;
+      reg [63:0] dispatcher_counter_frames;
       api_read64(engine_name, API_ADDR_ENGINE_NAME0);
       api_read32(engine_version, API_ADDR_ENGINE_VERSION);
       api_read64(clock_name, API_ADDR_CLOCK_NAME0);
       api_read64(keymem_name, API_ADDR_KEYMEM_NAME0);
       api_read64(crypto_err, API_ADDR_DEBUG_ERR_CRYPTO);
       api_read64(txbuf_err, API_ADDR_DEBUG_ERR_TXBUF);
+      dispatcher_read64(dispatcher_name, API_DISPATCHER_ADDR_NAME0);
+      dispatcher_read32(dispatcher_version, API_DISPATCHER_ADDR_VERSION);
+      dispatcher_read64(dispatcher_counter_frames, API_DISPATCHER_ADDR_COUNTER_FRAMES);
+      $display("%s:%0d: *** CORE: %s %s", `__FILE__, `__LINE__, dispatcher_name, dispatcher_version);
       $display("%s:%0d: *** CORE: %s %s", `__FILE__, `__LINE__, engine_name, engine_version);
       $display("%s:%0d: *** CORE: %s", `__FILE__, `__LINE__, clock_name);
       $display("%s:%0d: *** CORE: %s", `__FILE__, `__LINE__, keymem_name);
       $display("%s:%0d: *** DEBUG, Errors Crypto: %0d", `__FILE__, `__LINE__, crypto_err);
       $display("%s:%0d: *** DEBUG, Errors TxBuf: %0d", `__FILE__, `__LINE__, txbuf_err);
+      $display("%s:%0d: *** Dispatcher, frame start counter: %0d", `__FILE__, `__LINE__, dispatcher_counter_frames);
     end
 
     $display("Test stop: %s:%0d", `__FILE__, `__LINE__);
@@ -366,7 +418,7 @@ module nts_top_tb;
         end else begin
           rx_ptr <= rx_ptr - 1;
         end
-        
+
       end else if (packet_available) begin
         $display("%s:%0d packet_available", `__FILE__, `__LINE__);
         rx_busy <= 1;

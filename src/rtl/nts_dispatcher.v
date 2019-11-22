@@ -48,8 +48,32 @@ module nts_dispatcher #(
   output wire                  o_dispatch_fifo_empty,
   input  wire                  i_dispatch_fifo_rd_start,
   output wire                  o_dispatch_fifo_rd_valid,
-  output wire [63:0]           o_dispatch_fifo_rd_data
+  output wire [63:0]           o_dispatch_fifo_rd_data,
+
+  input  wire                  i_api_cs,
+  input  wire                  i_api_we,
+  input  wire [11:0]           i_api_address,
+  input  wire [31:0]           i_api_write_data,
+  output wire [31:0]           o_api_read_data
 );
+
+  //----------------------------------------------------------------
+  // API constants
+  //----------------------------------------------------------------
+
+  localparam ADDR_NAME0   = 0;
+  localparam ADDR_NAME1   = 1;
+  localparam ADDR_VERSION = 2;
+  localparam ADDR_DUMMY   = 3;
+  localparam ADDR_COUNTER_FRAMES_MSB = 'h10;
+  localparam ADDR_COUNTER_FRAMES_LSB = 'h11;
+
+  localparam CORE_NAME    = 64'h4e_54_53_5f_44_53_50_54; //NTS_DSPT
+  localparam CORE_VERSION = 32'h30_2e_30_31; //0.01
+
+  //----------------------------------------------------------------
+  // State constants
+  //----------------------------------------------------------------
 
   localparam STATE_EMPTY           = 0;
   localparam STATE_HAS_DATA        = 1;
@@ -62,26 +86,58 @@ module nts_dispatcher #(
   localparam STATE_FIFO_OUT_FIN_1  = 8;
   localparam STATE_ERROR_GENERAL   = 9;
 
-  reg               current_mem;
+  //----------------------------------------------------------------
+  // Internal registers and wires
+  //----------------------------------------------------------------
+
+  reg  [31:0]     api_read_data;
+
+  reg               current_mem;       //Current: MAC RX receiver. ~Current: Dispatcher FIFO out
   reg                fifo_empty;
   reg  [3:0]          mem_state [1:0];
-  reg                     write [1:0];
-  reg  [63:0]            w_data [1:0];
-  wire [63:0]            r_data [1:0];
-  reg  [ADDR_WIDTH-1:0]  r_addr;
-  reg  [ADDR_WIDTH-1:0]  w_addr [1:0];
+
+  reg                     write [1:0]; //RAM W.E.
+  reg  [63:0]            w_data [1:0]; //RAM W.D.
+  wire [63:0]            r_data [1:0]; //RAM R.D
+  reg  [ADDR_WIDTH-1:0]  r_addr;       //RAM R.A
+  reg  [ADDR_WIDTH-1:0]  w_addr [1:0]; //RAM W.A
   reg  [ADDR_WIDTH-1:0] counter [1:0];
   reg  [7:0]         data_valid [1:0];
 
-  reg [63:0] fifo_rd_data;
-  reg        fifo_rd_valid;
+  reg [63:0] fifo_rd_data;  //out
+  reg        fifo_rd_valid; //out
 
+  reg [7:0] previous_rx_data_valid;
+  reg       detect_start_of_frame;
+
+  //----------------------------------------------------------------
+  // API Debug, counter etc registers
+  //----------------------------------------------------------------
+
+  reg        api_dummy_we;
+  reg [31:0] api_dummy_new;
+  reg [31:0] api_dummy_reg;
+  reg        counter_sof_detect_we;
+  reg [63:0] counter_sof_detect_new;
+  reg [63:0] counter_sof_detect_reg;
+  reg        counter_sof_detect_lsb_we;
+  reg [31:0] counter_sof_detect_lsb_reg;
+
+  //----------------------------------------------------------------
+  // Output wiring
+  //----------------------------------------------------------------
+
+  assign o_api_read_data              = api_read_data;
   assign o_dispatch_packet_available  = mem_state[ ~ current_mem ] == STATE_FIFO_OUT_INIT_0; //STATE_FIFO_OUT;
   assign o_dispatch_counter           = counter[ ~ current_mem ];
   assign o_dispatch_data_valid        = data_valid[ ~ current_mem ];
   assign o_dispatch_fifo_empty        = fifo_empty;
   assign o_dispatch_fifo_rd_valid     = fifo_rd_valid;
   assign o_dispatch_fifo_rd_data      = fifo_rd_data; //r_data[ ~ current_mem ];
+
+  //----------------------------------------------------------------
+  // RAM cores
+  //----------------------------------------------------------------
 
   bram #(ADDR_WIDTH,64) mem0 (
      .i_clk(i_clk),
@@ -99,8 +155,91 @@ module nts_dispatcher #(
      .o_data(r_data[1])
   );
 
-  reg [7:0] previous_rx_data_valid;
-  reg       detect_start_of_frame;
+  //----------------------------------------------------------------
+  // API
+  //----------------------------------------------------------------
+
+  always @*
+  begin : api
+    api_read_data = 0;
+
+    api_dummy_we = 0;
+    api_dummy_new = 0;
+    counter_sof_detect_lsb_we = 0;
+
+    if (i_api_cs) begin
+      if (i_api_we) begin
+        case (i_api_address)
+          ADDR_DUMMY:
+            begin
+              api_dummy_we = 1;
+              api_dummy_new = i_api_write_data;
+            end
+          default: ;
+        endcase
+      end else begin
+        case (i_api_address)
+          ADDR_NAME0: api_read_data = CORE_NAME[63:32];
+          ADDR_NAME1: api_read_data = CORE_NAME[31:0];
+          ADDR_VERSION: api_read_data = CORE_VERSION;
+          ADDR_DUMMY: api_read_data = api_dummy_reg;
+          ADDR_COUNTER_FRAMES_MSB:
+            begin
+              api_read_data = counter_sof_detect_reg[63:32];
+              counter_sof_detect_lsb_we = 1;
+            end
+          ADDR_COUNTER_FRAMES_LSB:
+            begin
+              api_read_data = counter_sof_detect_lsb_reg;
+            end
+          default: ;
+        endcase
+      end
+    end
+  end
+
+  //----------------------------------------------------------------
+  // Register Update
+  //----------------------------------------------------------------
+
+  always @ (posedge i_clk or posedge i_areset)
+  begin : reg_update
+    if (i_areset) begin
+      api_dummy_reg <= 0;
+      counter_sof_detect_reg <= 0;
+      counter_sof_detect_lsb_reg <= 0;
+    end else begin
+
+      if (api_dummy_we)
+        api_dummy_reg <= api_dummy_new;
+
+      if (counter_sof_detect_we)
+       counter_sof_detect_reg <= counter_sof_detect_new;
+
+      if (counter_sof_detect_lsb_we)
+        counter_sof_detect_lsb_reg <= counter_sof_detect_reg[31:0];
+
+    end
+  end
+
+  //----------------------------------------------------------------
+  // Debug counters
+  //----------------------------------------------------------------
+
+  always @*
+  begin : debug_regs
+    counter_sof_detect_we = 0;
+    counter_sof_detect_new = 0;
+
+    if (detect_start_of_frame) begin
+      counter_sof_detect_we = 1;
+      counter_sof_detect_new = counter_sof_detect_reg + 1;
+    end
+  end
+
+  //----------------------------------------------------------------
+  // Start of Frame Detector (previous MAC RX DV sampler)
+  //----------------------------------------------------------------
 
   always @(posedge i_clk or posedge i_areset)
   if (i_areset) begin
@@ -108,6 +247,10 @@ module nts_dispatcher #(
   end else begin
     previous_rx_data_valid <= i_rx_data_valid;
   end
+
+  //----------------------------------------------------------------
+  // Start of Frame Detector
+  //----------------------------------------------------------------
 
   always @*
   begin : sof_detector
@@ -119,8 +262,12 @@ module nts_dispatcher #(
     end
   end
 
+  //----------------------------------------------------------------
+  // Main process
+  //----------------------------------------------------------------
+
   always @ (posedge i_clk or posedge i_areset)
-  begin
+  begin : main_proc
     if (i_areset == 1'b1) begin
       current_mem   <= 'b0;
       fifo_empty    <= 'b1;

@@ -14,12 +14,19 @@ module nts_top #(
   input  wire                      i_mac_rx_bad_frame,
   input  wire                      i_mac_rx_good_frame,
 
-  //API interface. TODO: replace with SPI interface to reduce width when many concurrent lines
+  //Engine API interface. TODO: replace with SPI interface to reduce width when many concurrent lines
   input  wire                  [ENGINES - 1:0] i_api_cs,
   input  wire                  [ENGINES - 1:0] i_api_we,
   input  wire [API_ADDR_WIDTH * ENGINES - 1:0] i_api_address,
   input  wire [API_RW_WIDTH   * ENGINES - 1:0] i_api_write_data,
-  output wire [API_RW_WIDTH   * ENGINES - 1:0] o_api_read_data
+  output wire [API_RW_WIDTH   * ENGINES - 1:0] o_api_read_data,
+
+  //Dispatcher API interface. TODO: replace with SPI interface.
+  input  wire                        i_api_dispatcher_cs,
+  input  wire                        i_api_dispatcher_we,
+  input  wire [API_ADDR_WIDTH - 1:0] i_api_dispatcher_address,
+  input  wire   [API_RW_WIDTH - 1:0] i_api_dispatcher_write_data,
+  output wire   [API_RW_WIDTH - 1:0] o_api_dispatcher_read_data
 );
   localparam LAST_DATA_VALID_WIDTH = 8;
 
@@ -97,11 +104,12 @@ module nts_top #(
   nts_dispatcher #(.ADDR_WIDTH(ADDR_WIDTH)) dispatcher (
     .i_areset(i_areset),
     .i_clk(i_clk),
+
     .i_rx_data_valid(i_mac_rx_data_valid),
     .i_rx_data(mac_rx_corrected /*i_mac_rx_data*/ ),
     .i_rx_bad_frame(i_mac_rx_bad_frame),
     .i_rx_good_frame(i_mac_rx_good_frame),
-  //.i_process_frame(1'b1),
+
     .o_dispatch_packet_available(dispatch_engine_rx_packet_available[0]),
     .i_dispatch_packet_read_discard(engine_dispatch_rx_packet_read_discard[0]),
     .o_dispatch_counter(o_dispatch_counter),
@@ -109,7 +117,13 @@ module nts_top #(
     .o_dispatch_fifo_empty(dispatch_engine_rx_fifo_empty[0]),
     .i_dispatch_fifo_rd_start(engine_dispatch_rx_fifo_rd_start[0]),
     .o_dispatch_fifo_rd_valid(dispatch_engine_rx_fifo_rd_valid[0]),
-    .o_dispatch_fifo_rd_data(dispatch_engine_rx_fifo_rd_data[MAC_DATA_WIDTH*0+:MAC_DATA_WIDTH])
+    .o_dispatch_fifo_rd_data(dispatch_engine_rx_fifo_rd_data[MAC_DATA_WIDTH*0+:MAC_DATA_WIDTH]),
+
+    .i_api_cs(i_api_dispatcher_cs),
+    .i_api_we(i_api_dispatcher_we),
+    .i_api_address(i_api_dispatcher_address),
+    .i_api_write_data(i_api_dispatcher_write_data),
+    .o_api_read_data(o_api_dispatcher_read_data)
   );
 
   if (DEBUG) begin

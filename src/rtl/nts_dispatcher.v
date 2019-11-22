@@ -65,8 +65,17 @@ module nts_dispatcher #(
   localparam ADDR_NAME1   = 1;
   localparam ADDR_VERSION = 2;
   localparam ADDR_DUMMY   = 3;
-  localparam ADDR_COUNTER_FRAMES_MSB = 'h10;
-  localparam ADDR_COUNTER_FRAMES_LSB = 'h11;
+
+  localparam ADDR_COUNTER_FRAMES_MSB     = 'h10;
+  localparam ADDR_COUNTER_FRAMES_LSB     = 'h11;
+  localparam ADDR_COUNTER_GOOD_MSB       = 'h12;
+  localparam ADDR_COUNTER_GOOD_LSB       = 'h13;
+  localparam ADDR_COUNTER_BAD_MSB        = 'h14;
+  localparam ADDR_COUNTER_BAD_LSB        = 'h15;
+  localparam ADDR_COUNTER_DISPATCHED_MSB = 'h16;
+  localparam ADDR_COUNTER_DISPATCHED_LSB = 'h17;
+  localparam ADDR_COUNTER_ERROR_MSB      = 'h18;
+  localparam ADDR_COUNTER_ERROR_LSB      = 'h19;
 
   localparam CORE_NAME    = 64'h4e_54_53_5f_44_53_50_54; //NTS_DSPT
   localparam CORE_VERSION = 32'h30_2e_30_31; //0.01
@@ -110,6 +119,8 @@ module nts_dispatcher #(
   reg [7:0] previous_rx_data_valid;
   reg       detect_start_of_frame;
 
+  wire      error_state;
+
   //----------------------------------------------------------------
   // API Debug, counter etc registers
   //----------------------------------------------------------------
@@ -117,23 +128,51 @@ module nts_dispatcher #(
   reg        api_dummy_we;
   reg [31:0] api_dummy_new;
   reg [31:0] api_dummy_reg;
+
   reg        counter_sof_detect_we;
   reg [63:0] counter_sof_detect_new;
   reg [63:0] counter_sof_detect_reg;
   reg        counter_sof_detect_lsb_we;
   reg [31:0] counter_sof_detect_lsb_reg;
 
+  reg        counter_bad_we;
+  reg [63:0] counter_bad_new;
+  reg [63:0] counter_bad_reg;
+  reg        counter_bad_lsb_we;
+  reg [31:0] counter_bad_lsb_reg;
+
+  reg        counter_dispatched_we;
+  reg [63:0] counter_dispatched_new;
+  reg [63:0] counter_dispatched_reg;
+  reg        counter_dispatched_lsb_we;
+  reg [31:0] counter_dispatched_lsb_reg;
+
+  reg        counter_error_we;
+  reg [63:0] counter_error_new;
+  reg [63:0] counter_error_reg;
+  reg        counter_error_lsb_we;
+  reg [31:0] counter_error_lsb_reg;
+
+  reg        counter_good_we;
+  reg [63:0] counter_good_new;
+  reg [63:0] counter_good_reg;
+  reg        counter_good_lsb_we;
+  reg [31:0] counter_good_lsb_reg;
+
   //----------------------------------------------------------------
   // Output wiring
   //----------------------------------------------------------------
 
-  assign o_api_read_data              = api_read_data;
-  assign o_dispatch_packet_available  = mem_state[ ~ current_mem ] == STATE_FIFO_OUT_INIT_0; //STATE_FIFO_OUT;
+  assign error_state     = (mem_state[0] == STATE_ERROR_GENERAL) || (mem_state[1] == STATE_ERROR_GENERAL);
+
+  assign o_api_read_data = api_read_data;
+
+  assign o_dispatch_packet_available  = mem_state[ ~ current_mem ] == STATE_FIFO_OUT_INIT_0;
   assign o_dispatch_counter           = counter[ ~ current_mem ];
   assign o_dispatch_data_valid        = data_valid[ ~ current_mem ];
   assign o_dispatch_fifo_empty        = fifo_empty;
   assign o_dispatch_fifo_rd_valid     = fifo_rd_valid;
-  assign o_dispatch_fifo_rd_data      = fifo_rd_data; //r_data[ ~ current_mem ];
+  assign o_dispatch_fifo_rd_data      = fifo_rd_data;
 
   //----------------------------------------------------------------
   // RAM cores
@@ -165,6 +204,11 @@ module nts_dispatcher #(
 
     api_dummy_we = 0;
     api_dummy_new = 0;
+
+    counter_bad_lsb_we = 0;
+    counter_dispatched_lsb_we = 0;
+    counter_error_lsb_we = 0;
+    counter_good_lsb_we = 0;
     counter_sof_detect_lsb_we = 0;
 
     if (i_api_cs) begin
@@ -192,6 +236,42 @@ module nts_dispatcher #(
             begin
               api_read_data = counter_sof_detect_lsb_reg;
             end
+          ADDR_COUNTER_GOOD_MSB:
+            begin
+              api_read_data = counter_good_reg[63:32];
+              counter_good_lsb_we = 1;
+            end
+          ADDR_COUNTER_GOOD_LSB:
+            begin
+              api_read_data = counter_good_lsb_reg;
+            end
+          ADDR_COUNTER_BAD_MSB:
+            begin
+              api_read_data = counter_bad_reg[63:32];
+              counter_bad_lsb_we = 1;
+            end
+          ADDR_COUNTER_BAD_LSB:
+            begin
+              api_read_data = counter_bad_lsb_reg;
+            end
+          ADDR_COUNTER_DISPATCHED_MSB:
+            begin
+              api_read_data = counter_dispatched_reg[63:32];
+              counter_dispatched_lsb_we = 1;
+            end
+          ADDR_COUNTER_DISPATCHED_LSB:
+            begin
+              api_read_data = counter_dispatched_lsb_reg;
+            end
+          ADDR_COUNTER_ERROR_MSB:
+            begin
+              api_read_data = counter_error_reg[63:32];
+              counter_error_lsb_we = 1;
+            end
+          ADDR_COUNTER_ERROR_LSB:
+            begin
+              api_read_data = counter_error_lsb_reg;
+            end
           default: ;
         endcase
       end
@@ -205,13 +285,48 @@ module nts_dispatcher #(
   always @ (posedge i_clk or posedge i_areset)
   begin : reg_update
     if (i_areset) begin
+
       api_dummy_reg <= 0;
+
+      counter_bad_reg <= 0;
+      counter_bad_lsb_reg <= 0;
+      counter_dispatched_reg <= 0;
+      counter_dispatched_lsb_reg <= 0;
+      counter_error_reg <= 0;
+      counter_error_lsb_reg <= 0;
+      counter_good_reg <= 0;
+      counter_good_lsb_reg <= 0;
       counter_sof_detect_reg <= 0;
       counter_sof_detect_lsb_reg <= 0;
+
     end else begin
 
       if (api_dummy_we)
         api_dummy_reg <= api_dummy_new;
+
+      if (counter_bad_we)
+       counter_bad_reg <= counter_bad_new;
+
+      if (counter_bad_lsb_we)
+        counter_bad_lsb_reg <= counter_bad_reg[31:0];
+
+      if (counter_dispatched_we)
+       counter_dispatched_reg <= counter_dispatched_new;
+
+      if (counter_dispatched_lsb_we)
+        counter_dispatched_lsb_reg <= counter_dispatched_reg[31:0];
+
+      if (counter_error_we)
+       counter_error_reg <= counter_error_new;
+
+      if (counter_error_lsb_we)
+        counter_error_lsb_reg <= counter_error_reg[31:0];
+
+      if (counter_good_we)
+       counter_good_reg <= counter_good_new;
+
+      if (counter_good_lsb_we)
+        counter_good_lsb_reg <= counter_good_reg[31:0];
 
       if (counter_sof_detect_we)
        counter_sof_detect_reg <= counter_sof_detect_new;
@@ -228,8 +343,41 @@ module nts_dispatcher #(
 
   always @*
   begin : debug_regs
+
+    counter_bad_we = 0;
+    counter_bad_new = 0;
+
+    counter_dispatched_we = 0;
+    counter_dispatched_new = 0;
+
+    counter_error_we = 0;
+    counter_error_new = 0;
+
+    counter_good_we = 0;
+    counter_good_new = 0;
+
     counter_sof_detect_we = 0;
     counter_sof_detect_new = 0;
+
+    if (i_rx_bad_frame) begin
+      counter_bad_we = 1;
+      counter_bad_new = counter_bad_reg + 1;
+    end
+
+    if (i_dispatch_fifo_rd_start) begin
+      counter_dispatched_we = 1;
+      counter_dispatched_new = counter_dispatched_reg + 1;
+    end
+
+    if (error_state) begin
+      counter_error_we = 1;
+      counter_error_new = counter_error_reg + 1;
+    end
+
+    if (i_rx_good_frame) begin
+      counter_good_we = 1;
+      counter_good_new = counter_good_reg + 1;
+    end
 
     if (detect_start_of_frame) begin
       counter_sof_detect_we = 1;

@@ -33,10 +33,14 @@ module nts_top_tb;
   localparam [11:0] API_ADDR_KEYMEM_KEY3_START  = API_ADDR_KEYMEM_BASE + 12'h70;
   localparam [11:0] API_ADDR_KEYMEM_KEY3_END    = API_ADDR_KEYMEM_BASE + 12'h7f;
 
-  localparam [11:0] API_DISPATCHER_ADDR_NAME0          = 0;
-  localparam [11:0] API_DISPATCHER_ADDR_VERSION        = 2;
-  localparam [11:0] API_DISPATCHER_ADDR_DUMMY          = 3;
-  localparam [11:0] API_DISPATCHER_ADDR_COUNTER_FRAMES = 'h10;
+  localparam [11:0] API_DISPATCHER_ADDR_NAME               = 'h000;
+  localparam [11:0] API_DISPATCHER_ADDR_VERSION            = 'h002;
+  localparam [11:0] API_DISPATCHER_ADDR_DUMMY              = 'h003;
+  localparam [11:0] API_DISPATCHER_ADDR_COUNTER_FRAMES     = 'h010;
+  localparam [11:0] API_DISPATCHER_ADDR_COUNTER_GOOD       = 'h012;
+  localparam [11:0] API_DISPATCHER_ADDR_COUNTER_BAD        = 'h014;
+  localparam [11:0] API_DISPATCHER_ADDR_COUNTER_DISPATCHED = 'h016;
+  localparam [11:0] API_DISPATCHER_ADDR_COUNTER_ERROR      = 'h018;
 
 
   localparam   [31:0] NTS_TEST_REQUEST_MASTER_KEY_ID_1=32'h30a8dce1;
@@ -100,6 +104,7 @@ module nts_top_tb;
   reg [71:0] /* 8 + 64 */ packet [0:99];
   reg                     packet_available;
   integer                 packet_length;
+  reg                     packet_marked_bad;
 
   assign rx_current = packet[rx_ptr];
 
@@ -249,7 +254,8 @@ module nts_top_tb;
 
   task send_packet (
     input [65535:0] source,
-    input    [31:0] length
+    input    [31:0] length,
+    input           bad_packet
   );
   integer i;
   integer packet_ptr;
@@ -257,6 +263,7 @@ module nts_top_tb;
   begin
     `assert( (0==(length%8)) ); // byte aligned required
     `assert( rx_busy == 1'b0 );
+    packet_marked_bad = bad_packet;
     for (i=0; i<100; i=i+1) begin
       packet[i] = { 8'h00, 64'habad_1dea_f00d_cafe };
     end
@@ -348,11 +355,12 @@ module nts_top_tb;
     begin : loop
       integer i;
       for (i = 0; i < 15; i = i + 1) begin
-        send_packet({63696'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_1}, 1840);
-        send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160);
-        send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160);
+        send_packet({63696'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_1}, 1840, 1);
+        send_packet({63696'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_1}, 1840, 0);
+        send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160, 0);
+        send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160, 0);
         while (dut.dispatcher.mem_state[dut.dispatcher.current_mem] != 0) #10;
-        send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160);
+        send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160, 0);
       end
     end
     #90000;
@@ -372,15 +380,23 @@ module nts_top_tb;
       reg [63:0] dispatcher_name;
       reg [31:0] dispatcher_version;
       reg [63:0] dispatcher_counter_frames;
+      reg [63:0] dispatcher_counter_good;
+      reg [63:0] dispatcher_counter_bad;
+      reg [63:0] dispatcher_counter_dispatched;
+      reg [63:0] dispatcher_counter_error;
       api_read64(engine_name, API_ADDR_ENGINE_NAME0);
       api_read32(engine_version, API_ADDR_ENGINE_VERSION);
       api_read64(clock_name, API_ADDR_CLOCK_NAME0);
       api_read64(keymem_name, API_ADDR_KEYMEM_NAME0);
       api_read64(crypto_err, API_ADDR_DEBUG_ERR_CRYPTO);
       api_read64(txbuf_err, API_ADDR_DEBUG_ERR_TXBUF);
-      dispatcher_read64(dispatcher_name, API_DISPATCHER_ADDR_NAME0);
+      dispatcher_read64(dispatcher_name, API_DISPATCHER_ADDR_NAME);
       dispatcher_read32(dispatcher_version, API_DISPATCHER_ADDR_VERSION);
       dispatcher_read64(dispatcher_counter_frames, API_DISPATCHER_ADDR_COUNTER_FRAMES);
+      dispatcher_read64(dispatcher_counter_good, API_DISPATCHER_ADDR_COUNTER_GOOD);
+      dispatcher_read64(dispatcher_counter_bad, API_DISPATCHER_ADDR_COUNTER_BAD);
+      dispatcher_read64(dispatcher_counter_dispatched, API_DISPATCHER_ADDR_COUNTER_DISPATCHED);
+      dispatcher_read64(dispatcher_counter_error, API_DISPATCHER_ADDR_COUNTER_ERROR);
       $display("%s:%0d: *** CORE: %s %s", `__FILE__, `__LINE__, dispatcher_name, dispatcher_version);
       $display("%s:%0d: *** CORE: %s %s", `__FILE__, `__LINE__, engine_name, engine_version);
       $display("%s:%0d: *** CORE: %s", `__FILE__, `__LINE__, clock_name);
@@ -388,6 +404,10 @@ module nts_top_tb;
       $display("%s:%0d: *** DEBUG, Errors Crypto: %0d", `__FILE__, `__LINE__, crypto_err);
       $display("%s:%0d: *** DEBUG, Errors TxBuf: %0d", `__FILE__, `__LINE__, txbuf_err);
       $display("%s:%0d: *** Dispatcher, frame start counter: %0d", `__FILE__, `__LINE__, dispatcher_counter_frames);
+      $display("%s:%0d: *** Dispatcher, good frame counter:  %0d", `__FILE__, `__LINE__, dispatcher_counter_good);
+      $display("%s:%0d: *** Dispatcher, bad frame counter:   %0d", `__FILE__, `__LINE__, dispatcher_counter_bad);
+      $display("%s:%0d: *** Dispatcher, dispatched counter:  %0d", `__FILE__, `__LINE__, dispatcher_counter_dispatched);
+      $display("%s:%0d: *** Dispatcher, error counter:       %0d", `__FILE__, `__LINE__, dispatcher_counter_error);
     end
 
     $display("Test stop: %s:%0d", `__FILE__, `__LINE__);
@@ -414,7 +434,10 @@ module nts_top_tb;
         { i_mac_rx_data_valid, i_mac_rx_data } <= rx_current;
         if (rx_ptr == 0) begin
           rx_busy <= 0;
-          i_mac_rx_good_frame <= 1;
+          if (packet_marked_bad)
+            i_mac_rx_bad_frame <= 1;
+          else
+            i_mac_rx_good_frame <= 1;
         end else begin
           rx_ptr <= rx_ptr - 1;
         end

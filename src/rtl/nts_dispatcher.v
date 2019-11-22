@@ -61,23 +61,36 @@ module nts_dispatcher #(
   // API constants
   //----------------------------------------------------------------
 
-  localparam ADDR_NAME0   = 0;
-  localparam ADDR_NAME1   = 1;
-  localparam ADDR_VERSION = 2;
-  localparam ADDR_DUMMY   = 3;
+  localparam ADDR_NAME0             = 0;
+  localparam ADDR_NAME1             = 1;
+  localparam ADDR_VERSION           = 2;
+  localparam ADDR_DUMMY             = 3;
+  localparam ADDR_CTRL              = 8;  //TODO implement
+  localparam ADDR_STATUS            = 9;  //TODO implement
+  localparam ADDR_BYTES_RX_MSB      = 10; //TODO implement
+  localparam ADDR_BYTES_RX_LSB      = 11; //TODO implement
+  localparam ADDR_NTS_REC_MSB       = 12; //TODO implement
+  localparam ADDR_NTS_REC_LSB       = 13; //TODO implement
+  localparam ADDR_NTS_DISCARDED_MSB = 14; //TODO implement
+  localparam ADDR_NTS_DISCARDED_LSB = 15; //TODO implement
+  localparam ADDR_NTS_ENGINES_READY = 16; //TODO implement
 
-  localparam ADDR_COUNTER_FRAMES_MSB     = 'h10;
-  localparam ADDR_COUNTER_FRAMES_LSB     = 'h11;
-  localparam ADDR_COUNTER_GOOD_MSB       = 'h12;
-  localparam ADDR_COUNTER_GOOD_LSB       = 'h13;
-  localparam ADDR_COUNTER_BAD_MSB        = 'h14;
-  localparam ADDR_COUNTER_BAD_LSB        = 'h15;
-  localparam ADDR_COUNTER_DISPATCHED_MSB = 'h16;
-  localparam ADDR_COUNTER_DISPATCHED_LSB = 'h17;
-  localparam ADDR_COUNTER_ERROR_MSB      = 'h18;
-  localparam ADDR_COUNTER_ERROR_LSB      = 'h19;
+  localparam ADDR_COUNTER_FRAMES_MSB     = 'h20;
+  localparam ADDR_COUNTER_FRAMES_LSB     = 'h21;
+  localparam ADDR_COUNTER_GOOD_MSB       = 'h22;
+  localparam ADDR_COUNTER_GOOD_LSB       = 'h23;
+  localparam ADDR_COUNTER_BAD_MSB        = 'h24;
+  localparam ADDR_COUNTER_BAD_LSB        = 'h25;
+  localparam ADDR_COUNTER_DISPATCHED_MSB = 'h26;
+  localparam ADDR_COUNTER_DISPATCHED_LSB = 'h27;
+  localparam ADDR_COUNTER_ERROR_MSB      = 'h28;
+  localparam ADDR_COUNTER_ERROR_LSB      = 'h29;
 
-  localparam CORE_NAME    = 64'h4e_54_53_5f_44_53_50_54; //NTS_DSPT
+  localparam ADDR_BUS_ID_CMD_ADDR = 80; //TODO implement
+  localparam ADDR_BUS_STATUS      = 81; //TODO implement
+  localparam ADDR_BUS_DATA        = 82; //TODO implement
+
+  localparam CORE_NAME    = 64'h4e_54_53_2d_44_49_53_50; //NTS-DISP
   localparam CORE_VERSION = 32'h30_2e_30_31; //0.01
 
   //----------------------------------------------------------------

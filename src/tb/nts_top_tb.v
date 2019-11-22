@@ -36,11 +36,11 @@ module nts_top_tb;
   localparam [11:0] API_DISPATCHER_ADDR_NAME               = 'h000;
   localparam [11:0] API_DISPATCHER_ADDR_VERSION            = 'h002;
   localparam [11:0] API_DISPATCHER_ADDR_DUMMY              = 'h003;
-  localparam [11:0] API_DISPATCHER_ADDR_COUNTER_FRAMES     = 'h010;
-  localparam [11:0] API_DISPATCHER_ADDR_COUNTER_GOOD       = 'h012;
-  localparam [11:0] API_DISPATCHER_ADDR_COUNTER_BAD        = 'h014;
-  localparam [11:0] API_DISPATCHER_ADDR_COUNTER_DISPATCHED = 'h016;
-  localparam [11:0] API_DISPATCHER_ADDR_COUNTER_ERROR      = 'h018;
+  localparam [11:0] API_DISPATCHER_ADDR_COUNTER_FRAMES     = 'h020;
+  localparam [11:0] API_DISPATCHER_ADDR_COUNTER_GOOD       = 'h022;
+  localparam [11:0] API_DISPATCHER_ADDR_COUNTER_BAD        = 'h024;
+  localparam [11:0] API_DISPATCHER_ADDR_COUNTER_DISPATCHED = 'h026;
+  localparam [11:0] API_DISPATCHER_ADDR_COUNTER_ERROR      = 'h028;
 
 
   localparam   [31:0] NTS_TEST_REQUEST_MASTER_KEY_ID_1=32'h30a8dce1;

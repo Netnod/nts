@@ -134,6 +134,9 @@ module nts_dispatcher #(
 
   wire      error_state;
 
+  reg [63:0] mac_rx_corrected;
+
+
   //----------------------------------------------------------------
   // API Debug, counter etc registers
   //----------------------------------------------------------------
@@ -399,6 +402,29 @@ module nts_dispatcher #(
   end
 
   //----------------------------------------------------------------
+  // Fix byte order of last word to fit rest of message.
+  // (reduces complexity in rest of design)
+  // TODO: Move this to dispatcher when its working well.
+  //----------------------------------------------------------------
+
+  always @*
+    case (i_rx_data_valid)
+      8'b1111_1111: mac_rx_corrected = { i_rx_data };
+      8'b0111_1111: mac_rx_corrected = { i_rx_data[55:0],  8'h00 };
+      8'b0011_1111: mac_rx_corrected = { i_rx_data[47:0], 16'h0000 };
+      8'b0001_1111: mac_rx_corrected = { i_rx_data[39:0], 24'h000000 };
+      8'b0000_1111: mac_rx_corrected = { i_rx_data[31:0], 32'h00000000 };
+      8'b0000_0111: mac_rx_corrected = { i_rx_data[23:0], 40'h0000000000 };
+      8'b0000_0011: mac_rx_corrected = { i_rx_data[15:0], 48'h000000000000 };
+      8'b0000_0001: mac_rx_corrected = { i_rx_data[7:0],  56'h00000000000000 };
+      8'b0000_0000: mac_rx_corrected = 64'h0;
+      default:
+        if (DEBUG) begin
+          $display("%s:%0d Unexpected i_rx_data_valid: %b",  `__FILE__, `__LINE__, i_rx_data_valid );
+        end
+    endcase
+
+  //----------------------------------------------------------------
   // Start of Frame Detector (previous MAC RX DV sampler)
   //----------------------------------------------------------------
 
@@ -543,14 +569,14 @@ module nts_dispatcher #(
                 begin
                   write[current_mem]   <= 1'b1;
                   w_addr[current_mem]  <= 'b0;
-                  w_data[current_mem]  <= i_rx_data;
+                  w_data[current_mem]  <= mac_rx_corrected; // i_rx_data but last word shifted logically correct
                   counter[current_mem] <= 'b0;
                 end
               STATE_HAS_DATA:
                 if (counter[current_mem] != ~ 'b0) begin
                   write[current_mem]   <= 1'b1;
                   w_addr[current_mem]  <= counter[current_mem] + 1;
-                  w_data[current_mem]  <= i_rx_data;
+                  w_data[current_mem]  <= mac_rx_corrected; // i_rx_data but last word shifted logically correct
                   counter[current_mem] <= counter[current_mem] + 1;
                 end // not buffer overrun
               default: ;

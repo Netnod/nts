@@ -65,37 +65,12 @@ module nts_top #(
   reg                           noncegen_engine_ready_DUMMY;
   reg                    [63:0] noncegen_engine_data_DUMMY;
 
-  reg                    [63:0] mac_rx_corrected;
-
   assign api_cs = i_api_cs;
   assign api_we = i_api_we;
   assign api_address = i_api_address;
   assign api_write_data = i_api_write_data;
 
   assign o_api_read_data = api_read_data;
-
-  //----------------------------------------------------------------
-  // Fix byte order of last word to fit rest of message.
-  // (reduces complexity in rest of design)
-  // TODO: Move this to dispatcher when its working well.
-  //----------------------------------------------------------------
-
-  always @*
-    case (i_mac_rx_data_valid)
-      8'b1111_1111: mac_rx_corrected = { i_mac_rx_data };
-      8'b0111_1111: mac_rx_corrected = { i_mac_rx_data[55:0],  8'h00 };
-      8'b0011_1111: mac_rx_corrected = { i_mac_rx_data[47:0], 16'h0000 };
-      8'b0001_1111: mac_rx_corrected = { i_mac_rx_data[39:0], 24'h000000 };
-      8'b0000_1111: mac_rx_corrected = { i_mac_rx_data[31:0], 32'h00000000 };
-      8'b0000_0111: mac_rx_corrected = { i_mac_rx_data[23:0], 40'h0000000000 };
-      8'b0000_0011: mac_rx_corrected = { i_mac_rx_data[15:0], 48'h000000000000 };
-      8'b0000_0001: mac_rx_corrected = { i_mac_rx_data[7:0],  56'h00000000000000 };
-      8'b0000_0000: mac_rx_corrected = 64'h0;
-      default:
-        if (DEBUG) begin
-          $display("%s:%0d Unexpected i_mac_rx_data_valid: %b",  `__FILE__, `__LINE__, i_mac_rx_data_valid );
-        end
-    endcase
 
   //----------------------------------------------------------------
   // Dispatcher
@@ -106,7 +81,7 @@ module nts_top #(
     .i_clk(i_clk),
 
     .i_rx_data_valid(i_mac_rx_data_valid),
-    .i_rx_data(mac_rx_corrected /*i_mac_rx_data*/ ),
+    .i_rx_data(i_mac_rx_data),
     .i_rx_bad_frame(i_mac_rx_bad_frame),
     .i_rx_good_frame(i_mac_rx_good_frame),
 

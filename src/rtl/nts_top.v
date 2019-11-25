@@ -14,13 +14,6 @@ module nts_top #(
   input  wire                      i_mac_rx_bad_frame,
   input  wire                      i_mac_rx_good_frame,
 
-  //Engine API interface. TODO: replace with SPI interface to reduce width when many concurrent lines
-  input  wire                  [ENGINES - 1:0] i_api_cs,
-  input  wire                  [ENGINES - 1:0] i_api_we,
-  input  wire [API_ADDR_WIDTH * ENGINES - 1:0] i_api_address,
-  input  wire [API_RW_WIDTH   * ENGINES - 1:0] i_api_write_data,
-  output wire [API_RW_WIDTH   * ENGINES - 1:0] o_api_read_data,
-
   //Dispatcher API interface. TODO: replace with SPI interface.
   input  wire                        i_api_dispatcher_cs,
   input  wire                        i_api_dispatcher_we,
@@ -33,9 +26,9 @@ module nts_top #(
   reg [63:0] ntp_time_DUMMY;
 
   wire                  [ENGINES - 1:0] api_cs;
-  wire                  [ENGINES - 1:0] api_we;
-  wire [API_ADDR_WIDTH * ENGINES - 1:0] api_address;
-  wire   [API_RW_WIDTH * ENGINES - 1:0] api_write_data;
+  wire                                  api_we;
+  wire           [API_ADDR_WIDTH - 1:0] api_address;
+  wire             [API_RW_WIDTH - 1:0] api_write_data;
   wire   [API_RW_WIDTH * ENGINES - 1:0] api_read_data;
 
   wire [ENGINES-1:0] engine_busy;
@@ -65,13 +58,6 @@ module nts_top #(
   reg                           noncegen_engine_ready_DUMMY;
   reg                    [63:0] noncegen_engine_data_DUMMY;
 
-  assign api_cs = i_api_cs;
-  assign api_we = i_api_we;
-  assign api_address = i_api_address;
-  assign api_write_data = i_api_write_data;
-
-  assign o_api_read_data = api_read_data;
-
   //----------------------------------------------------------------
   // Dispatcher
   //----------------------------------------------------------------
@@ -98,7 +84,13 @@ module nts_top #(
     .i_api_we(i_api_dispatcher_we),
     .i_api_address(i_api_dispatcher_address),
     .i_api_write_data(i_api_dispatcher_write_data),
-    .o_api_read_data(o_api_dispatcher_read_data)
+    .o_api_read_data(o_api_dispatcher_read_data),
+
+    .o_engine_cs(api_cs),
+    .o_engine_we(api_we),
+    .o_engine_address(api_address),
+    .o_engine_write_data(api_write_data),
+    .i_engine_read_data(api_read_data)
   );
 
   if (DEBUG) begin
@@ -141,9 +133,9 @@ module nts_top #(
         .o_dispatch_tx_bytes_last_word(o_dispatch_tx_bytes_last_word_DUMMY),
 
         .i_api_cs(api_cs[engine_index]),
-        .i_api_we(api_we[engine_index]),
-        .i_api_address(api_address[API_ADDR_WIDTH*engine_index+:API_ADDR_WIDTH]),
-        .i_api_write_data(api_write_data[API_RW_WIDTH*engine_index+:API_RW_WIDTH]),
+        .i_api_we(api_we),
+        .i_api_address(api_address),
+        .i_api_write_data(api_write_data),
         .o_api_read_data(api_read_data[API_RW_WIDTH*engine_index+:API_RW_WIDTH]),
 
         .o_noncegen_get(engine_noncegen_get_DUMMY),

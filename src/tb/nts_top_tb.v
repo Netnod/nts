@@ -42,7 +42,12 @@ module nts_top_tb;
   localparam [11:0] API_DISPATCHER_ADDR_COUNTER_BAD        = 'h024;
   localparam [11:0] API_DISPATCHER_ADDR_COUNTER_DISPATCHED = 'h026;
   localparam [11:0] API_DISPATCHER_ADDR_COUNTER_ERROR      = 'h028;
+  localparam [11:0] API_DISPATCHER_ADDR_BUS_ID_CMD_ADDR    = 80;
+  localparam [11:0] API_DISPATCHER_ADDR_BUS_STATUS         = 81;
+  localparam [11:0] API_DISPATCHER_ADDR_BUS_DATA           = 82;
 
+  localparam [7:0] BUS_READ  = 8'h55;
+  localparam [7:0] BUS_WRITE = 8'hAA;
 
   localparam   [31:0] NTS_TEST_REQUEST_MASTER_KEY_ID_1=32'h30a8dce1;
   localparam  [255:0] NTS_TEST_REQUEST_MASTER_KEY_1=256'h6d1e7f51_f64876ba_68d4669e_649ad613_402bf7bb_5cf275a9_83a28dab_5e416314;
@@ -76,23 +81,10 @@ module nts_top_tb;
   reg                      i_mac_rx_bad_frame;
   reg                      i_mac_rx_good_frame;
 
-  reg                   [ENGINES - 1:0] i_api_cs;
-  reg                   [ENGINES - 1:0] i_api_we;
-  reg  [API_ADDR_WIDTH * ENGINES - 1:0] i_api_address;
-  reg  [API_RW_WIDTH   * ENGINES - 1:0] i_api_write_data;
-  wire [API_RW_WIDTH   * ENGINES - 1:0] o_api_read_data;
-/*
-  reg                       i_api_dispatcher_cs;
-  reg                       i_api_dispatcher_we;
-  reg  [API_ADDR_WIDTH-1:0] i_api_dispatcher_address;
-  reg  [API_RW_WIDTH-1:0] i_api_dispatcher_write_data;
-  wire [API_RW_WIDTH-1:0] o_api_dispatcher_read_data;
-*/
-
-  reg i_api_dispatcher_cs;
-  reg i_api_dispatcher_we;
-  reg [11:0] i_api_dispatcher_address;
-  reg [31:0] i_api_dispatcher_write_data;
+  reg         i_api_dispatcher_cs;
+  reg         i_api_dispatcher_we;
+  reg  [11:0] i_api_dispatcher_address;
+  reg  [31:0] i_api_dispatcher_write_data;
   wire [31:0] o_api_dispatcher_read_data;
 
   //----------------------------------------------------------------
@@ -130,30 +122,6 @@ module nts_top_tb;
   end
   endtask
 
-  //TODO make this support > 1 engine in the future
-  task api_read32( output [31:0] out, input [11:0] addr );
-  begin : api_read32_
-    reg [31:0] result;
-    result = 0;
-    api_set(1, 0, addr, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
-    #10;
-    result = o_api_read_data;
-    api_set(0, 0, 0, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
-    out = result;
-  end
-  endtask
-
-  //TODO make this support > 1 engine in the future
-  task api_read64( output [63:0] out, input [11:0] addr );
-  begin : api_read64_
-    reg [63:0] result;
-    result = 0;
-    api_read32( result[63:32], addr );
-    api_read32( result[31:0], addr+1 );
-    out = result;
-  end
-  endtask
-
   task dispatcher_read32( output [31:0] out, input [11:0] addr );
   begin : dispatcher_read32_
     reg [31:0] result;
@@ -172,6 +140,65 @@ module nts_top_tb;
     result = 0;
     dispatcher_read32( result[63:32], addr );
     dispatcher_read32( result[31:0], addr+1 );
+    out = result;
+  end
+  endtask
+
+  task dispatcher_write32( input [31:0] data, input [11:0] addr);
+  begin
+    api_set(1, 1, addr, data, i_api_dispatcher_cs, i_api_dispatcher_we, i_api_dispatcher_address, i_api_dispatcher_write_data);
+    #10;
+    api_set(0, 0, 0, 0, i_api_dispatcher_cs, i_api_dispatcher_we, i_api_dispatcher_address, i_api_dispatcher_write_data);
+  end
+  endtask
+
+  //TODO make this support > 1 engine in the future
+  task api_read32( output [31:0] out, input [11:0] addr );
+  begin : api_read32_
+    reg [31:0] id_cmd_addr;
+    reg [31:0] result;
+    reg [31:0] status;
+    result = 0;
+
+    id_cmd_addr = { 12'h0, BUS_READ, addr };
+    dispatcher_write32( id_cmd_addr, API_DISPATCHER_ADDR_BUS_ID_CMD_ADDR );
+    dispatcher_write32( 32'h0000_0001, API_DISPATCHER_ADDR_BUS_STATUS );
+
+    dispatcher_read32( status, API_DISPATCHER_ADDR_BUS_STATUS );
+    while (status != 0)
+      dispatcher_read32( status, API_DISPATCHER_ADDR_BUS_STATUS );
+
+    dispatcher_read32( result, API_DISPATCHER_ADDR_BUS_DATA );
+
+    out = result;
+  end
+  endtask
+
+  //TODO make this support > 1 engine in the future
+  task api_write32( input [31:0] data, input [11:0] addr );
+  begin : api_write_32_
+    reg [31:0] id_cmd_addr;
+    reg [31:0] status;
+
+    id_cmd_addr = { 12'h0, BUS_WRITE, addr };
+    dispatcher_write32( id_cmd_addr, API_DISPATCHER_ADDR_BUS_ID_CMD_ADDR );
+    dispatcher_write32( data, API_DISPATCHER_ADDR_BUS_DATA );
+    dispatcher_write32( 32'h0000_0001, API_DISPATCHER_ADDR_BUS_STATUS );
+
+    dispatcher_read32( status, API_DISPATCHER_ADDR_BUS_STATUS );
+    while (status != 0)
+      dispatcher_read32( status, API_DISPATCHER_ADDR_BUS_STATUS );
+
+  end
+  endtask
+
+  //TODO make this support > 1 engine in the future
+  task api_read64( output [63:0] out, input [11:0] addr );
+  begin : api_read64_
+    reg [63:0] result;
+    result = 0;
+    api_read32( result[63:32], addr );
+    api_read32( result[31:0], addr+1 );
     out = result;
   end
   endtask
@@ -218,28 +245,26 @@ module nts_top_tb;
         end
       default: ;
     endcase
+
     api_read32(tmp, API_ADDR_KEYMEM_ADDR_CTRL);
+
     tmp = tmp & ~ (1<<key_index);
-    api_set(1, 1, API_ADDR_KEYMEM_ADDR_CTRL, tmp, i_api_cs, i_api_we, i_api_address, i_api_write_data);
-    #10;
-    api_set(1, 1, addr_keyid, keyid, i_api_cs, i_api_we, i_api_address, i_api_write_data);
-    #10;
-    api_set(1, 1, addr_length, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
-    #10;
+
+    api_write32( tmp,   API_ADDR_KEYMEM_ADDR_CTRL );
+    api_write32( keyid, addr_keyid );
+    api_write32( 0,     addr_length );
+
     for (i = 0; i < 8; i = i + 1) begin
       index = i[2:0];
-      api_set(1, 1, addr_key + {8'b00, index}, key[32*index+:32], i_api_cs, i_api_we, i_api_address, i_api_write_data);
-      #10;
+      api_write32( key[32*index+:32], addr_key + {8'b00, index} ); //256bit LSB
     end
     for (i = 0; i < 8; i = i + 1) begin
       index = i[2:0];
-      api_set(1, 1, addr_key + {8'b01, index}, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
-      #10;
+      api_write32( 0, addr_key + {8'b01, index} ); //256bit MSB, all zeros
     end
+
     tmp = tmp | (1<<key_index);
-    api_set(1, 1, API_ADDR_KEYMEM_ADDR_CTRL, tmp, i_api_cs, i_api_we, i_api_address, i_api_write_data);
-    #10;
-    api_set(0, 0, 0, tmp, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+    api_write32( tmp, API_ADDR_KEYMEM_ADDR_CTRL );
   end
   endtask
 
@@ -316,12 +341,6 @@ module nts_top_tb;
     .i_mac_rx_bad_frame(i_mac_rx_bad_frame),
     .i_mac_rx_good_frame(i_mac_rx_good_frame),
 
-    .i_api_cs(i_api_cs),
-    .i_api_we(i_api_we),
-    .i_api_address(i_api_address),
-    .i_api_write_data(i_api_write_data),
-    .o_api_read_data(o_api_read_data),
-
     .i_api_dispatcher_cs(i_api_dispatcher_cs),
     .i_api_dispatcher_we(i_api_dispatcher_we),
     .i_api_dispatcher_address(i_api_dispatcher_address),
@@ -337,10 +356,6 @@ module nts_top_tb;
     $display("Test start: %s:%0d", `__FILE__, `__LINE__);
     i_clk    = 0;
     i_areset = 1;
-    i_api_cs = 0;
-    i_api_we = 0;
-    i_api_address = 0;
-    i_api_write_data = 0;
     i_api_dispatcher_cs = 0;
     i_api_dispatcher_we = 0;
     i_api_dispatcher_address = 0;

@@ -30,6 +30,7 @@
 
 module nts_dispatcher #(
   parameter ADDR_WIDTH = 8,
+  parameter ENGINES = 1,
   parameter DEBUG = 1
 ) (
   input  wire        i_areset, // async reset
@@ -54,7 +55,13 @@ module nts_dispatcher #(
   input  wire                  i_api_we,
   input  wire [11:0]           i_api_address,
   input  wire [31:0]           i_api_write_data,
-  output wire [31:0]           o_api_read_data
+  output wire [31:0]           o_api_read_data,
+
+  output wire [ENGINES-1:0]    o_engine_cs,
+  output wire                  o_engine_we,
+  output wire [11:0]           o_engine_address,
+  output wire [31:0]           o_engine_write_data,
+  input  wire [ENGINES*32-1:0] i_engine_read_data
 );
 
   //----------------------------------------------------------------
@@ -86,9 +93,12 @@ module nts_dispatcher #(
   localparam ADDR_COUNTER_ERROR_MSB      = 'h28;
   localparam ADDR_COUNTER_ERROR_LSB      = 'h29;
 
-  localparam ADDR_BUS_ID_CMD_ADDR = 80; //TODO implement
-  localparam ADDR_BUS_STATUS      = 81; //TODO implement
-  localparam ADDR_BUS_DATA        = 82; //TODO implement
+  localparam ADDR_BUS_ID_CMD_ADDR = 80;
+  localparam ADDR_BUS_STATUS      = 81;
+  localparam ADDR_BUS_DATA        = 82;
+
+  localparam BUS_READ  = 8'h55;
+  localparam BUS_WRITE = 8'hAA;
 
   localparam CORE_NAME    = 64'h4e_54_53_2d_44_49_53_50; //NTS-DISP
   localparam CORE_VERSION = 32'h30_2e_30_31; //0.01
@@ -181,6 +191,22 @@ module nts_dispatcher #(
   reg        counter_good_lsb_we;
   reg [31:0] counter_good_lsb_reg;
 
+  reg        engine_ctrl_we;
+  reg [31:0] engine_ctrl_new;
+  reg [31:0] engine_ctrl_reg;
+  reg        engine_status_we;
+  reg [31:0] engine_status_new;
+  reg [31:0] engine_status_reg;
+  reg        engine_data_we;
+  reg [31:0] engine_data_new;
+  reg [31:0] engine_data_reg;
+
+  reg [ENGINES-1:0] bus_cs;
+  reg               bus_we;
+  reg [11:0]        bus_addr;
+  reg [31:0]        bus_write_data;
+  reg [31:0]        bus_read_data_mux;
+
   //----------------------------------------------------------------
   // Output wiring
   //----------------------------------------------------------------
@@ -195,6 +221,11 @@ module nts_dispatcher #(
   assign o_dispatch_fifo_empty        = fifo_empty;
   assign o_dispatch_fifo_rd_valid     = fifo_rd_valid;
   assign o_dispatch_fifo_rd_data      = fifo_rd_data;
+
+  assign o_engine_cs         = bus_cs;
+  assign o_engine_we         = bus_we;
+  assign o_engine_address    = bus_addr;
+  assign o_engine_write_data = bus_write_data;
 
   //----------------------------------------------------------------
   // RAM cores
@@ -234,6 +265,21 @@ module nts_dispatcher #(
     counter_good_lsb_we = 0;
     counter_sof_detect_lsb_we = 0;
 
+    engine_ctrl_we = 0;
+    engine_ctrl_new = 0;
+    engine_status_we = 0;
+    engine_status_new = 0;
+    engine_data_we = 0;
+    engine_data_new = 0;
+
+    if (engine_status_reg[0]) begin
+      //Reset status after 1 cycle.
+      engine_status_we = 1;
+      engine_status_new = { engine_status_reg[31:1], 1'b0 };
+      engine_data_we = 1;
+      engine_data_new = bus_read_data_mux;
+    end
+
     if (i_api_cs) begin
       if (i_api_we) begin
         case (i_api_address)
@@ -241,6 +287,21 @@ module nts_dispatcher #(
             begin
               api_dummy_we = 1;
               api_dummy_new = i_api_write_data;
+            end
+          ADDR_BUS_ID_CMD_ADDR:
+            begin
+              engine_ctrl_we = 1;
+              engine_ctrl_new = i_api_write_data;
+            end
+          ADDR_BUS_STATUS:
+            begin
+              engine_status_we = 1;
+              engine_status_new = i_api_write_data;
+            end
+          ADDR_BUS_DATA:
+            begin
+              engine_data_we = 1;
+              engine_data_new = i_api_write_data;
             end
           default: ;
         endcase
@@ -304,6 +365,18 @@ module nts_dispatcher #(
             begin
               api_read_data = counter_error_lsb_reg;
             end
+          ADDR_BUS_ID_CMD_ADDR:
+            begin
+              api_read_data = engine_ctrl_reg;
+            end
+          ADDR_BUS_STATUS:
+            begin
+              api_read_data = engine_status_reg;
+            end
+          ADDR_BUS_DATA:
+            begin
+              api_read_data = engine_data_reg;
+            end
           default: ;
         endcase
       end
@@ -332,6 +405,9 @@ module nts_dispatcher #(
       counter_good_lsb_reg <= 0;
       counter_sof_detect_reg <= 0;
       counter_sof_detect_lsb_reg <= 0;
+      engine_ctrl_reg <= 0;
+      engine_status_reg <= 0;
+      engine_data_reg <= 0;
 
     end else begin
 
@@ -373,6 +449,15 @@ module nts_dispatcher #(
 
       if (counter_sof_detect_lsb_we)
         counter_sof_detect_lsb_reg <= counter_sof_detect_reg[31:0];
+
+      if (engine_ctrl_we)
+        engine_ctrl_reg <= engine_ctrl_new;
+
+      if (engine_data_we)
+        engine_data_reg <= engine_data_new;
+
+      if (engine_status_we)
+        engine_status_reg <= engine_status_new;
 
     end
   end
@@ -525,6 +610,65 @@ module nts_dispatcher #(
     if ( 16'h00FF == rx_valid) begin
       detect_start_of_frame = 1;
     end
+  end
+
+  //----------------------------------------------------------------
+  // Enigne MUX handling
+  //----------------------------------------------------------------
+
+  always @*
+  begin: engine_mux
+    reg         enable_by_ctrl;
+    reg         enable_by_cmd;
+    reg  [11:0] id;
+    reg  [ 7:0] cmd;
+    reg  [11:0] addr;
+    integer  i;
+
+    bus_read_data_mux = 0;
+    bus_cs = 0;
+    bus_we = 0;
+    bus_addr = 0;
+    bus_write_data = 0;
+
+    { id, cmd, addr } = engine_ctrl_reg;
+
+    enable_by_cmd = 0;
+
+    enable_by_ctrl = engine_status_reg[0];
+
+    if (enable_by_ctrl) begin
+
+      bus_addr = addr;
+
+      case (cmd)
+        BUS_READ:
+          begin
+            enable_by_cmd = 1;
+          end
+        BUS_WRITE:
+          begin
+            bus_we = 1;
+            bus_write_data = engine_data_reg;
+            enable_by_cmd = 1;
+          end
+        default:
+          begin
+            if (DEBUG)
+              $display("%s:%0d Unexpected cmd: %h (engine_ctrl_reg: %h)",  `__FILE__, `__LINE__, cmd, engine_ctrl_reg );
+          end
+      endcase
+
+      if (enable_by_cmd) begin
+        for (i = 0; i < ENGINES; i = i + 1) begin
+          if (id == i[11:0]) begin
+            bus_cs[i] = 1;
+            bus_read_data_mux = i_engine_read_data[i*32+:32];
+          end
+        end
+      end
+
+    end //enable_by_ctrl
   end
 
   //----------------------------------------------------------------

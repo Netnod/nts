@@ -711,8 +711,8 @@ module nts_dispatcher #(
       r_addr        <= 'b0;
       mem_state[0]  <= STATE_EMPTY;
       mem_state[1]  <= STATE_EMPTY;
-      write[0]      <= 1'b0;
-      write[1]      <= 1'b0;
+    //write[0]      <= 1'b0; //[DRC 23-20] REQP-1840: RAMB18 async control check: async reset not allowed.
+    //write[1]      <= 1'b0; //[DRC 23-20] REQP-1840: RAMB18 async control check: async reset not allowed.
       w_data[0]     <= 64'b0;
       w_data[1]     <= 64'b0;
       w_addr[0]     <= 'b0;

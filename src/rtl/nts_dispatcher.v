@@ -67,8 +67,8 @@ module nts_dispatcher #(
   localparam ADDR_DUMMY             = 3;
   localparam ADDR_CTRL              = 8;  //TODO implement
   localparam ADDR_STATUS            = 9;  //TODO implement
-  localparam ADDR_BYTES_RX_MSB      = 10; //TODO implement
-  localparam ADDR_BYTES_RX_LSB      = 11; //TODO implement
+  localparam ADDR_BYTES_RX_MSB      = 10;
+  localparam ADDR_BYTES_RX_LSB      = 11;
   localparam ADDR_NTS_REC_MSB       = 12; //TODO implement
   localparam ADDR_NTS_REC_LSB       = 13; //TODO implement
   localparam ADDR_NTS_DISCARDED_MSB = 14; //TODO implement
@@ -157,6 +157,12 @@ module nts_dispatcher #(
   reg        counter_bad_lsb_we;
   reg [31:0] counter_bad_lsb_reg;
 
+  reg        counter_bytes_rx_we;
+  reg [63:0] counter_bytes_rx_new;
+  reg [63:0] counter_bytes_rx_reg;
+  reg        counter_bytes_rx_lsb_we;
+  reg [31:0] counter_bytes_rx_lsb_reg;
+
   reg        counter_dispatched_we;
   reg [63:0] counter_dispatched_new;
   reg [63:0] counter_dispatched_reg;
@@ -222,6 +228,7 @@ module nts_dispatcher #(
     api_dummy_new = 0;
 
     counter_bad_lsb_we = 0;
+    counter_bytes_rx_lsb_we = 0;
     counter_dispatched_lsb_we = 0;
     counter_error_lsb_we = 0;
     counter_good_lsb_we = 0;
@@ -243,6 +250,15 @@ module nts_dispatcher #(
           ADDR_NAME1: api_read_data = CORE_NAME[31:0];
           ADDR_VERSION: api_read_data = CORE_VERSION;
           ADDR_DUMMY: api_read_data = api_dummy_reg;
+          ADDR_BYTES_RX_MSB:
+            begin
+              api_read_data = counter_bytes_rx_reg[63:32];
+              counter_bytes_rx_lsb_we = 1;
+            end
+          ADDR_BYTES_RX_LSB:
+            begin
+              api_read_data = counter_bytes_rx_lsb_reg;
+            end
           ADDR_COUNTER_FRAMES_MSB:
             begin
               api_read_data = counter_sof_detect_reg[63:32];
@@ -306,6 +322,8 @@ module nts_dispatcher #(
 
       counter_bad_reg <= 0;
       counter_bad_lsb_reg <= 0;
+      counter_bytes_rx_reg <= 0;
+      counter_bytes_rx_lsb_reg <= 0;
       counter_dispatched_reg <= 0;
       counter_dispatched_lsb_reg <= 0;
       counter_error_reg <= 0;
@@ -325,6 +343,12 @@ module nts_dispatcher #(
 
       if (counter_bad_lsb_we)
         counter_bad_lsb_reg <= counter_bad_reg[31:0];
+
+      if (counter_bytes_rx_we)
+       counter_bytes_rx_reg <= counter_bytes_rx_new;
+
+      if (counter_bytes_rx_lsb_we)
+        counter_bytes_rx_lsb_reg <= counter_bytes_rx_reg[31:0];
 
       if (counter_dispatched_we)
        counter_dispatched_reg <= counter_dispatched_new;
@@ -402,27 +426,81 @@ module nts_dispatcher #(
   end
 
   //----------------------------------------------------------------
-  // Fix byte order of last word to fit rest of message.
-  // (reduces complexity in rest of design)
-  // TODO: Move this to dispatcher when its working well.
+  // MAC RX Data/DataValid pre-processor
+  //
+  //  - Fix byte order of last word to fit rest of message.
+  //    (reduces complexity in rest of design)
+  //
+  //  - Increments byte counters
+  //
   //----------------------------------------------------------------
 
   always @*
+  begin : mac_rx_data_processor
+    reg [3:0] bytes;
+    bytes = 0;
+    counter_bytes_rx_we = 0;
+    counter_bytes_rx_new = 0;
+    mac_rx_corrected = 0;
+
     case (i_rx_data_valid)
-      8'b1111_1111: mac_rx_corrected = { i_rx_data };
-      8'b0111_1111: mac_rx_corrected = { i_rx_data[55:0],  8'h00 };
-      8'b0011_1111: mac_rx_corrected = { i_rx_data[47:0], 16'h0000 };
-      8'b0001_1111: mac_rx_corrected = { i_rx_data[39:0], 24'h000000 };
-      8'b0000_1111: mac_rx_corrected = { i_rx_data[31:0], 32'h00000000 };
-      8'b0000_0111: mac_rx_corrected = { i_rx_data[23:0], 40'h0000000000 };
-      8'b0000_0011: mac_rx_corrected = { i_rx_data[15:0], 48'h000000000000 };
-      8'b0000_0001: mac_rx_corrected = { i_rx_data[7:0],  56'h00000000000000 };
-      8'b0000_0000: mac_rx_corrected = 64'h0;
+      8'b1111_1111:
+        begin
+          bytes = 8;
+          mac_rx_corrected = { i_rx_data };
+        end
+      8'b0111_1111:
+        begin
+          bytes = 7;
+          mac_rx_corrected = { i_rx_data[55:0],  8'h00 };
+        end
+      8'b0011_1111:
+        begin
+          bytes = 6;
+          mac_rx_corrected = { i_rx_data[47:0], 16'h0000 };
+        end
+      8'b0001_1111:
+         begin
+           bytes = 5;
+           mac_rx_corrected = { i_rx_data[39:0], 24'h000000 };
+         end
+      8'b0000_1111:
+         begin
+           bytes = 4;
+           mac_rx_corrected = { i_rx_data[31:0], 32'h00000000 };
+         end
+      8'b0000_0111:
+         begin
+           bytes = 3;
+            mac_rx_corrected = { i_rx_data[23:0], 40'h0000000000 };
+          end
+      8'b0000_0011:
+         begin
+           bytes = 2;
+           mac_rx_corrected = { i_rx_data[15:0], 48'h000000000000 };
+         end
+      8'b0000_0001:
+        begin
+          bytes = 1;
+          mac_rx_corrected = { i_rx_data[7:0],  56'h00000000000000 };
+        end
+      8'b0000_0000:
+        begin
+          bytes = 0;
+          mac_rx_corrected = 64'h0;
+        end
       default:
-        if (DEBUG) begin
-          $display("%s:%0d Unexpected i_rx_data_valid: %b",  `__FILE__, `__LINE__, i_rx_data_valid );
+        begin
+          mac_rx_corrected = i_rx_data;
+          if (DEBUG)
+            $display("%s:%0d Unexpected i_rx_data_valid: %b",  `__FILE__, `__LINE__, i_rx_data_valid );
         end
     endcase
+    if (bytes != 0) begin
+      counter_bytes_rx_we = 1;
+      counter_bytes_rx_new = counter_bytes_rx_reg + { 60'h0, bytes };
+    end
+  end
 
   //----------------------------------------------------------------
   // Start of Frame Detector (previous MAC RX DV sampler)

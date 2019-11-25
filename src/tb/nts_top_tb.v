@@ -4,9 +4,13 @@ module nts_top_tb;
   localparam [11:0] API_ADDR_ENGINE_NAME1       = API_ADDR_ENGINE_BASE + 1;
   localparam [11:0] API_ADDR_ENGINE_VERSION     = API_ADDR_ENGINE_BASE + 2;
 
-  localparam [11:0] API_ADDR_DEBUG_BASE         = 12'h180;
-  localparam [11:0] API_ADDR_DEBUG_ERR_CRYPTO   = API_ADDR_DEBUG_BASE + 'h20;
-  localparam [11:0] API_ADDR_DEBUG_ERR_TXBUF    = API_ADDR_DEBUG_BASE + 'h22;
+  localparam [11:0] API_ADDR_DEBUG_BASE           = 12'h180;
+  localparam [11:0] API_ADDR_DEBUG_NTS_PROCESSED  = API_ADDR_DEBUG_BASE + 0;
+  localparam [11:0] API_ADDR_DEBUG_NTS_BAD_COOKIE = API_ADDR_DEBUG_BASE + 2;
+  localparam [11:0] API_ADDR_DEBUG_NTS_BAD_AUTH   = API_ADDR_DEBUG_BASE + 4;
+  localparam [11:0] API_ADDR_DEBUG_NTS_BAD_KEYID  = API_ADDR_DEBUG_BASE + 6;
+  localparam [11:0] API_ADDR_DEBUG_ERR_CRYPTO     = API_ADDR_DEBUG_BASE + 'h20;
+  localparam [11:0] API_ADDR_DEBUG_ERR_TXBUF      = API_ADDR_DEBUG_BASE + 'h22;
 
   localparam [11:0] API_ADDR_CLOCK_BASE         = 12'h010;
   localparam [11:0] API_ADDR_CLOCK_NAME0        = API_ADDR_CLOCK_BASE + 0;
@@ -62,6 +66,9 @@ module nts_top_tb;
   localparam  [255:0] NTS_TEST_REQUEST_S2C_KEY_2=256'h55b99245_5a4c8089_e6a1281a_f8a2842d_443ea9ac_34646e84_dca14456_6f7b908c;
   localparam [2159:0] NTS_TEST_REQUEST_WITH_KEY_IPV4_2=2160'h001c7300_00995254_00cdcd23_08004500_01000001_00004011_bc174d48_e37ec23a_cad31267_101b00ec_8c5b2300_00200000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_000071cc_4c8cdb00_980b0104_002492ae_9b06e29f_638497f0_18b58124_85cbef5f_811f516a_620ed802_4546bb3e_db590204_006813fe_78e93426_b1f08926_0a257d85_5c533225_c7540952_f35b63d9_f6f6fb4c_69dbc025_3c869740_6b59c01c_d297755c_960a2532_7d40ad6f_41a636d1_4f8a584e_6414f559_3a0912fd_8a7e4b69_88be44ea_97f6f60f_b3d799f9_293e5852_d40fa062_4038e0fc_a5d90404_00280010_00107812_c6677d04_a1c0ac02_0219687c_17d5ca94_9acd04b0_ac8d8d82_d6c71f3f_8518;
   localparam [2319:0] NTS_TEST_REQUEST_WITH_KEY_IPV6_2=2320'h001c7300_00995254_00cdcd23_86dd6000_000000ec_11402a01_03f00001_00085063_d01c72c6_ab922a01_03f70002_00520000_00000000_00111267_101b00ec_af002300_00200000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_000071cc_4c8cdb00_980b0104_002492ae_9b06e29f_638497f0_18b58124_85cbef5f_811f516a_620ed802_4546bb3e_db590204_006813fe_78e93426_b1f08926_0a257d85_5c533225_c7540952_f35b63d9_f6f6fb4c_69dbc025_3c869740_6b59c01c_d297755c_960a2532_7d40ad6f_41a636d1_4f8a584e_6414f559_3a0912fd_8a7e4b69_88be44ea_97f6f60f_b3d799f9_293e5852_d40fa062_4038e0fc_a5d90404_00280010_00107812_c6677d04_a1c0ac02_0219687c_17d5ca94_9acd04b0_ac8d8d82_d6c71f3f_8518;
+
+  localparam [2159:0] NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_COOKIE=2160'h001c7300_00995254_00cdcd23_08004500_01000001_00004011_bc174d48_e37ec23a_cad31267_101b00ec_8c5b2300_00200000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_000071cc_4c8cdb00_980b0104_002492ae_9b06e29f_638497f0_18b58124_85cbef5f_811f516a_620ed802_4546bb3e_db590204_006813fe_78e9dead_beefdead_beef7d85_5c533225_c7540952_f35b63d9_f6f6fb4c_69dbc025_3c869740_6b59c01c_d297755c_960a2532_7d40ad6f_41a636d1_4f8a584e_6414f559_3a0912fd_8a7e4b69_88be44ea_97f6f60f_b3d799f9_293e5852_d40fa062_4038e0fc_a5d90404_00280010_00107812_c6677d04_a1c0ac02_0219687c_17d5ca94_9acd04b0_ac8d8d82_d6c71f3f_8518;
+  localparam [2159:0] NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_AUTH=2160'h001c7300_00995254_00cdcd23_08004500_01000001_00004011_bc174d48_e37ec23a_cad31267_101b00ec_8c5b2300_00200000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_000071cc_4c8cdb00_980b0104_002492ae_9b06e29f_638497f0_18b58124_85cbef5f_811f516a_620ed802_4546bb3e_db590204_006813fe_78e93426_b1f08926_0a257d85_5c533225_c7540952_f35b63d9_f6f6fb4c_69dbc025_3c869740_6b59c01c_d297755c_960a2532_7d40ad6f_41a636d1_4f8a584e_6414f559_3a0912fd_8a7e4b69_88be44ea_97f6f60f_b3d799f9_293e5852_d40fa062_4038e0fc_a5d90404_00280010_00107812_c6677d04_a1c0ac02_0219687c_17d5ca94_9acd04b0_ac8d8d82_d6c7dead_beef;
 
   localparam DEBUG           = 1;
   localparam ENGINES         = 1; //Beware: only ENGINES=1 supported for now
@@ -371,11 +378,16 @@ module nts_top_tb;
     begin : loop
       integer i;
       for (i = 0; i < 15; i = i + 1) begin
+        while (dut.dispatcher.mem_state[dut.dispatcher.current_mem] != 0) #10;
+        send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_COOKIE}, 2160, 0);
+        while (dut.dispatcher.mem_state[dut.dispatcher.current_mem] != 0) #10;
+        send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_AUTH}, 2160, 0);
+        while (dut.dispatcher.mem_state[dut.dispatcher.current_mem] != 0) #10;
         send_packet({63696'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_1}, 1840, 1);
+        while (dut.dispatcher.mem_state[dut.dispatcher.current_mem] != 0) #10;
+        send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160, 0);
         send_packet({63696'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_1}, 1840, 0);
         send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160, 0);
-        send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160, 0);
-        while (dut.dispatcher.mem_state[dut.dispatcher.current_mem] != 0) #10;
         send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160, 0);
       end
     end
@@ -391,6 +403,10 @@ module nts_top_tb;
       reg [31:0] engine_version;
       reg [63:0] clock_name;
       reg [63:0] keymem_name;
+      reg [63:0] engine_stats_nts_bad_auth;
+      reg [63:0] engine_stats_nts_bad_cookie;
+      reg [63:0] engine_stats_nts_bad_keyid;
+      reg [63:0] engine_stats_nts_processed;
       reg [63:0] crypto_err;
       reg [63:0] txbuf_err;
       reg [63:0] dispatcher_name;
@@ -405,6 +421,10 @@ module nts_top_tb;
       api_read32(engine_version, API_ADDR_ENGINE_VERSION);
       api_read64(clock_name, API_ADDR_CLOCK_NAME0);
       api_read64(keymem_name, API_ADDR_KEYMEM_NAME0);
+      api_read64(engine_stats_nts_bad_auth, API_ADDR_DEBUG_NTS_BAD_AUTH);
+      api_read64(engine_stats_nts_bad_cookie, API_ADDR_DEBUG_NTS_BAD_COOKIE);
+      api_read64(engine_stats_nts_bad_keyid, API_ADDR_DEBUG_NTS_BAD_KEYID);
+      api_read64(engine_stats_nts_processed, API_ADDR_DEBUG_NTS_PROCESSED);
       api_read64(crypto_err, API_ADDR_DEBUG_ERR_CRYPTO);
       api_read64(txbuf_err, API_ADDR_DEBUG_ERR_TXBUF);
       dispatcher_read64(dispatcher_name, API_DISPATCHER_ADDR_NAME);
@@ -419,6 +439,10 @@ module nts_top_tb;
       $display("%s:%0d: *** CORE: %s %s", `__FILE__, `__LINE__, engine_name, engine_version);
       $display("%s:%0d: *** CORE: %s", `__FILE__, `__LINE__, clock_name);
       $display("%s:%0d: *** CORE: %s", `__FILE__, `__LINE__, keymem_name);
+      $display("%s:%0d: *** STATISTICS, NTS bad auth:   %0d", `__FILE__, `__LINE__, engine_stats_nts_bad_auth);
+      $display("%s:%0d: *** STATISTICS, NTS bad cookie: %0d", `__FILE__, `__LINE__, engine_stats_nts_bad_cookie);
+      $display("%s:%0d: *** STATISTICS, NTS bad key id: %0d", `__FILE__, `__LINE__, engine_stats_nts_bad_keyid);
+      $display("%s:%0d: *** STATISTICS, NTS processed:  %0d", `__FILE__, `__LINE__, engine_stats_nts_processed);
       $display("%s:%0d: *** DEBUG, Errors Crypto: %0d", `__FILE__, `__LINE__, crypto_err);
       $display("%s:%0d: *** DEBUG, Errors TxBuf: %0d", `__FILE__, `__LINE__, txbuf_err);
       $display("%s:%0d: *** Dispatcher, bytes received:      %0d", `__FILE__, `__LINE__, dispatcher_counter_bytes_rx);

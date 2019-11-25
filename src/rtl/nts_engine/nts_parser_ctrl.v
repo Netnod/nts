@@ -107,7 +107,12 @@ module nts_parser_ctrl #(
   output wire                         o_detect_unique_identifier,
   output wire                         o_detect_nts_cookie,
   output wire                         o_detect_nts_cookie_placeholder,
-  output wire                         o_detect_nts_authenticator
+  output wire                         o_detect_nts_authenticator,
+
+  output wire                         o_statistics_nts_processed,
+  output wire                         o_statistics_nts_bad_cookie,
+  output wire                         o_statistics_nts_bad_auth,
+  output wire                         o_statistics_nts_bad_keyid
 );
 
   //----------------------------------------------------------------
@@ -299,6 +304,15 @@ module nts_parser_ctrl #(
 
   reg [NTP_EXTENSION_BITS-1:0] detect_nts_cookie_index_reg;
 
+  reg statistics_nts_processed_new;
+  reg statistics_nts_processed_reg;
+  reg statistics_nts_bad_cookie_new;
+  reg statistics_nts_bad_cookie_reg;
+  reg statistics_nts_bad_auth_new;
+  reg statistics_nts_bad_auth_reg;
+  reg statistics_nts_bad_keyid_new;
+  reg statistics_nts_bad_keyid_reg;
+
   //----------------------------------------------------------------
   // Wires.
   //----------------------------------------------------------------
@@ -322,7 +336,6 @@ module nts_parser_ctrl #(
 
   reg  muxctrl_crypto;
 
-
   //----------------------------------------------------------------
   // Connectivity for ports etc.
   //----------------------------------------------------------------
@@ -336,7 +349,6 @@ module nts_parser_ctrl #(
   assign ipdecode_offset_ntp_ext[2:0]              = (detect_ipv4 && ipdecode_ip4_ihl_reg == 5) ? 2 : (detect_ipv6) ? 6 : 0;
 
   assign o_busy                 = (i_tx_empty == 'b0) || (state_reg != STATE_IDLE);
-  //assign o_busy                 = state_reg != STATE_IDLE;
 
   assign o_access_port_addr     = access_port_addr_reg;
   assign o_access_port_rd_en    = access_port_rd_en_reg;
@@ -390,6 +402,11 @@ module nts_parser_ctrl #(
   assign o_detect_nts_cookie             = detect_nts_cookie_reg;
   assign o_detect_nts_cookie_placeholder = detect_nts_cookie_placeholder_reg;
   assign o_detect_nts_authenticator      = detect_nts_authenticator_reg;
+
+  assign o_statistics_nts_processed  = statistics_nts_processed_reg;
+  assign o_statistics_nts_bad_cookie = statistics_nts_bad_cookie_reg;
+  assign o_statistics_nts_bad_auth   = statistics_nts_bad_auth_reg;
+  assign o_statistics_nts_bad_keyid  = statistics_nts_bad_keyid_reg;
 
   //----------------------------------------------------------------
   // Functions and Tasks
@@ -454,29 +471,45 @@ module nts_parser_ctrl #(
       access_port_addr_reg       <= 'b0;
       access_port_rd_en_reg      <= 'b0;
       access_port_wordsize_reg   <= 'b0;
+
       cookie_server_id_reg       <= 'b0;
+
       crypto_fsm_reg             <= CRYPTO_FSM_IDLE;
+
       ipdecode_ip_version_reg    <= 'b0;
       ipdecode_ip4_ihl_reg       <= 'b0;
       ipdecode_udp_length_reg    <= 'b0;
+
       keymem_key_word_reg        <= 'b0;
       keymem_get_key_with_id_reg <= 'b0;
       keymem_server_id_reg       <= 'b0;
+
       last_bytes_reg             <= 'b0;
+
       memory_address_reg         <= 'b0;
       memory_bound_reg           <= 'b0;
-      ntp_extension_counter_reg  <= 'b0;
-      nts_authenticator_start_addr_reg <= 'b0;
+
+      ntp_extension_counter_reg            <= 'b0;
+      nts_authenticator_start_addr_reg     <= 'b0;
       nts_basic_sanity_check_packet_ok_reg <= 'b0;
-      nts_cookie_start_addr_reg  <= 'b0;
-      nts_valid_placeholders_reg <= 'b0;
-      //previous_i_data_reg        <= 'b0;
+      nts_cookie_start_addr_reg            <= 'b0;
+      nts_valid_placeholders_reg           <= 'b0;
+
       state_reg                  <= 'b0;
+
+      statistics_nts_processed_reg  <= 0;
+      statistics_nts_bad_cookie_reg <= 0;
+      statistics_nts_bad_auth_reg   <= 0;
+      statistics_nts_bad_keyid_reg  <= 0;
+
       timestamp_record_receive_timestamp_reg <= 'b0;
       timestamp_origin_timestamp_reg         <= 'b0;
       timestamp_version_number_reg           <= 'b0;
+
     //timestamp_poll_reg                     <= 'b0;
+
       word_counter_reg           <= 'b0;
+
       begin : ntp_extension_reset_async
         integer i;
         for (i=0; i <= NTP_EXTENSION_FIELDS-1; i=i+1) begin
@@ -487,7 +520,6 @@ module nts_parser_ctrl #(
         end
       end
     end else begin
-      //previous_i_data_reg <= i_data;
 
       if (access_port_addr_we)
         access_port_addr_reg <= access_port_addr_new;
@@ -559,6 +591,11 @@ module nts_parser_ctrl #(
 
       if (state_we)
         state_reg <= state_new;
+
+      statistics_nts_processed_reg  <= statistics_nts_processed_new;
+      statistics_nts_bad_cookie_reg <= statistics_nts_bad_cookie_new;
+      statistics_nts_bad_auth_reg   <= statistics_nts_bad_auth_new;
+      statistics_nts_bad_keyid_reg  <= statistics_nts_bad_keyid_new;
 
       if (timestamp_record_receive_timestamp_we)
         timestamp_record_receive_timestamp_reg <= timestamp_record_receive_timestamp_new;
@@ -1483,6 +1520,24 @@ module nts_parser_ctrl #(
           detect_nts_authenticator_reg      = 'b1;
       end
     end
+  end
+
+  //----------------------------------------------------------------
+  // Statistics signals
+  //----------------------------------------------------------------
+
+  always @*
+  begin : statistics
+    statistics_nts_bad_auth_new   = 0;
+    statistics_nts_bad_cookie_new = 0;
+    statistics_nts_bad_keyid_new  = 0;  //TODO implement
+    statistics_nts_processed_new  = 0;  //TODO implement
+
+    if ((state_reg == STATE_RX_AUTH_PACKET) && (crypto_fsm_reg == CRYPTO_FSM_DONE_FAILURE))
+      statistics_nts_bad_auth_new = 1;
+
+    if ((state_reg == STATE_RX_AUTH_COOKIE) && (crypto_fsm_reg == CRYPTO_FSM_DONE_FAILURE))
+      statistics_nts_bad_cookie_new = 1;
   end
 
   //----------------------------------------------------------------

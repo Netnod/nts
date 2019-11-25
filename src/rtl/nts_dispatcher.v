@@ -201,15 +201,20 @@ module nts_dispatcher #(
   reg [31:0] engine_data_new;
   reg [31:0] engine_data_reg;
 
-  reg [ENGINES-1:0] bus_cs;
-  reg               bus_we;
-  reg [11:0]        bus_addr;
-  reg [31:0]        bus_write_data;
-  reg [31:0]        bus_read_data_mux;
+  reg  [ENGINES-1:0] bus_cs_new;
+  reg  [ENGINES-1:0] bus_cs_reg;
+  reg                bus_we_new;
+  reg                bus_we_reg;
+  reg  [11:0]        bus_addr_new;
+  reg  [11:0]        bus_addr_reg;
+  wire [31:0]        bus_write_data;
+  reg  [31:0]        bus_read_data_mux;
 
   //----------------------------------------------------------------
   // Output wiring
   //----------------------------------------------------------------
+
+  assign bus_write_data  = engine_data_reg;
 
   assign error_state     = (mem_state[0] == STATE_ERROR_GENERAL) || (mem_state[1] == STATE_ERROR_GENERAL);
 
@@ -222,9 +227,9 @@ module nts_dispatcher #(
   assign o_dispatch_fifo_rd_valid     = fifo_rd_valid;
   assign o_dispatch_fifo_rd_data      = fifo_rd_data;
 
-  assign o_engine_cs         = bus_cs;
-  assign o_engine_we         = bus_we;
-  assign o_engine_address    = bus_addr;
+  assign o_engine_cs         = bus_cs_reg;
+  assign o_engine_we         = bus_we_reg;
+  assign o_engine_address    = bus_addr_reg;
   assign o_engine_write_data = bus_write_data;
 
   //----------------------------------------------------------------
@@ -273,11 +278,15 @@ module nts_dispatcher #(
     engine_data_new = 0;
 
     if (engine_status_reg[0]) begin
-      //Reset status after 1 cycle.
-      engine_status_we = 1;
-      engine_status_new = { engine_status_reg[31:1], 1'b0 };
-      engine_data_we = 1;
-      engine_data_new = bus_read_data_mux;
+      if (bus_cs_reg != 0) begin
+        //Reset status after 1 cycle.
+        engine_status_we = 1;
+        engine_status_new = { engine_status_reg[31:1], 1'b0 };
+        if (bus_we_reg == 1'b0) begin
+          engine_data_we = 1;
+          engine_data_new = bus_read_data_mux;
+        end
+      end
     end
 
     if (i_api_cs) begin
@@ -616,8 +625,19 @@ module nts_dispatcher #(
   // Enigne MUX handling
   //----------------------------------------------------------------
 
+  always @(posedge i_clk or posedge i_areset)
+  if (i_areset) begin
+    bus_cs_reg   <= 0;
+    bus_we_reg   <= 0;
+    //bus_addr_reg <= 0;
+  end else begin
+    bus_cs_reg   <= bus_cs_new;
+    bus_we_reg   <= bus_we_new;
+    bus_addr_reg <= bus_addr_new;
+  end
+
   always @*
-  begin: engine_mux
+  begin: engine_reg_parser_mux
     reg         enable_by_ctrl;
     reg         enable_by_cmd;
     reg  [11:0] id;
@@ -626,10 +646,9 @@ module nts_dispatcher #(
     integer  i;
 
     bus_read_data_mux = 0;
-    bus_cs = 0;
-    bus_we = 0;
-    bus_addr = 0;
-    bus_write_data = 0;
+    bus_cs_new = 0;
+    bus_we_new = 0;
+    bus_addr_new = 0;
 
     { id, cmd, addr } = engine_ctrl_reg;
 
@@ -639,7 +658,7 @@ module nts_dispatcher #(
 
     if (enable_by_ctrl) begin
 
-      bus_addr = addr;
+      bus_addr_new = addr;
 
       case (cmd)
         BUS_READ:
@@ -648,8 +667,7 @@ module nts_dispatcher #(
           end
         BUS_WRITE:
           begin
-            bus_we = 1;
-            bus_write_data = engine_data_reg;
+            bus_we_new = 1;
             enable_by_cmd = 1;
           end
         default:
@@ -662,13 +680,22 @@ module nts_dispatcher #(
       if (enable_by_cmd) begin
         for (i = 0; i < ENGINES; i = i + 1) begin
           if (id == i[11:0]) begin
-            bus_cs[i] = 1;
-            bus_read_data_mux = i_engine_read_data[i*32+:32];
+            bus_cs_new[i] = 1;
           end
         end
       end
 
     end //enable_by_ctrl
+  end
+
+  always @*
+  begin : engine_api_mux
+    integer i;
+    bus_read_data_mux = 0;
+    for (i = 0; i < ENGINES; i = i + 1) begin
+      if (bus_cs_reg[i] == 1)
+         bus_read_data_mux = i_engine_read_data[i*32+:32];
+    end
   end
 
   //----------------------------------------------------------------

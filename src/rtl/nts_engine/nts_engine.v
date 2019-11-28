@@ -779,7 +779,7 @@ module nts_engine #(
   // Server Key Memory instantiation.
   //----------------------------------------------------------------
 
-  keymem keymem (
+  nts_keymem keymem (
     .clk(i_clk),
     .areset(i_areset),
     // API access

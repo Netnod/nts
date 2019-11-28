@@ -49,7 +49,7 @@ ENGINE_SRC = src/rtl/nts_engine/nts_engine.v \
  src/rtl/memory/bram.v \
  src/rtl/memory/bram_dpge.v \
  src/rtl/memory/bram_dp2w.v \
- sub/keymem/src/rtl/keymem.v \
+ sub/keymem/src/rtl/nts_keymem.v \
  $(SIV_SRC)
 
 ifeq ($(VLINT),)
@@ -124,7 +124,7 @@ lint_engine:
  src/rtl/memory/bram.v \
  src/rtl/memory/bram_dpge.v \
  src/rtl/memory/bram_dp2w.v \
- sub/keymem/src/rtl/keymem.v \
+ sub/keymem/src/rtl/nts_keymem.v \
  $(SIV_SRC)
 
 lint_dispatcher:

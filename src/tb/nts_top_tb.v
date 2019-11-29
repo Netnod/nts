@@ -425,6 +425,8 @@ module nts_top_tb;
       reg [63:0] dispatcher_counter_bad;
       reg [63:0] dispatcher_counter_dispatched;
       reg [63:0] dispatcher_counter_error;
+      reg [11:0] addr;
+      reg [32:0] value;
       api_read64(engine_name, API_ADDR_ENGINE_NAME0);
       api_read32(engine_version, API_ADDR_ENGINE_VERSION);
       api_read64(clock_name, API_ADDR_CLOCK_NAME0);
@@ -463,6 +465,11 @@ module nts_top_tb;
       $display("%s:%0d: *** Dispatcher, bad frame counter:   %0d", `__FILE__, `__LINE__, dispatcher_counter_bad);
       $display("%s:%0d: *** Dispatcher, dispatched counter:  %0d", `__FILE__, `__LINE__, dispatcher_counter_dispatched);
       $display("%s:%0d: *** Dispatcher, error counter:       %0d", `__FILE__, `__LINE__, dispatcher_counter_error);
+      for (addr = 0; addr < 12'hFFF; addr = addr + 1) begin
+        dispatcher_read32(value, addr);
+        if (value != 0)
+          $display("%s:%0d: *** Dispatcher[%h] = %h", `__FILE__, `__LINE__, addr, value);
+      end
     end
 
     $display("Test stop: %s:%0d", `__FILE__, `__LINE__);

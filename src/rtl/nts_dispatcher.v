@@ -106,7 +106,7 @@ module nts_dispatcher #(
   localparam BUS_WRITE = 8'hAA;
 
   localparam CORE_NAME    = 64'h4e_54_53_2d_44_49_53_50; //NTS-DISP
-  localparam CORE_VERSION = 32'h30_2e_30_31; //0.01
+  localparam CORE_VERSION = 32'h30_2e_30_32; //0.02
 
   //----------------------------------------------------------------
   // State constants
@@ -403,7 +403,18 @@ module nts_dispatcher #(
             begin
               api_read_data = engine_data_reg;
             end
-          default: ;
+          default:
+            begin
+              if (i_api_address >= 12'h100 && i_api_address < 12'h140) begin
+                case (i_api_address[1:0])
+                  0: api_read_data = 32'hf005ba11;
+                  1: api_read_data = 32'hb0a710ad;
+                  2: api_read_data = 32'h5ca1ab1e;
+                  3: api_read_data = 32'hba5eba11;
+                  default: ;
+                endcase
+              end
+            end
         endcase
       end
     end

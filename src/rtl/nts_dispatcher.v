@@ -287,6 +287,8 @@ module nts_dispatcher #(
     engine_data_we = 0;
     engine_data_new = 0;
 
+    ntp_time_lsb_we = 0;
+
     if (engine_status_reg[0]) begin
       if (bus_cs_reg != 0) begin
         //Reset status after 1 cycle.
@@ -680,7 +682,6 @@ module nts_dispatcher #(
     reg  [11:0] addr;
     integer  i;
 
-    bus_read_data_mux = 0;
     bus_cs_new = 0;
     bus_we_new = 0;
     bus_addr_new = 0;

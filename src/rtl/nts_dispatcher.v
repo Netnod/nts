@@ -36,6 +36,8 @@ module nts_dispatcher #(
   input  wire        i_areset, // async reset
   input  wire        i_clk,
 
+  input wire [63:0] i_ntp_time,
+
   // MAC
   input  wire [7:0]  i_rx_data_valid,
   input  wire [63:0] i_rx_data,
@@ -72,6 +74,9 @@ module nts_dispatcher #(
   localparam ADDR_NAME1             = 1;
   localparam ADDR_VERSION           = 2;
   localparam ADDR_DUMMY             = 3;
+  localparam ADDR_SYSTICK32         = 4;
+  localparam ADDR_NTPTIME_MSB       = 6;
+  localparam ADDR_NTPTIME_LSB       = 7;
   localparam ADDR_CTRL              = 8;  //TODO implement
   localparam ADDR_STATUS            = 9;  //TODO implement
   localparam ADDR_BYTES_RX_MSB      = 10;
@@ -201,6 +206,11 @@ module nts_dispatcher #(
   reg [31:0] engine_data_new;
   reg [31:0] engine_data_reg;
 
+  reg        ntp_time_lsb_we;
+  reg [63:0] ntp_time_lsb_reg;
+
+  reg [31:0] systick32_reg;
+
   reg  [ENGINES-1:0] bus_cs_new;
   reg  [ENGINES-1:0] bus_cs_reg;
   reg                bus_we_new;
@@ -320,6 +330,13 @@ module nts_dispatcher #(
           ADDR_NAME1: api_read_data = CORE_NAME[31:0];
           ADDR_VERSION: api_read_data = CORE_VERSION;
           ADDR_DUMMY: api_read_data = api_dummy_reg;
+          ADDR_SYSTICK32: api_read_data = systick32_reg;
+          ADDR_NTPTIME_MSB:
+            begin
+              api_read_data = i_ntp_time[63:32];
+              ntp_time_lsb_we = 1;
+            end
+          ADDR_NTPTIME_LSB: api_read_data = ntp_time_lsb_reg;
           ADDR_BYTES_RX_MSB:
             begin
               api_read_data = counter_bytes_rx_reg[63:32];
@@ -417,6 +434,8 @@ module nts_dispatcher #(
       engine_ctrl_reg <= 0;
       engine_status_reg <= 0;
       engine_data_reg <= 0;
+      ntp_time_lsb_reg <= 0;
+      systick32_reg <= 0;
 
     end else begin
 
@@ -467,6 +486,11 @@ module nts_dispatcher #(
 
       if (engine_status_we)
         engine_status_reg <= engine_status_new;
+
+      if (ntp_time_lsb_we)
+        ntp_time_lsb_reg <= i_ntp_time[31:0];
+
+      systick32_reg <= systick32_reg + 1;
 
     end
   end

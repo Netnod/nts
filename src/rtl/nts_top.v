@@ -14,6 +14,8 @@ module nts_top #(
   input  wire                      i_mac_rx_bad_frame,
   input  wire                      i_mac_rx_good_frame,
 
+  input  wire               [63:0] i_ntp_time,
+
   //Dispatcher API interface. TODO: replace with SPI interface.
   input  wire                        i_api_dispatcher_cs,
   input  wire                        i_api_dispatcher_we,
@@ -23,7 +25,11 @@ module nts_top #(
 );
   localparam LAST_DATA_VALID_WIDTH = 8;
 
-  reg [63:0] ntp_time_DUMMY;
+  reg               [63:0] ntp_time_reg;
+  reg                [7:0] rx_data_valid_reg;
+  reg [MAC_DATA_WIDTH-1:0] rx_data_reg;
+  reg                      rx_bad_frame_reg;
+  reg                      rx_good_frame_reg;
 
   wire                  [ENGINES - 1:0] api_cs;
   wire                                  api_we;
@@ -59,6 +65,25 @@ module nts_top #(
   reg                    [63:0] noncegen_engine_data_DUMMY;
 
   //----------------------------------------------------------------
+  // Buffer inputs
+  //----------------------------------------------------------------
+
+  always @(posedge i_clk or posedge i_areset)
+  if (i_areset) begin
+    ntp_time_reg      <= 0;
+    rx_data_valid_reg <= 0;
+    rx_data_reg       <= 0;
+    rx_bad_frame_reg  <= 0;
+    rx_good_frame_reg <= 0;
+  end else begin
+    ntp_time_reg      <= i_ntp_time;
+    rx_data_valid_reg <= i_mac_rx_data_valid;
+    rx_data_reg       <= i_mac_rx_data;
+    rx_bad_frame_reg  <= i_mac_rx_bad_frame;
+    rx_good_frame_reg <= i_mac_rx_good_frame;
+  end
+
+  //----------------------------------------------------------------
   // Dispatcher
   //----------------------------------------------------------------
 
@@ -66,10 +91,12 @@ module nts_top #(
     .i_areset(i_areset),
     .i_clk(i_clk),
 
-    .i_rx_data_valid(i_mac_rx_data_valid),
-    .i_rx_data(i_mac_rx_data),
-    .i_rx_bad_frame(i_mac_rx_bad_frame),
-    .i_rx_good_frame(i_mac_rx_good_frame),
+    .i_ntp_time(ntp_time_reg),
+
+    .i_rx_data_valid(rx_data_valid_reg),
+    .i_rx_data(rx_data_reg),
+    .i_rx_bad_frame(rx_bad_frame_reg),
+    .i_rx_good_frame(rx_good_frame_reg),
 
     .o_dispatch_packet_available(dispatch_engine_rx_packet_available[0]),
     .i_dispatch_packet_read_discard(engine_dispatch_rx_packet_read_discard[0]),
@@ -113,7 +140,7 @@ module nts_top #(
         .i_areset(i_areset),
         .i_clk(i_clk),
 
-        .i_ntp_time(ntp_time_DUMMY),
+        .i_ntp_time(ntp_time_reg),
 
         .o_busy(engine_busy[engine_index]),
 
@@ -219,19 +246,6 @@ module nts_top #(
        $display("%s:%0d o_dispatch_tx_bytes_last_word_DUMMY=%b (ignored)",  `__FILE__, `__LINE__, o_dispatch_tx_bytes_last_word_DUMMY);
     always @*
       $display("%s:%0d  o_dispatch_tx_fifo_rd_data_DUMMY=%h (ignored)",  `__FILE__, `__LINE__, o_dispatch_tx_fifo_rd_data_DUMMY);
-  end
-
-  //----------------------------------------------------------------
-  // Dummy: NTP clock
-  //----------------------------------------------------------------
-
-  always  @(posedge i_clk or posedge i_areset)
-  begin
-    if (i_areset) begin
-      ntp_time_DUMMY = 64'h0000_0001_0000_0000;
-    end else begin
-      ntp_time_DUMMY = ntp_time_DUMMY + 1;
-    end
   end
 
   //----------------------------------------------------------------

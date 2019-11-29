@@ -40,6 +40,8 @@ module nts_top_tb;
   localparam [11:0] API_DISPATCHER_ADDR_NAME               = 'h000;
   localparam [11:0] API_DISPATCHER_ADDR_VERSION            = 'h002;
   localparam [11:0] API_DISPATCHER_ADDR_DUMMY              = 'h003;
+  localparam [11:0] API_DISPATCHER_ADDR_SYSTICK32          = 'h004;
+  localparam [11:0] API_DISPATCHER_ADDR_NTPTIME            = 'h006;
   localparam [11:0] API_DISPATCHER_ADDR_BYTES_RX           = 'h00a;
   localparam [11:0] API_DISPATCHER_ADDR_COUNTER_FRAMES     = 'h020;
   localparam [11:0] API_DISPATCHER_ADDR_COUNTER_GOOD       = 'h022;
@@ -93,6 +95,8 @@ module nts_top_tb;
   reg  [11:0] i_api_dispatcher_address;
   reg  [31:0] i_api_dispatcher_write_data;
   wire [31:0] o_api_dispatcher_read_data;
+
+  reg  [63:0] i_ntp_time;
 
   //----------------------------------------------------------------
   // RX MAC helper regs
@@ -348,6 +352,8 @@ module nts_top_tb;
     .i_mac_rx_bad_frame(i_mac_rx_bad_frame),
     .i_mac_rx_good_frame(i_mac_rx_good_frame),
 
+    .i_ntp_time(i_ntp_time),
+
     .i_api_dispatcher_cs(i_api_dispatcher_cs),
     .i_api_dispatcher_we(i_api_dispatcher_we),
     .i_api_dispatcher_address(i_api_dispatcher_address),
@@ -411,6 +417,8 @@ module nts_top_tb;
       reg [63:0] txbuf_err;
       reg [63:0] dispatcher_name;
       reg [31:0] dispatcher_version;
+      reg [31:0] dispatcher_systick32;
+      reg [31:0] dispatcher_ntp_time;
       reg [63:0] dispatcher_counter_bytes_rx;
       reg [63:0] dispatcher_counter_frames;
       reg [63:0] dispatcher_counter_good;
@@ -429,6 +437,8 @@ module nts_top_tb;
       api_read64(txbuf_err, API_ADDR_DEBUG_ERR_TXBUF);
       dispatcher_read64(dispatcher_name, API_DISPATCHER_ADDR_NAME);
       dispatcher_read32(dispatcher_version, API_DISPATCHER_ADDR_VERSION);
+      dispatcher_read32(dispatcher_systick32, API_DISPATCHER_ADDR_SYSTICK32);
+      dispatcher_read64(dispatcher_ntp_time, API_DISPATCHER_ADDR_NTPTIME);
       dispatcher_read64(dispatcher_counter_bytes_rx, API_DISPATCHER_ADDR_BYTES_RX);
       dispatcher_read64(dispatcher_counter_frames, API_DISPATCHER_ADDR_COUNTER_FRAMES);
       dispatcher_read64(dispatcher_counter_good, API_DISPATCHER_ADDR_COUNTER_GOOD);
@@ -445,6 +455,8 @@ module nts_top_tb;
       $display("%s:%0d: *** STATISTICS, NTS processed:  %0d", `__FILE__, `__LINE__, engine_stats_nts_processed);
       $display("%s:%0d: *** DEBUG, Errors Crypto: %0d", `__FILE__, `__LINE__, crypto_err);
       $display("%s:%0d: *** DEBUG, Errors TxBuf: %0d", `__FILE__, `__LINE__, txbuf_err);
+      $display("%s:%0d: *** Dispatcher, ntp_time:            %016x", `__FILE__, `__LINE__, dispatcher_ntp_time);
+      $display("%s:%0d: *** Dispatcher, systick32:           %0d", `__FILE__, `__LINE__, dispatcher_systick32);
       $display("%s:%0d: *** Dispatcher, bytes received:      %0d", `__FILE__, `__LINE__, dispatcher_counter_bytes_rx);
       $display("%s:%0d: *** Dispatcher, frame start counter: %0d", `__FILE__, `__LINE__, dispatcher_counter_frames);
       $display("%s:%0d: *** Dispatcher, good frame counter:  %0d", `__FILE__, `__LINE__, dispatcher_counter_good);
@@ -490,6 +502,19 @@ module nts_top_tb;
         rx_busy <= 1;
         rx_ptr <= packet_length;
       end
+    end
+  end
+
+  //----------------------------------------------------------------
+  // Testbench model: NTP clock
+  //----------------------------------------------------------------
+
+  always  @(posedge i_clk or posedge i_areset)
+  begin
+    if (i_areset) begin
+      i_ntp_time = 64'h0000_0001_0000_0000;
+    end else begin
+      i_ntp_time = i_ntp_time + 1;
     end
   end
 

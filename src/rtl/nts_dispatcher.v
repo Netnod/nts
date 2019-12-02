@@ -75,6 +75,7 @@ module nts_dispatcher #(
   localparam ADDR_VERSION           = 2;
   localparam ADDR_DUMMY             = 3;
   localparam ADDR_SYSTICK32         = 4;
+  localparam ADDR_STATES_INSPECT    = 5;
   localparam ADDR_NTPTIME_MSB       = 6;
   localparam ADDR_NTPTIME_LSB       = 7;
   localparam ADDR_CTRL              = 8;  //TODO implement
@@ -358,6 +359,7 @@ module nts_dispatcher #(
           ADDR_VERSION: api_read_data = CORE_VERSION;
           ADDR_DUMMY: api_read_data = api_dummy_reg;
           ADDR_SYSTICK32: api_read_data = systick32_reg;
+          ADDR_STATES_INSPECT: api_read_data = { 15'h0, current_mem_reg, 4'h0, mem_state_reg[0], 4'h0, mem_state_reg[1] };
           ADDR_NTPTIME_MSB:
             begin
               api_read_data = i_ntp_time[63:32];

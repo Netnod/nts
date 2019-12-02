@@ -102,6 +102,8 @@ module nts_dispatcher #(
   localparam ADDR_BUS_STATUS      = 81;
   localparam ADDR_BUS_DATA        = 82;
 
+  localparam ADDR_LAST            = 'hFFF;
+
   localparam BUS_READ  = 8'h55;
   localparam BUS_WRITE = 8'hAA;
 
@@ -405,18 +407,11 @@ module nts_dispatcher #(
             begin
               api_read_data = engine_data_reg;
             end
-          default:
+          ADDR_LAST:
             begin
-              if (i_api_address >= 12'h100 && i_api_address < 12'h140) begin
-                case (i_api_address[1:0])
-                  0: api_read_data = 32'hf005ba11;
-                  1: api_read_data = 32'hb0a710ad;
-                  2: api_read_data = 32'h5ca1ab1e;
-                  3: api_read_data = 32'hba5eba11;
-                  default: ;
-                endcase
-              end
+              api_read_data = 32'hf005ba11;
             end
+          default: ;
         endcase
       end
     end
@@ -666,7 +661,7 @@ module nts_dispatcher #(
   if (i_areset) begin
     bus_cs_reg   <= 0;
     bus_we_reg   <= 0;
-    //bus_addr_reg <= 0;
+    bus_addr_reg <= 0;
   end else begin
     bus_cs_reg   <= bus_cs_new;
     bus_we_reg   <= bus_we_new;

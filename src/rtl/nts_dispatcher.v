@@ -427,6 +427,10 @@ module nts_dispatcher #(
 
       api_dummy_reg <= 0;
 
+      bus_cs_reg   <= 0;
+      bus_we_reg   <= 0;
+      bus_addr_reg <= 0;
+
       counter_bad_reg <= 0;
       counter_bad_lsb_reg <= 0;
       counter_bytes_rx_reg <= 0;
@@ -439,16 +443,25 @@ module nts_dispatcher #(
       counter_good_lsb_reg <= 0;
       counter_sof_detect_reg <= 0;
       counter_sof_detect_lsb_reg <= 0;
+
       engine_ctrl_reg <= 0;
       engine_status_reg <= 0;
       engine_data_reg <= 0;
+
       ntp_time_lsb_reg <= 0;
+
+      previous_rx_data_valid <= 8'hFF; // Must not be zero as 00FF used to detect start of frame
+
       systick32_reg <= 32'h01;
 
     end else begin
 
       if (api_dummy_we)
         api_dummy_reg <= api_dummy_new;
+
+      bus_cs_reg   <= bus_cs_new;
+      bus_we_reg   <= bus_we_new;
+      bus_addr_reg <= bus_addr_new;
 
       if (counter_bad_we)
        counter_bad_reg <= counter_bad_new;
@@ -497,6 +510,11 @@ module nts_dispatcher #(
 
       if (ntp_time_lsb_we)
         ntp_time_lsb_reg <= i_ntp_time[31:0];
+
+      //----------------------------------------------------------------
+      // Start of Frame Detector (previous MAC RX DV sampler)
+      //----------------------------------------------------------------
+      previous_rx_data_valid <= i_rx_data_valid;
 
       systick32_reg <= systick32_reg + 1;
 
@@ -629,17 +647,6 @@ module nts_dispatcher #(
   end
 
   //----------------------------------------------------------------
-  // Start of Frame Detector (previous MAC RX DV sampler)
-  //----------------------------------------------------------------
-
-  always @(posedge i_clk or posedge i_areset)
-  if (i_areset) begin
-    previous_rx_data_valid <= 8'hFF; // Must not be zero as 00FF used to detect start of frame
-  end else begin
-    previous_rx_data_valid <= i_rx_data_valid;
-  end
-
-  //----------------------------------------------------------------
   // Start of Frame Detector
   //----------------------------------------------------------------
 
@@ -656,17 +663,6 @@ module nts_dispatcher #(
   //----------------------------------------------------------------
   // Enigne MUX handling
   //----------------------------------------------------------------
-
-  always @(posedge i_clk or posedge i_areset)
-  if (i_areset) begin
-    bus_cs_reg   <= 0;
-    bus_we_reg   <= 0;
-    bus_addr_reg <= 0;
-  end else begin
-    bus_cs_reg   <= bus_cs_new;
-    bus_we_reg   <= bus_we_new;
-    bus_addr_reg <= bus_addr_new;
-  end
 
   always @*
   begin: engine_reg_parser_mux

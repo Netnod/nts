@@ -912,6 +912,7 @@ module nts_dispatcher #(
     data_valid_new_rx = rx_data_valid;
     mem_state_rx_new  = rx_state;
     ram_w_addr_new_rx = 0;
+    ram_w_data_new_rx = 0;
     ram_write_new_rx  = 0;
 
     if (i_rx_bad_frame) begin

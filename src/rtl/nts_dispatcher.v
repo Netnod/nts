@@ -207,7 +207,7 @@ module nts_dispatcher #(
   reg [31:0] engine_data_reg;
 
   reg        ntp_time_lsb_we;
-  reg [63:0] ntp_time_lsb_reg;
+  reg [31:0] ntp_time_lsb_reg;
 
   reg [31:0] systick32_reg;
 
@@ -448,7 +448,7 @@ module nts_dispatcher #(
       engine_status_reg <= 0;
       engine_data_reg <= 0;
       ntp_time_lsb_reg <= 0;
-      systick32_reg <= 0;
+      systick32_reg <= 32'h01;
 
     end else begin
 

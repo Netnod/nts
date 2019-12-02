@@ -384,13 +384,13 @@ module nts_top_tb;
     begin : loop
       integer i;
       for (i = 0; i < 15; i = i + 1) begin
-        while (dut.dispatcher.mem_state[dut.dispatcher.current_mem] != 0) #10;
+        while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
         send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_COOKIE}, 2160, 0);
-        while (dut.dispatcher.mem_state[dut.dispatcher.current_mem] != 0) #10;
+        while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
         send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_AUTH}, 2160, 0);
-        while (dut.dispatcher.mem_state[dut.dispatcher.current_mem] != 0) #10;
+        while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
         send_packet({63696'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_1}, 1840, 1);
-        while (dut.dispatcher.mem_state[dut.dispatcher.current_mem] != 0) #10;
+        while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
         send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160, 0);
         send_packet({63696'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_1}, 1840, 0);
         send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160, 0);

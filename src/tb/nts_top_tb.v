@@ -442,7 +442,7 @@ module nts_top_tb;
       api_read64(clock_name, API_ADDR_CLOCK_NAME0);
       api_read32(debug_name, API_ADDR_DEBUG_NAME);
       api_read64(keymem_name, API_ADDR_KEYMEM_NAME0);
-      api_read64(debug_systick32, API_ADDR_DEBUG_SYSTICK32);
+      api_read32(debug_systick32, API_ADDR_DEBUG_SYSTICK32);
       api_read64(engine_stats_nts_bad_auth, API_ADDR_DEBUG_NTS_BAD_AUTH);
       api_read64(engine_stats_nts_bad_cookie, API_ADDR_DEBUG_NTS_BAD_COOKIE);
       api_read64(engine_stats_nts_bad_keyid, API_ADDR_DEBUG_NTS_BAD_KEYID);

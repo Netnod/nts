@@ -9,6 +9,8 @@ module nts_top_tb;
   localparam [11:0] API_ADDR_DEBUG_NTS_BAD_COOKIE = API_ADDR_DEBUG_BASE + 2;
   localparam [11:0] API_ADDR_DEBUG_NTS_BAD_AUTH   = API_ADDR_DEBUG_BASE + 4;
   localparam [11:0] API_ADDR_DEBUG_NTS_BAD_KEYID  = API_ADDR_DEBUG_BASE + 6;
+  localparam [11:0] API_ADDR_DEBUG_NAME           = API_ADDR_DEBUG_BASE + 8;
+  localparam [11:0] API_ADDR_DEBUG_SYSTICK32      = API_ADDR_DEBUG_BASE + 9;
   localparam [11:0] API_ADDR_DEBUG_ERR_CRYPTO     = API_ADDR_DEBUG_BASE + 'h20;
   localparam [11:0] API_ADDR_DEBUG_ERR_TXBUF      = API_ADDR_DEBUG_BASE + 'h22;
 
@@ -414,7 +416,9 @@ module nts_top_tb;
       reg [63:0] engine_name;
       reg [31:0] engine_version;
       reg [63:0] clock_name;
+      reg [31:0] debug_name;
       reg [63:0] keymem_name;
+      reg [31:0] debug_systick32;
       reg [63:0] engine_stats_nts_bad_auth;
       reg [63:0] engine_stats_nts_bad_cookie;
       reg [63:0] engine_stats_nts_bad_keyid;
@@ -436,7 +440,9 @@ module nts_top_tb;
       api_read64(engine_name, API_ADDR_ENGINE_NAME0);
       api_read32(engine_version, API_ADDR_ENGINE_VERSION);
       api_read64(clock_name, API_ADDR_CLOCK_NAME0);
+      api_read32(debug_name, API_ADDR_DEBUG_NAME);
       api_read64(keymem_name, API_ADDR_KEYMEM_NAME0);
+      api_read64(debug_systick32, API_ADDR_DEBUG_SYSTICK32);
       api_read64(engine_stats_nts_bad_auth, API_ADDR_DEBUG_NTS_BAD_AUTH);
       api_read64(engine_stats_nts_bad_cookie, API_ADDR_DEBUG_NTS_BAD_COOKIE);
       api_read64(engine_stats_nts_bad_keyid, API_ADDR_DEBUG_NTS_BAD_KEYID);
@@ -456,13 +462,15 @@ module nts_top_tb;
       $display("%s:%0d: *** CORE: %s %s", `__FILE__, `__LINE__, dispatcher_name, dispatcher_version);
       $display("%s:%0d: *** CORE: %s %s", `__FILE__, `__LINE__, engine_name, engine_version);
       $display("%s:%0d: *** CORE: %s", `__FILE__, `__LINE__, clock_name);
+      $display("%s:%0d: *** CORE: %s", `__FILE__, `__LINE__, debug_name);
       $display("%s:%0d: *** CORE: %s", `__FILE__, `__LINE__, keymem_name);
-      $display("%s:%0d: *** STATISTICS, NTS bad auth:   %0d", `__FILE__, `__LINE__, engine_stats_nts_bad_auth);
-      $display("%s:%0d: *** STATISTICS, NTS bad cookie: %0d", `__FILE__, `__LINE__, engine_stats_nts_bad_cookie);
-      $display("%s:%0d: *** STATISTICS, NTS bad key id: %0d", `__FILE__, `__LINE__, engine_stats_nts_bad_keyid);
-      $display("%s:%0d: *** STATISTICS, NTS processed:  %0d", `__FILE__, `__LINE__, engine_stats_nts_processed);
-      $display("%s:%0d: *** DEBUG, Errors Crypto: %0d", `__FILE__, `__LINE__, crypto_err);
-      $display("%s:%0d: *** DEBUG, Errors TxBuf: %0d", `__FILE__, `__LINE__, txbuf_err);
+      $display("%s:%0d: *** DEBUG, systick32:      %0d", `__FILE__, `__LINE__, debug_systick32);
+      $display("%s:%0d: *** DEBUG, NTS bad auth:   %0d", `__FILE__, `__LINE__, engine_stats_nts_bad_auth);
+      $display("%s:%0d: *** DEBUG, NTS bad cookie: %0d", `__FILE__, `__LINE__, engine_stats_nts_bad_cookie);
+      $display("%s:%0d: *** DEBUG, NTS bad key id: %0d", `__FILE__, `__LINE__, engine_stats_nts_bad_keyid);
+      $display("%s:%0d: *** DEBUG, NTS processed:  %0d", `__FILE__, `__LINE__, engine_stats_nts_processed);
+      $display("%s:%0d: *** DEBUG, Errors Crypto:  %0d", `__FILE__, `__LINE__, crypto_err);
+      $display("%s:%0d: *** DEBUG, Errors TxBuf:   %0d", `__FILE__, `__LINE__, txbuf_err);
       $display("%s:%0d: *** Dispatcher, ntp_time:            %016x", `__FILE__, `__LINE__, dispatcher_ntp_time);
       $display("%s:%0d: *** Dispatcher, systick32:           %0d", `__FILE__, `__LINE__, dispatcher_systick32);
       $display("%s:%0d: *** Dispatcher, bytes received:      %0d", `__FILE__, `__LINE__, dispatcher_counter_bytes_rx);
@@ -475,6 +483,11 @@ module nts_top_tb;
         dispatcher_read32(value, addr);
         if (value != 0)
           $display("%s:%0d: *** Dispatcher[%h] = %h", `__FILE__, `__LINE__, addr, value);
+      end
+      for (addr = 0; addr < 12'hFFF; addr = addr + 1) begin
+        api_read32(value, addr);
+        if (value != 0)
+          $display("%s:%0d: *** Engine[%h] = %h", `__FILE__, `__LINE__, addr, value);
       end
     end
 

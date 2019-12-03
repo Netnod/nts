@@ -92,10 +92,14 @@ module nts_engine #(
   localparam ADDR_CTRL          = 'h08; //TODO implement
   localparam ADDR_STATUS        = 'h09;
 
+  localparam DEBUG_NAME = 32'h44_42_55_47; // "DBUG"
+
   localparam ADDR_DEBUG_NTS_PROCESSED  = 0;
   localparam ADDR_DEBUG_NTS_BAD_COOKIE = 2;
   localparam ADDR_DEBUG_NTS_BAD_AUTH   = 4;
   localparam ADDR_DEBUG_NTS_BAD_KEYID  = 6;
+  localparam ADDR_DEBUG_NAME           = 8;
+  localparam ADDR_DEBUG_SYSTICK32      = 9;
   localparam ADDR_DEBUG_ERROR_CRYPTO   = 'h20;
   localparam ADDR_DEBUG_ERROR_TXBUF    = 'h22;
 
@@ -301,6 +305,8 @@ module nts_engine #(
   reg        counter_error_txbuf_lsb_we;
   reg [31:0] counter_error_txbuf_lsb_reg;
 
+  reg [31:0] systick32_reg;
+
   always @*
   begin : reg_setter
     counter_nts_bad_auth_we    = 0;
@@ -373,6 +379,9 @@ module nts_engine #(
 
       counter_error_txbuf_reg <= 0;
       counter_error_txbuf_lsb_reg <= 0;
+
+      systick32_reg <= 32'h0000_0001;
+
     end else begin
       if (counter_nts_bad_auth_we)
         counter_nts_bad_auth_reg <= counter_nts_bad_auth_new;
@@ -409,6 +418,8 @@ module nts_engine #(
 
       if (counter_error_txbuf_lsb_we)
         counter_error_txbuf_lsb_reg <= counter_error_txbuf_reg[31:0];
+
+      systick32_reg <= systick32_reg + 1;
     end
   end
 
@@ -489,6 +500,8 @@ module nts_engine #(
             begin
               api_read_data_debug = counter_nts_bad_keyid_lsb_reg;
             end
+          ADDR_DEBUG_NAME: api_read_data_debug = DEBUG_NAME;
+          ADDR_DEBUG_SYSTICK32: api_read_data_debug = systick32_reg;
           ADDR_DEBUG_ERROR_CRYPTO:
             begin
               api_read_data_debug = counter_error_crypto_reg[63:32];

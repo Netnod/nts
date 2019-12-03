@@ -74,6 +74,7 @@ module nts_top_tb;
   localparam [2159:0] NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_AUTH=2160'h001c7300_00995254_00cdcd23_08004500_01000001_00004011_bc174d48_e37ec23a_cad31267_101b00ec_8c5b2300_00200000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_000071cc_4c8cdb00_980b0104_002492ae_9b06e29f_638497f0_18b58124_85cbef5f_811f516a_620ed802_4546bb3e_db590204_006813fe_78e93426_b1f08926_0a257d85_5c533225_c7540952_f35b63d9_f6f6fb4c_69dbc025_3c869740_6b59c01c_d297755c_960a2532_7d40ad6f_41a636d1_4f8a584e_6414f559_3a0912fd_8a7e4b69_88be44ea_97f6f60f_b3d799f9_293e5852_d40fa062_4038e0fc_a5d90404_00280010_00107812_c6677d04_a1c0ac02_0219687c_17d5ca94_9acd04b0_ac8d8d82_d6c7dead_beef;
 
   localparam DEBUG           = 1;
+  localparam BENCHMARK       = 1;
   localparam ENGINES         = 1; //Beware: only ENGINES=1 supported for now
   localparam API_ADDR_WIDTH  = 12;
   localparam API_RW_WIDTH    = 32;
@@ -537,5 +538,50 @@ module nts_top_tb;
   always begin
     #5 i_clk = ~i_clk;
   end
+
+  //----------------------------------------------------------------
+  // Benchmarking registers
+  //----------------------------------------------------------------
+
+  if (BENCHMARK) begin : benchmark
+    reg [63:0] tick_counter;
+    reg [63:0] old_tick_counter;
+    reg [63:0] old_tick_counter_crypto;
+    reg [63:0] old_tick_counter_packet;
+    reg  [3:0] old_parser_state;
+    reg  [3:0] old_parser_state_crypto;
+
+    always  @(posedge i_clk or posedge i_areset)
+    begin
+      if (i_areset) begin
+        tick_counter <= 1;
+        old_tick_counter <= 1;
+        old_tick_counter_crypto <= 1;
+        old_tick_counter_packet <= 1;
+        old_parser_state <= 0;
+        old_parser_state_crypto <= 0;
+      end else begin
+        tick_counter <= tick_counter + 1;
+
+        if (old_parser_state == 0)
+          old_tick_counter_packet <= tick_counter;
+
+        if (old_parser_state != dut.engine.parser.state_reg) begin
+          old_tick_counter <= tick_counter;
+          old_parser_state <= dut.engine.parser.state_reg;
+          if (old_parser_state != 0)
+            $display("%s:%0d dut.engine.parser.state_reg(%0d)->(%0d): %0d ticks", `__FILE__, `__LINE__, old_parser_state, dut.engine.parser.state_reg, tick_counter - old_tick_counter);
+          if (dut.engine.parser.state_reg == 0)
+            $display("%s:%0d Packet took %0d ticks to process", `__FILE__, `__LINE__, tick_counter - old_tick_counter_packet);
+        end
+        if (old_parser_state_crypto != dut.engine.parser.crypto_fsm_reg) begin
+          old_tick_counter_crypto <= tick_counter;
+          old_parser_state_crypto <= dut.engine.parser.crypto_fsm_reg;
+          $display("%s:%0d dut.engine.parser.crypto_fsm_reg(%0d)->(%0d): %0d ticks", `__FILE__, `__LINE__, old_parser_state_crypto, dut.engine.parser.crypto_fsm_reg, tick_counter - old_tick_counter_crypto);
+        end
+
+      end
+    end
+ end
 
 endmodule

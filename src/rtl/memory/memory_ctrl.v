@@ -122,6 +122,7 @@ module memory_ctrl #(
       addr_a_reg       <= 0;
       addr_b_reg       <= 0;
       lo_reg           <= 0;
+      read64_reg       <= 0;
       state_reg        <= STATE_IDLE;
       write_1delay_reg <= 0;
       write_2delay_reg <= 0;

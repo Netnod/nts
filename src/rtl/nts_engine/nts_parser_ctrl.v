@@ -1530,14 +1530,28 @@ module nts_parser_ctrl #(
   begin : statistics
     statistics_nts_bad_auth_new   = 0;
     statistics_nts_bad_cookie_new = 0;
-    statistics_nts_bad_keyid_new  = 0;  //TODO implement
-    statistics_nts_processed_new  = 0;  //TODO implement
+    statistics_nts_bad_keyid_new  = 0;
+    statistics_nts_processed_new  = 0;
 
-    if ((state_reg == STATE_RX_AUTH_PACKET) && (crypto_fsm_reg == CRYPTO_FSM_DONE_FAILURE))
-      statistics_nts_bad_auth_new = 1;
-
-    if ((state_reg == STATE_RX_AUTH_COOKIE) && (crypto_fsm_reg == CRYPTO_FSM_DONE_FAILURE))
-      statistics_nts_bad_cookie_new = 1;
+    case (state_reg)
+      STATE_VERIFY_KEY_FROM_COOKIE2:
+        if (i_keymem_ready && keymem_get_key_with_id_reg == 'b0 ) begin
+          if (i_keymem_key_valid == 'b0) begin
+            statistics_nts_bad_keyid_new = 1;
+          end
+        end
+      STATE_RX_AUTH_COOKIE:
+        if (crypto_fsm_reg == CRYPTO_FSM_DONE_FAILURE)
+          statistics_nts_bad_cookie_new = 1;
+      STATE_RX_AUTH_PACKET:
+        begin
+           if (crypto_fsm_reg == CRYPTO_FSM_DONE_SUCCESS)
+             statistics_nts_processed_new = 1;
+           if (crypto_fsm_reg == CRYPTO_FSM_DONE_FAILURE)
+             statistics_nts_bad_auth_new = 1;
+        end
+      default: ;
+    endcase
   end
 
   //----------------------------------------------------------------

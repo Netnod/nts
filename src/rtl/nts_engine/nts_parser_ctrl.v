@@ -556,6 +556,7 @@ module nts_parser_ctrl #(
       error_count_reg            <= 'b0;
       error_state_reg            <= 'b0;
 
+      ipdecode_ethernet_protocol_reg <= 0;
       ipdecode_ip_version_reg    <= 'b0;
       ipdecode_ip4_ihl_reg       <= 'b0;
       ipdecode_udp_length_reg    <= 'b0;

@@ -148,6 +148,7 @@ module nts_engine #(
   wire                         api_cs_debug;
   wire                         api_cs_engine;
   wire                         api_cs_keymem;
+  wire                         api_cs_parser;
 
   reg                 [31 : 0] api_read_data_engine;
   wire                [31 : 0] api_read_data_cookie;
@@ -155,6 +156,7 @@ module nts_engine #(
 
   wire                [31 : 0] api_read_data_clock;
   wire                [31 : 0] api_read_data_keymem;
+  wire                [31 : 0] api_read_data_parser;
 
   wire                         api_we;
   wire                 [7 : 0] api_address;
@@ -550,7 +552,10 @@ module nts_engine #(
     .i_internal_keymem_api_read_data(api_read_data_keymem),
 
     .o_internal_debug_api_cs(api_cs_debug),
-    .i_internal_debug_api_read_data(api_read_data_debug)
+    .i_internal_debug_api_read_data(api_read_data_debug),
+
+    .o_internal_parser_api_cs(api_cs_parser),
+    .i_internal_parser_api_read_data(api_read_data_parser)
   );
 
   //----------------------------------------------------------------
@@ -719,6 +724,12 @@ module nts_engine #(
    .o_busy(parser_busy),
 
    .i_clear(1'b0), //currently no soft reset implemented
+
+   .i_api_cs(api_cs_parser),
+   .i_api_we(api_we),
+   .i_api_address(api_address),
+   .i_api_write_data(api_write_data),
+   .o_api_read_data(api_read_data_parser),
 
    .i_process_initial(i_dispatch_rx_fifo_rd_valid),
    .i_last_word_data_valid(i_dispatch_rx_data_last_valid),

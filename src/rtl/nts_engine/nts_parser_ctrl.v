@@ -46,6 +46,12 @@ module nts_parser_ctrl #(
 
   output wire                         o_busy,
 
+  input  wire                         i_api_cs,
+  input  wire                         i_api_we,
+  input  wire                   [7:0] i_api_address,
+  input  wire                  [31:0] i_api_write_data,
+  output wire                  [31:0] o_api_read_data,
+
   input  wire                         i_clear,
   input  wire                         i_process_initial,
   input  wire                   [7:0] i_last_word_data_valid,
@@ -114,6 +120,21 @@ module nts_parser_ctrl #(
   output wire                         o_statistics_nts_bad_auth,
   output wire                         o_statistics_nts_bad_keyid
 );
+
+  //----------------------------------------------------------------
+  // API. Internal constant and parameter definitions.
+  //----------------------------------------------------------------
+
+  localparam CORE_NAME    = 64'h70_61_72_73_65_72_20_20; //"parser  "
+  localparam CORE_VERSION = 32'h30_2e_30_31;
+
+  localparam ADDR_NAME0        =    0;
+  localparam ADDR_NAME1        =    1;
+  localparam ADDR_VERSION      =    2;
+  localparam ADDR_STATE        = 'h10;
+  localparam ADDR_STATE_CRYPTO = 'h12;
+  localparam ADDR_ERROR_STATE  = 'h13;
+  localparam ADDR_ERROR_COUNT  = 'h14;
 
   //----------------------------------------------------------------
   // Internal constant and parameter definitions.
@@ -205,6 +226,14 @@ module nts_parser_ctrl #(
   reg                  [31:0] cookie_server_id_new;
   reg                  [31:0] cookie_server_id_reg;
 
+  reg                         error_state_we;
+  reg                   [3:0] error_state_new;
+  reg                   [3:0] error_state_reg;
+
+  reg                         error_count_we;
+  reg                  [31:0] error_count_new;
+  reg                  [31:0] error_count_reg;
+
   reg                         crypto_fsm_we;
   reg                   [3:0] crypto_fsm_new;
   reg                   [3:0] crypto_fsm_reg;
@@ -212,6 +241,7 @@ module nts_parser_ctrl #(
   reg                         state_we;
   reg                   [3:0] state_new;
   reg                   [3:0] state_reg;
+  reg                   [3:0] state_previous_reg;
 
   reg                         word_counter_we;
   reg        [ADDR_WIDTH-1:0] word_counter_new;
@@ -317,6 +347,8 @@ module nts_parser_ctrl #(
   // Wires.
   //----------------------------------------------------------------
 
+  reg [31:0] api_read_data;
+
   reg crypto_op_cookie_verify;
   reg crypto_op_cookie_loadkeys;
   reg crypto_op_c2s_verify_auth;
@@ -353,6 +385,8 @@ module nts_parser_ctrl #(
   assign o_access_port_addr     = access_port_addr_reg;
   assign o_access_port_rd_en    = access_port_rd_en_reg;
   assign o_access_port_wordsize = access_port_wordsize_reg;
+
+  assign o_api_read_data = api_read_data;
 
   assign o_keymem_key_word        = keymem_key_word_reg;
   assign o_keymem_get_key_with_id = keymem_get_key_with_id_reg;
@@ -459,6 +493,49 @@ module nts_parser_ctrl #(
   endtask
 
   //----------------------------------------------------------------
+  // API
+  //----------------------------------------------------------------
+
+  always @*
+  begin
+    api_read_data = 0;
+    if (i_api_cs) begin
+      if (i_api_we) begin
+        ;
+      end else begin
+        case (i_api_address)
+          ADDR_NAME0: api_read_data = CORE_NAME[63:32];
+          ADDR_NAME1: api_read_data = CORE_NAME[31:0];
+          ADDR_VERSION: api_read_data = CORE_VERSION;
+          ADDR_STATE: api_read_data = { 28'h0, state_reg };
+          ADDR_STATE_CRYPTO: api_read_data = { 28'h0, crypto_fsm_reg };
+          ADDR_ERROR_STATE: api_read_data = error_state_reg;
+          ADDR_ERROR_COUNT: api_read_data = error_count_reg;
+          default: ;
+        endcase
+      end
+    end
+  end
+
+  //----------------------------------------------------------------
+  // API debug helpers
+  //----------------------------------------------------------------
+
+  always @*
+  begin
+    error_count_we = 0;
+    error_count_new = 0;
+    error_state_we = 0;
+    error_state_new = 0;
+    if (state_reg == STATE_ERROR_GENERAL) begin
+      error_count_we = 1;
+      error_count_new = error_count_reg + 1;
+      error_state_we = 1;
+      error_state_new = state_previous_reg;
+    end
+  end
+
+  //----------------------------------------------------------------
   // Register Update
   // Update functionality for all registers in the core.
   // All registers are positive edge triggered with asynchronous
@@ -475,6 +552,9 @@ module nts_parser_ctrl #(
       cookie_server_id_reg       <= 'b0;
 
       crypto_fsm_reg             <= CRYPTO_FSM_IDLE;
+
+      error_count_reg            <= 'b0;
+      error_state_reg            <= 'b0;
 
       ipdecode_ip_version_reg    <= 'b0;
       ipdecode_ip4_ihl_reg       <= 'b0;
@@ -495,7 +575,8 @@ module nts_parser_ctrl #(
       nts_cookie_start_addr_reg            <= 'b0;
       nts_valid_placeholders_reg           <= 'b0;
 
-      state_reg                  <= 'b0;
+      state_reg                     <= 'b0;
+      state_previous_reg            <= 'b0;
 
       statistics_nts_processed_reg  <= 0;
       statistics_nts_bad_cookie_reg <= 0;
@@ -535,6 +616,12 @@ module nts_parser_ctrl #(
 
       if (cookie_server_id_we)
         cookie_server_id_reg <= cookie_server_id_new;
+
+      if (error_count_we)
+        error_count_reg <= error_count_new;
+
+      if (error_state_we)
+        error_state_reg <= error_state_new;
 
       if (ipdecode_ethernet_protocol_we)
         ipdecode_ethernet_protocol_reg <= ipdecode_ethernet_protocol_new;
@@ -589,8 +676,10 @@ module nts_parser_ctrl #(
       nts_cookie_start_addr_reg <= nts_cookie_start_addr_new;
       nts_valid_placeholders_reg <= nts_valid_placeholders_new;
 
-      if (state_we)
+      if (state_we) begin
         state_reg <= state_new;
+        state_previous_reg <= state_reg;
+      end
 
       statistics_nts_processed_reg  <= statistics_nts_processed_new;
       statistics_nts_bad_cookie_reg <= statistics_nts_bad_cookie_new;
@@ -1269,7 +1358,7 @@ module nts_parser_ctrl #(
           end else if (ntp_extension_counter_reg==NTP_EXTENSION_FIELDS-1) begin
             state_we  = 'b1;
             state_new = STATE_ERROR_GENERAL;
-            $display("%s:%0d ",`__FILE__,`__LINE__);
+            //$display("%s:%0d ",`__FILE__,`__LINE__);
           end
         end
       STATE_EXTENSIONS_EXTRACTED:
@@ -1279,22 +1368,8 @@ module nts_parser_ctrl #(
         end else begin
           state_we  = 'b1;
           state_new = STATE_ERROR_GENERAL;
-          $display("%s:%0d packet rejected!",`__FILE__,`__LINE__);
+          //$display("%s:%0d packet rejected!",`__FILE__,`__LINE__);
         end
-/*
-        if (detect_nts_cookie_reg) begin
-          if (ntp_extension_length_reg[detect_nts_cookie_index_reg] >= 8) begin
-            state_we  = 'b1;
-            state_new = STATE_EXTRACT_COOKIE_FROM_RAM;
-          end else begin
-            state_we  = 'b1;
-            state_new = STATE_ERROR_GENERAL;
-          end
-        end else begin
-          state_we  = 'b1;
-          state_new = STATE_ERROR_GENERAL;
-        end
-*/
       STATE_EXTRACT_COOKIE_FROM_RAM:
         if (i_access_port_rd_dv) begin
           state_we  = 'b1;
@@ -1307,7 +1382,7 @@ module nts_parser_ctrl #(
             state_new = STATE_VERIFY_KEY_FROM_COOKIE2;
           end else begin
             state_we  = 'b1;
-            state_new = STATE_ERROR_UNIMPLEMENTED;
+            state_new = STATE_ERROR_GENERAL;
           end
         end
       STATE_VERIFY_KEY_FROM_COOKIE2:
@@ -1570,27 +1645,5 @@ module nts_parser_ctrl #(
            (crypto_fsm_new==CRYPTO_FSM_DONE_SUCCESS) ? "Win!" : ((crypto_fsm_new==CRYPTO_FSM_DONE_FAILURE)?"Fail":"...."));
     end
   endgenerate
-/*
-  always @ (posedge i_clk, posedge i_areset)
-  begin : debug_messages
-    if (i_areset == 1'b1) begin
-      ;
-    end else begin
-      case (state_reg)
-        STATE_IDLE: ;
-        STATE_COPY: ; //$display("%s:%0d STATE_COPY", `__FILE__, `__LINE__);
-        STATE_LENGTH_CHECKS: ; //$display("%s:%0d STATE_LENGTH_CHECKS", `__FILE__, `__LINE__);
-        STATE_EXTRACT_EXT_FROM_RAM: ; //$display("%s:%0d STATE_EXTRACT_EXT_FROM_RAM", `__FILE__, `__LINE__);
-        STATE_EXTRACT_COOKIE_FROM_RAM: $display("%s:%0d STATE_EXTRACT_COOKIE_FROM_RAM", `__FILE__, `__LINE__);
-        STATE_EXTENSIONS_EXTRACTED: $display("%s:%0d STATE_EXTENSIONS_EXTRACTED", `__FILE__, `__LINE__);
-        STATE_VERIFY_KEY_FROM_COOKIE1: $display("%s:%0d STATE_VERIFY_KEY_FROM_COOKIE1", `__FILE__, `__LINE__);
-        STATE_VERIFY_KEY_FROM_COOKIE2: $display("%s:%0d STATE_VERIFY_KEY_FROM_COOKIE2", `__FILE__, `__LINE__);
-        STATE_TIMESTAMP: $display("%s:%0d TIMESTAMP", `__FILE__, `__LINE__);
-        STATE_TIMESTAMP_WAIT: $display("%s:%0d TIMESTAMP_WAIT", `__FILE__, `__LINE__);
-        STATE_ERROR_GENERAL: $display("%s:%0d warning: error", `__FILE__, `__LINE__);
-        default: $display("%s:%0d warning: state %0d not implemented", `__FILE__, `__LINE__, state_reg);
-      endcase
-    end
-  end
-*/
+
 endmodule

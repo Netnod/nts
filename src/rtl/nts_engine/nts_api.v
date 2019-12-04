@@ -38,7 +38,9 @@ module nts_api #(
   parameter [11:0] ADDR_KEYMEM_BASE = 12'h080,
   parameter [11:0] ADDR_KEYMEM_STOP = 12'h17F,
   parameter [11:0] ADDR_DEBUG_BASE  = 12'h180,
-  parameter [11:0] ADDR_DEBUG_STOP  = 12'h1F0
+  parameter [11:0] ADDR_DEBUG_STOP  = 12'h1F0,
+  parameter [11:0] ADDR_PARSER_BASE = 12'h200,
+  parameter [11:0] ADDR_PARSER_STOP = 12'h2FF
 ) (
   input  wire        i_external_api_cs,
   input  wire        i_external_api_we,
@@ -63,7 +65,10 @@ module nts_api #(
   input  wire [31:0] i_internal_keymem_api_read_data,
 
   output wire        o_internal_debug_api_cs,
-  input  wire [31:0] i_internal_debug_api_read_data
+  input  wire [31:0] i_internal_debug_api_read_data,
+
+  output wire        o_internal_parser_api_cs,
+  input  wire [31:0] i_internal_parser_api_read_data
 );
 
   wire        select_engine;
@@ -71,27 +76,27 @@ module nts_api #(
   wire        select_cookie;
   wire        select_keymem;
   wire        select_debug;
+  wire        select_parser;
   wire [11:0] addr_offset;
-//wire [11:0] addr_calculated;
   reg   [7:0] addr_calculated;
 
 
-  assign select_engine             = /*(i_external_api_address >= ADDR_ENGINE_BASE) && */ (i_external_api_address <= ADDR_ENGINE_STOP);
+  assign select_engine             = (i_external_api_address <= ADDR_ENGINE_STOP);
   assign select_clock              = (i_external_api_address >= ADDR_CLOCK_BASE)  && (i_external_api_address <= ADDR_CLOCK_STOP);
   assign select_cookie             = (i_external_api_address >= ADDR_COOKIE_BASE) && (i_external_api_address <= ADDR_COOKIE_STOP);
   assign select_keymem             = (i_external_api_address >= ADDR_KEYMEM_BASE) && (i_external_api_address <= ADDR_KEYMEM_STOP);
   assign select_debug              = (i_external_api_address >= ADDR_DEBUG_BASE)  && (i_external_api_address <= ADDR_DEBUG_STOP);
+  assign select_parser             = (i_external_api_address >= ADDR_PARSER_BASE)  && (i_external_api_address <= ADDR_PARSER_STOP);
+
 
   assign addr_offset               = select_engine ? ADDR_ENGINE_BASE : (
                                      select_clock  ? ADDR_CLOCK_BASE : (
                                      select_cookie ? ADDR_COOKIE_BASE : (
                                      select_keymem ? ADDR_KEYMEM_BASE  : (
-                                     select_debug  ? ADDR_DEBUG_BASE : 0 ))));
-
-//assign addr_calculated           = i_external_api_address - addr_offset;
+                                     select_debug  ? ADDR_DEBUG_BASE : (
+                                     select_parser ? ADDR_PARSER_BASE : 0 )))));
 
   assign o_internal_api_we         = i_external_api_we;
-//assign o_internal_api_address    = addr_calculated[7:0];
   assign o_internal_api_address    = addr_calculated;
   assign o_internal_api_write_data = i_external_api_write_data;
 
@@ -100,14 +105,16 @@ module nts_api #(
   assign o_internal_cookie_api_cs  = i_external_api_cs && select_cookie;
   assign o_internal_keymem_api_cs  = i_external_api_cs && select_keymem;
   assign o_internal_debug_api_cs   = i_external_api_cs && select_debug;
+  assign o_internal_parser_api_cs  = i_external_api_cs && select_parser;
 
   assign o_external_api_read_data  = i_external_api_cs ? (
                                        select_engine ? i_internal_engine_api_read_data : (
                                        select_clock  ? i_internal_clock_api_read_data : (
                                        select_cookie ? i_internal_cookie_api_read_data : (
                                        select_keymem ? i_internal_keymem_api_read_data  : (
-                                       select_debug  ? i_internal_debug_api_read_data :
-                                       0 ))))
+                                       select_debug  ? i_internal_debug_api_read_data : (
+                                       select_parser ? i_internal_parser_api_read_data :
+                                       0 )))))
                                      ) : 0;
 
   always @*
@@ -115,7 +122,10 @@ module nts_api #(
     reg [11:0] a;
     a = i_external_api_address;
     a = a - addr_offset;
-    addr_calculated = a[7:0];
+    if (a[11:8] != 0)
+      addr_calculated = 0; //Unexpected error
+    else
+      addr_calculated = a[7:0];
   end
 
 endmodule

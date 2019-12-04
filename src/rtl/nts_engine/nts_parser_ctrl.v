@@ -663,7 +663,7 @@ module nts_parser_ctrl #(
         ntp_extension_copied_reg [ntp_extension_counter_reg] <= ntp_extension_copied_new;
 
       if (ntp_extension_we) begin
-        $display("%s:%0d ntp_ext[%0d] = tag:%h,length:%h,addr:%h", `__FILE__, `__LINE__, ntp_extension_counter_reg, ntp_extension_tag_new, ntp_extension_length_new, ntp_extension_addr_new);
+        //$display("%s:%0d ntp_ext[%0d] = tag:%h,length:%h,addr:%h", `__FILE__, `__LINE__, ntp_extension_counter_reg, ntp_extension_tag_new, ntp_extension_length_new, ntp_extension_addr_new);
         ntp_extension_addr_reg   [ntp_extension_counter_reg] <= ntp_extension_addr_new;
         ntp_extension_tag_reg    [ntp_extension_counter_reg] <= ntp_extension_tag_new;
         ntp_extension_length_reg [ntp_extension_counter_reg] <= ntp_extension_length_new;
@@ -811,7 +811,7 @@ module nts_parser_ctrl #(
             unique_idenfifiers = unique_idenfifiers + 1;
             //5.3. The string MUST be at least 32 octets long.
             if (ntp_extension_length_reg[j] < LEN_NTS_MIN_UNIQUE_IDENT) begin
-              $display("%s:%0d Length: %0d, required: %0d", `__FILE__, `__LINE__, ntp_extension_length_reg[j], LEN_NTS_MIN_UNIQUE_IDENT);
+              //$display("%s:%0d Length: %0d, required: %0d", `__FILE__, `__LINE__, ntp_extension_length_reg[j], LEN_NTS_MIN_UNIQUE_IDENT);
               evil_packet = 1;
             end
           end
@@ -820,7 +820,7 @@ module nts_parser_ctrl #(
             cookies = cookies + 1;
             nts_cookie_start_addr_new = ntp_extension_addr_reg[j];
             if (ntp_extension_length_reg[j] != LEN_NTS_COOKIE ) begin
-              $display("%s:%0d Length: %0d, required: %0d", `__FILE__, `__LINE__, ntp_extension_length_reg[j], LEN_NTS_COOKIE);
+              //$display("%s:%0d Length: %0d, required: %0d", `__FILE__, `__LINE__, ntp_extension_length_reg[j], LEN_NTS_COOKIE);
               evil_packet = 1;
             end
           end
@@ -831,7 +831,7 @@ module nts_parser_ctrl #(
             //     the same as the body length of the NTS Cookie extension field.
             // => Approximation: same length rules
             if (ntp_extension_length_reg[j] != LEN_NTS_COOKIE ) begin
-              $display("%s:%0d Length: %0d, required: %0d", `__FILE__, `__LINE__, ntp_extension_length_reg[j], LEN_NTS_COOKIE);
+              //$display("%s:%0d Length: %0d, required: %0d", `__FILE__, `__LINE__, ntp_extension_length_reg[j], LEN_NTS_COOKIE);
               evil_packet = 1;
             end
             // NOTE:
@@ -843,7 +843,7 @@ module nts_parser_ctrl #(
             authenticators = authenticators  + 1;
             nts_authenticator_start_addr_new = ntp_extension_addr_reg[j];
             if (ntp_extension_length_reg[j] != LEN_NTS_AUTHENTICATOR ) begin
-              $display("%s:%0d Length: %0d, required: %0d", `__FILE__, `__LINE__, ntp_extension_length_reg[j], LEN_NTS_AUTHENTICATOR);
+              //$display("%s:%0d Length: %0d, required: %0d", `__FILE__, `__LINE__, ntp_extension_length_reg[j], LEN_NTS_AUTHENTICATOR);
               evil_packet = 1;
             end
           end
@@ -981,7 +981,7 @@ module nts_parser_ctrl #(
       end else if (state_reg == STATE_EXTRACT_COOKIE_FROM_RAM) begin
         //TODO add support for multiple cookies
         if (i_access_port_rd_dv) begin
-          $display("%s:%0d i_access_port_rd_data=%h",`__FILE__, `__LINE__, i_access_port_rd_data);
+          //$display("%s:%0d i_access_port_rd_data=%h",`__FILE__, `__LINE__, i_access_port_rd_data);
           ;
         end else if (i_access_port_wait == 'b0) begin
           access_port_addr_we      = 'b1;
@@ -993,11 +993,6 @@ module nts_parser_ctrl #(
         end
       end
     end
-  end
-
-  always @*
-  begin
-   $display("%s:%0d keymem_get_key_with_id_we = %h", `__FILE__, `__LINE__, keymem_get_key_with_id_we);
   end
 
   always @*
@@ -1037,18 +1032,18 @@ module nts_parser_ctrl #(
           if (i_keymem_ready && keymem_get_key_with_id_reg == 'b0) begin
             if (i_keymem_key_valid == 'b0) begin
                ; // reset, zero all output
-               $display("%s:%0d STATE_VERIFY_KEY_FROM_COOKIE2", `__FILE__, `__LINE__);
+               //$display("%s:%0d STATE_VERIFY_KEY_FROM_COOKIE2", `__FILE__, `__LINE__);
             end else if (keymem_key_word_reg == 'b1111) begin
               keymem_get_key_with_id_we  = 'b1;
               ; // reset, zero all output
-              $display("%s:%0d STATE_VERIFY_KEY_FROM_COOKIE2", `__FILE__, `__LINE__);
+              //$display("%s:%0d STATE_VERIFY_KEY_FROM_COOKIE2", `__FILE__, `__LINE__);
             end else begin
               // Yay! We read a key word
               keymem_key_word_we         = 'b1;
               keymem_key_word_new        = keymem_key_word_reg + 1;
               keymem_get_key_with_id_we  = 'b1;
               keymem_get_key_with_id_new = 'b1;
-              $display("%s:%0d STATE_VERIFY_KEY_FROM_COOKIE2 keymem_key_word_reg = %h keymem_key_word_new = %h", `__FILE__, `__LINE__, keymem_key_word_reg, keymem_key_word_new);
+              //$display("%s:%0d STATE_VERIFY_KEY_FROM_COOKIE2 keymem_key_word_reg = %h keymem_key_word_new = %h", `__FILE__, `__LINE__, keymem_key_word_reg, keymem_key_word_new);
             end
           end
         end
@@ -1065,7 +1060,7 @@ module nts_parser_ctrl #(
       if (i_access_port_rd_dv) begin
         cookie_server_id_we  = 'b1;
         cookie_server_id_new = i_access_port_rd_data[31:0];
-        $display("%s:%0d cookie_server_id we=%h new=%h", `__FILE__, `__LINE__, cookie_server_id_we, i_access_port_rd_data[31:0]);
+        //$display("%s:%0d cookie_server_id we=%h new=%h", `__FILE__, `__LINE__, cookie_server_id_we, i_access_port_rd_data[31:0]);
       end
     end
   end
@@ -1352,7 +1347,7 @@ module nts_parser_ctrl #(
           if (memory_address_failure_reg == 'b1) begin
             state_we  = 'b1;
             state_new = STATE_ERROR_GENERAL;
-            $display("%s:%0d memory_address_failure_reg %h",`__FILE__,`__LINE__, memory_address_failure_reg);
+            //$display("%s:%0d memory_address_failure_reg %h",`__FILE__,`__LINE__, memory_address_failure_reg);
           end else if (memory_address_lastbyte_read_reg == 1'b1) begin
             state_we  = 'b1;
             state_new = STATE_EXTENSIONS_EXTRACTED;
@@ -1517,27 +1512,27 @@ module nts_parser_ctrl #(
         if (word_counter_reg == 4) begin
           timestamp_version_number_we  = 1;
           timestamp_version_number_new = i_data[45:43];
-          $display("%s:%0d timestamp_version_number_new=%h", `__FILE__, `__LINE__, timestamp_version_number_new);
+          //$display("%s:%0d timestamp_version_number_new=%h", `__FILE__, `__LINE__, timestamp_version_number_new);
         end else if (word_counter_reg == 9) begin
           timestamp_origin_timestamp_we  = 1;
           timestamp_origin_timestamp_new = { i_data[47:0], 16'h0 };
         end else if (word_counter_reg == 10) begin
           timestamp_origin_timestamp_we  = 1;
           timestamp_origin_timestamp_new = { timestamp_origin_timestamp_reg[63:16], i_data[63:48] };
-          $display("%s:%0d timestamp_origin_timestamp_new=%h", `__FILE__, `__LINE__, timestamp_origin_timestamp_new);
+          //$display("%s:%0d timestamp_origin_timestamp_new=%h", `__FILE__, `__LINE__, timestamp_origin_timestamp_new);
         end
       end if (detect_ipv6) begin
         if (word_counter_reg == 6) begin
           timestamp_version_number_we  = 1;
           timestamp_version_number_new = i_data[13:11];
-          $display("%s:%0d timestamp_version_number_new=%h", `__FILE__, `__LINE__, timestamp_version_number_new);
+          //$display("%s:%0d timestamp_version_number_new=%h", `__FILE__, `__LINE__, timestamp_version_number_new);
         end else if (word_counter_reg == 11) begin
           timestamp_origin_timestamp_we  = 1;
           timestamp_origin_timestamp_new = { i_data[15:0], 48'h0 };
         end else if (word_counter_reg == 12) begin
           timestamp_origin_timestamp_we  = 1;
           timestamp_origin_timestamp_new = { timestamp_origin_timestamp_reg[63:48], i_data[63:16] };
-          $display("%s:%0d timestamp_origin_timestamp_new=%h", `__FILE__, `__LINE__, timestamp_origin_timestamp_new);
+          //$display("%s:%0d timestamp_origin_timestamp_new=%h", `__FILE__, `__LINE__, timestamp_origin_timestamp_new);
         end
       end
     end
@@ -1629,22 +1624,5 @@ module nts_parser_ctrl #(
       default: ;
     endcase
   end
-
-  //----------------------------------------------------------------
-  // Debug messages
-  // Only emits messages that are useful for running local debug
-  //----------------------------------------------------------------
-
-  generate
-    if (DEBUG_OUTPUT) begin
-      always @(posedge i_clk)
-        if (crypto_fsm_we == 1)
-          $display("%s:%0d State: %h CRYPTO_FSM state %h => %h [%s]",`__FILE__,`__LINE__,
-            state_reg,
-            crypto_fsm_reg,
-            crypto_fsm_new,
-           (crypto_fsm_new==CRYPTO_FSM_DONE_SUCCESS) ? "Win!" : ((crypto_fsm_new==CRYPTO_FSM_DONE_FAILURE)?"Fail":"...."));
-    end
-  endgenerate
 
 endmodule

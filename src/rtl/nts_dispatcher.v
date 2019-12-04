@@ -31,7 +31,7 @@
 module nts_dispatcher #(
   parameter ADDR_WIDTH = 8,
   parameter ENGINES = 1,
-  parameter DEBUG = 1
+  parameter DEBUG = 0
 ) (
   input  wire        i_areset, // async reset
   input  wire        i_clk,
@@ -731,8 +731,8 @@ module nts_dispatcher #(
       default:
         begin
           mac_rx_corrected = i_rx_data;
-          if (DEBUG)
-            $display("%s:%0d Unexpected i_rx_data_valid: %b",  `__FILE__, `__LINE__, i_rx_data_valid );
+          //if (DEBUG)
+            //$display("%s:%0d Unexpected i_rx_data_valid: %b",  `__FILE__, `__LINE__, i_rx_data_valid );
         end
     endcase
     if (bytes != 0) begin
@@ -792,11 +792,7 @@ module nts_dispatcher #(
             bus_we_new = 1;
             enable_by_cmd = 1;
           end
-        default:
-          begin
-            if (DEBUG)
-              $display("%s:%0d Unexpected cmd: %h (engine_ctrl_reg: %h)",  `__FILE__, `__LINE__, cmd, engine_ctrl_reg );
-          end
+        default: ;
       endcase
 
       if (enable_by_cmd) begin
@@ -947,7 +943,7 @@ module nts_dispatcher #(
                 ram_w_data_new_rx = mac_rx_corrected; // i_rx_data but last word shifted logically correct
               end
               if (i_rx_good_frame) begin
-                $display("%s:%0d data_valid: %h (%b)", `__FILE__, `__LINE__, i_rx_data_valid, i_rx_data_valid);
+                //$display("%s:%0d data_valid: %h (%b)", `__FILE__, `__LINE__, i_rx_data_valid, i_rx_data_valid);
                 data_valid_new_rx = i_rx_data_valid;
                 mem_state_rx_new  = STATE_PACKET_RECEIVED;
               end
@@ -963,12 +959,4 @@ module nts_dispatcher #(
     end // not bad frame
   end //always begin
 
-  if (DEBUG>0) begin
-    always @*
-      $display("%s:%0d mem_state[0]: %h", `__FILE__, `__LINE__, mem_state_reg[0]);
-    always @*
-      $display("%s:%0d mem_state[1]: %h", `__FILE__, `__LINE__, mem_state_reg[1]);
-    always @*
-      $display("%s:%0d current_mem: %h", `__FILE__, `__LINE__, current_mem_reg);
-  end
 endmodule

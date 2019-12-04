@@ -552,6 +552,74 @@ module nts_top_tb;
     #5 i_clk = ~i_clk;
   end
 
+
+  if (DEBUG>0) begin
+    always @(posedge i_clk)
+      if (dut.engine.parser.ntp_extension_we)
+        $display("%s:%0d ntp_ext[%0d] = tag:%h,length:%h,addr:%h",
+          `__FILE__,
+          `__LINE__,
+          dut.engine.parser.ntp_extension_counter_reg,
+          dut.engine.parser.ntp_extension_tag_new,
+          dut.engine.parser.ntp_extension_length_new,
+          dut.engine.parser.ntp_extension_addr_new
+        );
+      always @(posedge i_clk)
+        if (dut.engine.parser.crypto_fsm_we == 1)
+          $display("%s:%0d State: %h CRYPTO_FSM state %h => %h [%s]",`__FILE__,`__LINE__,
+            dut.engine.parser.state_reg,
+            dut.engine.parser.crypto_fsm_reg,
+            dut.engine.parser.crypto_fsm_new,
+           (dut.engine.parser.crypto_fsm_new==dut.engine.parser.CRYPTO_FSM_DONE_SUCCESS) ? "Win!" : ((dut.engine.parser.crypto_fsm_new==dut.engine.parser.CRYPTO_FSM_DONE_FAILURE)?"Fail":"...."));
+      always @*
+        $display("%s:%0d dut.o_dispatch_counter=%h (ignored)",  `__FILE__, `__LINE__, dut.dispatcher.o_dispatch_counter);
+      always @*
+        begin : tmp___
+          integer engine_index;
+          for (engine_index = 0; engine_index < ENGINES; engine_index = engine_index + 1)
+            if (dut.engine_busy[dut.engine_index]==1'b0)
+              $display("%s:%0d detect UI:%b C:%b CP:%b A:%b",  `__FILE__, `__LINE__,
+                dut.engine_debug_detect_unique_identifier[engine_index],
+                dut.engine_debug_detect_nts_cookie[engine_index],
+                dut.engine_debug_detect_nts_cookie_placeholder[engine_index],
+                dut.engine_debug_detect_nts_authenticator[engine_index]);
+        end
+      always @*
+        $display("%s:%0d dut.engine.crypto.key_master_reg: %h", `__FILE__, `__LINE__, dut.engine.crypto.key_master_reg);
+      always @*
+        $display("%s:%0d dut.engine.crypto.key_current_reg: %h", `__FILE__, `__LINE__, dut.engine.crypto.key_current_reg);
+      always @*
+        $display("%s:%0d dut.engine.crypto.key_c2s_reg: %h", `__FILE__, `__LINE__, dut.engine.crypto.key_c2s_reg);
+      always @*
+        $display("%s:%0d dut.engine.crypto.key_s2c_reg: %h", `__FILE__, `__LINE__, dut.engine.crypto.key_s2c_reg);
+      always @*
+        $display("%s:%0d dut.engine.parser.state_reg: %h", `__FILE__, `__LINE__, dut.engine.parser.state_reg);
+      always @*
+        $display("%s:%0d dut.engine.parser.i_last_word_data_valid: %b", `__FILE__, `__LINE__, dut.engine.parser.i_last_word_data_valid);
+      always @*
+        $display("%s:%0d dut.engine.parser.word_counter_reg: %h", `__FILE__, `__LINE__, dut.engine.parser.word_counter_reg);
+      always @*
+        $display("%s:%0d dut.engine.parser.ipdecode_udp_length_reg: %h (%0d)", `__FILE__, `__LINE__, dut.engine.parser.ipdecode_udp_length_reg, dut.engine.parser.ipdecode_udp_length_reg);
+      always @*
+        $display("%s:%0d dut.engine.parser.detect_ipv4: %b detect_ipv6: %b", `__FILE__, `__LINE__, dut.engine.parser.detect_ipv4, dut.engine.parser.detect_ipv6);
+      always @*
+        $display("%s:%0d dut.engine.i_dispatch_rx_fifo_rd_data: %h", `__FILE__, `__LINE__, dut.engine.i_dispatch_rx_fifo_rd_data);
+      always @*
+        $display("%s:%0d dut.engine.i_dispatch_rx_fifo_rd_valid: %h",  `__FILE__, `__LINE__, dut.engine.i_dispatch_rx_fifo_rd_valid);
+      always @*
+        $display("%s:%0d dut.dispatcher.mem_state[0]: %h", `__FILE__, `__LINE__, dut.dispatcher.mem_state_reg[0]);
+      always @*
+        $display("%s:%0d dut.dispatcher.mem_state[1]: %h", `__FILE__, `__LINE__, dut.dispatcher.mem_state_reg[1]);
+      always @*
+        $display("%s:%0d dut.dispatcher.current_mem: %h", `__FILE__, `__LINE__, dut.dispatcher.current_mem_reg);
+      always @*
+        if (dut.i_dispatch_tx_packet_read_DUMMY)
+          $display("%s:%0d dut.o_dispatch_tx_bytes_last_word_DUMMY=%b (ignored)",  `__FILE__, `__LINE__, dut.o_dispatch_tx_bytes_last_word_DUMMY);
+      always @*
+        $display("%s:%0d  dut.o_dispatch_tx_fifo_rd_data_DUMMY=%h (ignored)",  `__FILE__, `__LINE__, dut.o_dispatch_tx_fifo_rd_data_DUMMY);
+
+  end
+
   //----------------------------------------------------------------
   // Benchmarking registers
   //----------------------------------------------------------------

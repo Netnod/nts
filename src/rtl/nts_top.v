@@ -1,6 +1,5 @@
 module nts_top #(
   parameter ENGINES         = 1, //Beware: only ENGINES=1 supported for now
-  parameter DEBUG           = 1,
   parameter ADDR_WIDTH      = 7,
   parameter API_ADDR_WIDTH  = 12,
   parameter API_RW_WIDTH    = 32,
@@ -120,11 +119,6 @@ module nts_top #(
     .i_engine_read_data(api_read_data)
   );
 
-  if (DEBUG) begin
-    always @*
-      $display("%s:%0d  o_dispatch_counter=%h (ignored)",  `__FILE__, `__LINE__, o_dispatch_counter);
-  end
-
   //----------------------------------------------------------------
   // NTS Engine(s)
   //----------------------------------------------------------------
@@ -174,41 +168,7 @@ module nts_top #(
         .o_detect_nts_cookie_placeholder(engine_debug_detect_nts_cookie_placeholder[engine_index]),
         .o_detect_nts_authenticator(engine_debug_detect_nts_authenticator[engine_index])
       );
-
-      if (DEBUG) begin
-        always @*
-          if (engine_busy[engine_index]==1'b0) begin
-            $display("%s:%0d detect UI:%b C:%b CP:%b A:%b",  `__FILE__, `__LINE__,
-              engine_debug_detect_unique_identifier[engine_index],
-              engine_debug_detect_nts_cookie[engine_index],
-              engine_debug_detect_nts_cookie_placeholder[engine_index],
-              engine_debug_detect_nts_authenticator[engine_index]);
-          end
-        always @*
-          $display("%s:%0d engine.crypto.key_master_reg: %h", `__FILE__, `__LINE__, engine.crypto.key_master_reg);
-        always @*
-          $display("%s:%0d engine.crypto.key_current_reg: %h", `__FILE__, `__LINE__, engine.crypto.key_current_reg);
-        always @*
-          $display("%s:%0d engine.crypto.key_c2s_reg: %h", `__FILE__, `__LINE__, engine.crypto.key_c2s_reg);
-        always @*
-          $display("%s:%0d engine.crypto.key_s2c_reg: %h", `__FILE__, `__LINE__, engine.crypto.key_s2c_reg);
-        always @*
-          $display("%s:%0d engine.parser.state_reg: %h", `__FILE__, `__LINE__, engine.parser.state_reg);
-        always @*
-          $display("%s:%0d engine.parser.i_last_word_data_valid: %b", `__FILE__, `__LINE__, engine.parser.i_last_word_data_valid);
-        always @*
-          $display("%s:%0d engine.parser.word_counter_reg: %h", `__FILE__, `__LINE__, engine.parser.word_counter_reg);
-        always @*
-          $display("%s:%0d engine.parser.ipdecode_udp_length_reg: %h (%0d)", `__FILE__, `__LINE__, engine.parser.ipdecode_udp_length_reg, engine.parser.ipdecode_udp_length_reg);
-        always @*
-          $display("%s:%0d engine.parser.detect_ipv4: %b detect_ipv6: %b", `__FILE__, `__LINE__, engine.parser.detect_ipv4, engine.parser.detect_ipv6);
-        always @*
-          $display("%s:%0d i_dispatch_rx_fifo_rd_data: %h", `__FILE__, `__LINE__, engine.i_dispatch_rx_fifo_rd_data);
-        always @*
-           $display("%s:%0d engine.i_dispatch_rx_fifo_rd_valid: %h",  `__FILE__, `__LINE__, engine.i_dispatch_rx_fifo_rd_valid);
-      end
 /*
-    end
   endgenerate
 */
   //----------------------------------------------------------------
@@ -238,14 +198,6 @@ module nts_top #(
         tx_receiving <= 'b1;
       end
     end
-  end
-
-  if (DEBUG) begin
-    always @*
-      if (i_dispatch_tx_packet_read_DUMMY)
-       $display("%s:%0d o_dispatch_tx_bytes_last_word_DUMMY=%b (ignored)",  `__FILE__, `__LINE__, o_dispatch_tx_bytes_last_word_DUMMY);
-    always @*
-      $display("%s:%0d  o_dispatch_tx_fifo_rd_data_DUMMY=%h (ignored)",  `__FILE__, `__LINE__, o_dispatch_tx_fifo_rd_data_DUMMY);
   end
 
   //----------------------------------------------------------------

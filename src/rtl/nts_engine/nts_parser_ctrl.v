@@ -135,6 +135,18 @@ module nts_parser_ctrl #(
   localparam ADDR_STATE_CRYPTO = 'h12;
   localparam ADDR_ERROR_STATE  = 'h13;
   localparam ADDR_ERROR_COUNT  = 'h14;
+  localparam ADDR_ERROR_CAUSE  = 'h15;
+
+  //----------------------------------------------------------------
+  // Error causes observable over API
+  //----------------------------------------------------------------
+
+  localparam ERROR_CAUSE_BAD_RXW        = 32'h42_52_58_57; //BRXW
+  localparam ERROR_CAUSE_TX_FULL        = 32'h54_46_55_4c; //TFUL
+  localparam ERROR_CAUSE_PKT_SHORT      = 32'h4c_50_4b_30; //LPK0
+  localparam ERROR_CAUSE_PKT_LONG       = 32'h4c_50_4b_31; //LPK1
+  localparam ERROR_CAUSE_PKT_UDP_ALIGN  = 32'h4c_50_4b_32; //LPK2
+  localparam ERROR_CAUSE_NTP_OUT_OF_MEM = 32'h4d_45_52_30; //MER0
 
   //----------------------------------------------------------------
   // Internal constant and parameter definitions.
@@ -229,6 +241,10 @@ module nts_parser_ctrl #(
   reg                         error_state_we;
   reg                   [3:0] error_state_new;
   reg                   [3:0] error_state_reg;
+
+  reg                         error_cause_we;
+  reg                  [31:0] error_cause_new;
+  reg                  [31:0] error_cause_reg;
 
   reg                         error_count_we;
   reg                  [31:0] error_count_new;
@@ -509,8 +525,9 @@ module nts_parser_ctrl #(
           ADDR_VERSION: api_read_data = CORE_VERSION;
           ADDR_STATE: api_read_data = { 28'h0, state_reg };
           ADDR_STATE_CRYPTO: api_read_data = { 28'h0, crypto_fsm_reg };
-          ADDR_ERROR_STATE: api_read_data = error_state_reg;
+          ADDR_ERROR_STATE: api_read_data = { 28'h0, error_state_reg };
           ADDR_ERROR_COUNT: api_read_data = error_count_reg;
+          ADDR_ERROR_CAUSE: api_read_data = error_cause_reg;
           default: ;
         endcase
       end
@@ -553,6 +570,7 @@ module nts_parser_ctrl #(
 
       crypto_fsm_reg             <= CRYPTO_FSM_IDLE;
 
+      error_cause_reg            <= 'b0;
       error_count_reg            <= 'b0;
       error_state_reg            <= 'b0;
 
@@ -617,6 +635,9 @@ module nts_parser_ctrl #(
 
       if (cookie_server_id_we)
         cookie_server_id_reg <= cookie_server_id_new;
+
+      if (error_cause_we)
+        error_cause_reg <= error_cause_new;
 
       if (error_count_we)
         error_count_reg <= error_count_new;
@@ -1288,6 +1309,20 @@ module nts_parser_ctrl #(
   end
 
   //----------------------------------------------------------------
+  // Finite State Machine - Set Error Task
+  // Goes to STATE_ERROR_GENERAL while setting an error cause
+  //----------------------------------------------------------------
+
+  task set_error_state( input [31:0] cause );
+  begin
+    state_we = 1;
+    state_new = STATE_ERROR_GENERAL;
+    error_cause_we = 1;
+    error_cause_new = cause;
+  end
+  endtask
+
+  //----------------------------------------------------------------
   // Finite State Machine
   // Overall functionallitty control
   //----------------------------------------------------------------
@@ -1296,6 +1331,9 @@ module nts_parser_ctrl #(
   begin : FSM
     state_we   = 'b0;
     state_new  = STATE_IDLE;
+
+    error_cause_we = 0;
+    error_cause_new = 0;
 
     if (i_clear)
       state_we  = 'b1;
@@ -1315,13 +1353,11 @@ module nts_parser_ctrl #(
               8'b00111111: ;
               8'b01111111: ;
               8'b11111111: ;
-              default: state_new = STATE_ERROR_GENERAL;
+              default: set_error_state( ERROR_CAUSE_BAD_RXW );
             endcase
           end
-          if (i_tx_full) begin
-            state_we  = 'b1;
-            state_new = STATE_ERROR_GENERAL;
-          end
+          if (i_tx_full)
+            set_error_state( ERROR_CAUSE_TX_FULL );
         end
       STATE_COPY:
         if (i_process_initial == 1'b0) begin
@@ -1332,13 +1368,13 @@ module nts_parser_ctrl #(
         begin
           state_we = 'b1;
           if (ipdecode_udp_length_reg < ( 8 /* UDP Header */ + 6*8 /* Minimum NTP Payload */ + 8 /* Smallest NTP extension */ ))
-            state_new = STATE_ERROR_GENERAL;
+            set_error_state( ERROR_CAUSE_PKT_SHORT );
           else if (ipdecode_udp_length_reg > 65507 /* IPv4 maximum UDP packet size */)
-            state_new  = STATE_ERROR_GENERAL;
+            set_error_state( ERROR_CAUSE_PKT_LONG );
           else if (ipdecode_udp_length_reg[1:0] != 0) /* NTP packets are 7*8 + M(4+4n), always 4 byte aligned */
-            state_new  = STATE_ERROR_GENERAL;
+            set_error_state( ERROR_CAUSE_PKT_UDP_ALIGN );
           else if (func_address_within_memory_bounds (ipdecode_offset_ntp_ext, 4) == 'b0)
-            state_new  = STATE_ERROR_GENERAL;
+            set_error_state( ERROR_CAUSE_NTP_OUT_OF_MEM );
           else
             state_new  = STATE_EXTRACT_EXT_FROM_RAM;
         end

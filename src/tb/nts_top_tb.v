@@ -293,6 +293,19 @@ module nts_top_tb;
   // Test bench tasks
   //----------------------------------------------------------------
 
+  function [63:0] mac_reverse( input [63:0] d );
+  begin
+    mac_reverse[56+:8] = d[0+:8]  ;
+    mac_reverse[48+:8] = d[8+:8]  ;
+    mac_reverse[40+:8] = d[16+:8] ;
+    mac_reverse[32+:8] = d[24+:8] ;
+    mac_reverse[24+:8] = d[32+:8] ;
+    mac_reverse[16+:8] = d[40+:8] ;
+    mac_reverse[8+:8]  = d[48+:8] ;
+    mac_reverse[0+:8]  = d[56+:8] ;
+  end
+  endfunction
+
   task send_packet (
     input [65535:0] source,
     input    [31:0] length,
@@ -311,13 +324,13 @@ module nts_top_tb;
     packet_ptr = 1;
     source_ptr = (length % 64);
     case (source_ptr)
-       56: packet[0] = { 8'b0111_1111,  8'b0, source[55:0] };
-       48: packet[0] = { 8'b0011_1111, 16'b0, source[47:0] };
-       40: packet[0] = { 8'b0001_1111, 24'b0, source[39:0] };
-       32: packet[0] = { 8'b0000_1111, 32'b0, source[31:0] };
-       24: packet[0] = { 8'b0000_0111, 40'b0, source[23:0] };
-       16: packet[0] = { 8'b0000_0011, 48'b0, source[15:0] };
-        8: packet[0] = { 8'b0000_0001, 56'b0, source[7:0] };
+       56: packet[0] = { 8'b0111_1111, mac_reverse( { source[55:0],  8'h0 } ) };
+       48: packet[0] = { 8'b0011_1111, mac_reverse( { source[47:0], 16'h0 } ) };
+       40: packet[0] = { 8'b0001_1111, mac_reverse( { source[39:0], 24'h0 } ) };
+       32: packet[0] = { 8'b0000_1111, mac_reverse( { source[31:0], 32'h0 } ) };
+       24: packet[0] = { 8'b0000_0111, mac_reverse( { source[23:0], 40'h0 } ) };
+       16: packet[0] = { 8'b0000_0011, mac_reverse( { source[15:0], 48'h0 } ) };
+        8: packet[0] = { 8'b0000_0001, mac_reverse( { source[7:0],  56'h0 } ) };
         0: packet_ptr = 0;
       default:
         `assert(0)
@@ -327,7 +340,7 @@ module nts_top_tb;
       if (DEBUG > 2) $display("%s:%0d %h %h", `__FILE__, `__LINE__, 0, packet[0]);
 
     for ( i = 0; i < length/64; i = i + 1) begin
-       packet[packet_ptr] = { 8'b1111_1111, source[source_ptr+:64] };
+       packet[packet_ptr] = { 8'b1111_1111, mac_reverse( source[source_ptr+:64] )};
        if (DEBUG > 2)
          $display("%s:%0d %h %h", `__FILE__, `__LINE__, packet_ptr, packet[packet_ptr]);
        source_ptr = source_ptr + 64;
@@ -616,8 +629,9 @@ module nts_top_tb;
         if (dut.i_dispatch_tx_packet_read_DUMMY)
           $display("%s:%0d dut.o_dispatch_tx_bytes_last_word_DUMMY=%b (ignored)",  `__FILE__, `__LINE__, dut.o_dispatch_tx_bytes_last_word_DUMMY);
       always @*
-        $display("%s:%0d  dut.o_dispatch_tx_fifo_rd_data_DUMMY=%h (ignored)",  `__FILE__, `__LINE__, dut.o_dispatch_tx_fifo_rd_data_DUMMY);
-
+        $display("%s:%0d dut.o_dispatch_tx_fifo_rd_data_DUMMY=%h (ignored)",  `__FILE__, `__LINE__, dut.o_dispatch_tx_fifo_rd_data_DUMMY);
+      always @*
+        $display("%s:%0d dut.dispatcher.mac_rx_corrected=%h <-----",  `__FILE__, `__LINE__, dut.dispatcher.mac_rx_corrected);
   end
 
   //----------------------------------------------------------------

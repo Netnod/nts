@@ -674,66 +674,41 @@ module nts_dispatcher #(
   //
   //----------------------------------------------------------------
 
+  function [63:0] mac_byte_reverse( input [63:0] rxd, input [7:0] rxv );
+  begin : reverse
+    reg [63:0] out;
+    out[56+:8] = rxv[0] ? rxd[0+:8]  : 8'h00;
+    out[48+:8] = rxv[1] ? rxd[8+:8]  : 8'h00;
+    out[40+:8] = rxv[2] ? rxd[16+:8] : 8'h00;
+    out[32+:8] = rxv[3] ? rxd[24+:8] : 8'h00;
+    out[24+:8] = rxv[4] ? rxd[32+:8] : 8'h00;
+    out[16+:8] = rxv[5] ? rxd[40+:8] : 8'h00;
+    out[8+:8]  = rxv[6] ? rxd[48+:8] : 8'h00;
+    out[0+:8]  = rxv[7] ? rxd[56+:8] : 8'h00;
+    mac_byte_reverse = out;
+  end
+  endfunction
+
   always @*
   begin : mac_rx_data_processor
     reg [3:0] bytes;
     bytes = 0;
     counter_bytes_rx_we = 0;
     counter_bytes_rx_new = 0;
-    mac_rx_corrected = 0;
+
+    mac_rx_corrected = mac_byte_reverse( i_rx_data, i_rx_data_valid );
 
     case (i_rx_data_valid)
-      8'b1111_1111:
-        begin
-          bytes = 8;
-          mac_rx_corrected = { i_rx_data };
-        end
-      8'b0111_1111:
-        begin
-          bytes = 7;
-          mac_rx_corrected = { i_rx_data[55:0],  8'h00 };
-        end
-      8'b0011_1111:
-        begin
-          bytes = 6;
-          mac_rx_corrected = { i_rx_data[47:0], 16'h0000 };
-        end
-      8'b0001_1111:
-         begin
-           bytes = 5;
-           mac_rx_corrected = { i_rx_data[39:0], 24'h000000 };
-         end
-      8'b0000_1111:
-         begin
-           bytes = 4;
-           mac_rx_corrected = { i_rx_data[31:0], 32'h00000000 };
-         end
-      8'b0000_0111:
-         begin
-           bytes = 3;
-            mac_rx_corrected = { i_rx_data[23:0], 40'h0000000000 };
-          end
-      8'b0000_0011:
-         begin
-           bytes = 2;
-           mac_rx_corrected = { i_rx_data[15:0], 48'h000000000000 };
-         end
-      8'b0000_0001:
-        begin
-          bytes = 1;
-          mac_rx_corrected = { i_rx_data[7:0],  56'h00000000000000 };
-        end
-      8'b0000_0000:
-        begin
-          bytes = 0;
-          mac_rx_corrected = 64'h0;
-        end
-      default:
-        begin
-          mac_rx_corrected = i_rx_data;
-          //if (DEBUG)
-            //$display("%s:%0d Unexpected i_rx_data_valid: %b",  `__FILE__, `__LINE__, i_rx_data_valid );
-        end
+      8'b1111_1111: bytes = 8;
+      8'b0111_1111: bytes = 7;
+      8'b0011_1111: bytes = 6;
+      8'b0001_1111: bytes = 5;
+      8'b0000_1111: bytes = 4;
+      8'b0000_0111: bytes = 3;
+      8'b0000_0011: bytes = 2;
+      8'b0000_0001: bytes = 1;
+      8'b0000_0000: bytes = 0;
+      default: ;
     endcase
     if (bytes != 0) begin
       counter_bytes_rx_we = 1;

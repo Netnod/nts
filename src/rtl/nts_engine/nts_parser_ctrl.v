@@ -39,7 +39,7 @@ module nts_parser_ctrl #(
   parameter [15:0] LEN_NTS_COOKIE             = 'h0068,
   parameter [15:0] LEN_NTS_MIN_UNIQUE_IDENT   = 'h0024, //5.3. The string MUST be at least 32 octets long.
   parameter [15:0] LEN_NTS_AUTHENTICATOR      = 'h0028, //TL 4h + KeyId 4h + SIV nonce 10h + SIV tag 10h
-  parameter DEBUG_OUTPUT = 1
+  parameter DEBUG_BUFFER = 1
 ) (
   input  wire                         i_areset, // async reset
   input  wire                         i_clk,
@@ -365,6 +365,22 @@ module nts_parser_ctrl #(
   reg statistics_nts_bad_keyid_reg;
 
   //----------------------------------------------------------------
+  // Debug buffer
+  //----------------------------------------------------------------
+
+  localparam DEBUG_BUFFER_WORDS = 64;
+
+  reg  [63:0] debug_buffer [0:DEBUG_BUFFER_WORDS-1];
+  wire  [5:0] debug_buffer_read_addr;
+  wire [63:0] debug_buffer_read_data;
+  reg   [5:0] debug_buffer_write_addr;
+  reg  [63:0] debug_buffer_write_data;
+  reg         debug_buffer_write_enable;
+
+  assign debug_buffer_read_addr = i_api_address[6:1];
+  assign debug_buffer_read_data = (DEBUG_BUFFER>0) ? debug_buffer[debug_buffer_read_addr] : 0;
+
+  //----------------------------------------------------------------
   // Wires.
   //----------------------------------------------------------------
 
@@ -524,22 +540,26 @@ module nts_parser_ctrl #(
       if (i_api_we) begin
         ;
       end else begin
-        case (i_api_address)
-          ADDR_NAME0: api_read_data = CORE_NAME[63:32];
-          ADDR_NAME1: api_read_data = CORE_NAME[31:0];
-          ADDR_VERSION: api_read_data = CORE_VERSION;
-          ADDR_STATE: api_read_data = { 28'h0, state_reg };
-          ADDR_STATE_CRYPTO: api_read_data = { 28'h0, crypto_fsm_reg };
-          ADDR_ERROR_STATE: api_read_data = { 28'h0, error_state_reg };
-          ADDR_ERROR_COUNT: api_read_data = error_count_reg;
-          ADDR_ERROR_CAUSE: api_read_data = error_cause_reg;
-          ADDR_ERROR_SIZE:
-            begin
-              api_read_data[31:ADDR_WIDTH+3] = 0;
-              api_read_data[ADDR_WIDTH+3-1:0] = error_size_reg ;
-            end
-          default: ;
-        endcase
+        if (i_api_address < 128) begin
+          case (i_api_address)
+            ADDR_NAME0: api_read_data = CORE_NAME[63:32];
+            ADDR_NAME1: api_read_data = CORE_NAME[31:0];
+            ADDR_VERSION: api_read_data = CORE_VERSION;
+            ADDR_STATE: api_read_data = { 28'h0, state_reg };
+            ADDR_STATE_CRYPTO: api_read_data = { 28'h0, crypto_fsm_reg };
+            ADDR_ERROR_STATE: api_read_data = { 28'h0, error_state_reg };
+            ADDR_ERROR_COUNT: api_read_data = error_count_reg;
+            ADDR_ERROR_CAUSE: api_read_data = error_cause_reg;
+            ADDR_ERROR_SIZE:
+              begin
+                api_read_data[31:ADDR_WIDTH+3] = 0;
+                api_read_data[ADDR_WIDTH+3-1:0] = error_size_reg ;
+              end
+            default: ;
+          endcase
+        end else begin
+          api_read_data = (i_api_address[0]) ? debug_buffer_read_data[31:0] : debug_buffer_read_data[63:32];
+        end
       end
     end
   end
@@ -570,6 +590,51 @@ module nts_parser_ctrl #(
       error_state_new = state_previous_reg;
     end
   end
+
+  //----------------------------------------------------------------
+  // API debug buffer
+  //----------------------------------------------------------------
+
+
+  always @*
+  begin : api_debug_write
+    debug_buffer_write_enable = 0;
+    debug_buffer_write_addr = 0;
+    debug_buffer_write_data = 0;
+    if (DEBUG_BUFFER) begin
+      debug_buffer_write_data = i_data;
+      case (state_reg)
+        STATE_IDLE:
+          if (i_process_initial) begin
+            debug_buffer_write_addr = 0;
+            debug_buffer_write_enable = 1;
+          end
+        STATE_COPY:
+          if (i_process_initial) begin
+            if (word_counter_reg < (DEBUG_BUFFER_WORDS-1)) begin
+              debug_buffer_write_addr = word_counter_reg + 1;
+              debug_buffer_write_enable = 1;
+            end
+          end
+        default: ;
+      endcase
+    end //if DEBUG_BUFFER
+  end
+
+  if (DEBUG_BUFFER)
+    always @ (posedge i_clk, posedge i_areset)
+    begin : debug_update
+      integer i;
+      if (i_areset) begin
+        for (i = 0; i < DEBUG_BUFFER_WORDS; i = i + 1) begin
+          debug_buffer[i] <= 0;
+        end
+      end else begin
+        if (debug_buffer_write_enable) begin
+          debug_buffer[debug_buffer_write_addr] <= debug_buffer_write_data;
+        end
+      end
+    end
 
   //----------------------------------------------------------------
   // Register Update

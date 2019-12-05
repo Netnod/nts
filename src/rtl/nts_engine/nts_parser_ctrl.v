@@ -136,6 +136,7 @@ module nts_parser_ctrl #(
   localparam ADDR_ERROR_STATE  = 'h13;
   localparam ADDR_ERROR_COUNT  = 'h14;
   localparam ADDR_ERROR_CAUSE  = 'h15;
+  localparam ADDR_ERROR_SIZE   = 'h16;
 
   //----------------------------------------------------------------
   // Error causes observable over API
@@ -249,6 +250,10 @@ module nts_parser_ctrl #(
   reg                         error_count_we;
   reg                  [31:0] error_count_new;
   reg                  [31:0] error_count_reg;
+
+  reg                         error_size_we;
+  reg      [ADDR_WIDTH+3-1:0] error_size_new;
+  reg      [ADDR_WIDTH+3-1:0] error_size_reg;
 
   reg                         crypto_fsm_we;
   reg                   [3:0] crypto_fsm_new;
@@ -528,6 +533,11 @@ module nts_parser_ctrl #(
           ADDR_ERROR_STATE: api_read_data = { 28'h0, error_state_reg };
           ADDR_ERROR_COUNT: api_read_data = error_count_reg;
           ADDR_ERROR_CAUSE: api_read_data = error_cause_reg;
+          ADDR_ERROR_SIZE:
+            begin
+              api_read_data[31:ADDR_WIDTH+3] = 0;
+              api_read_data[ADDR_WIDTH+3-1:0] = error_size_reg ;
+            end
           default: ;
         endcase
       end
@@ -539,14 +549,23 @@ module nts_parser_ctrl #(
   //----------------------------------------------------------------
 
   always @*
-  begin
+  begin : api_error_signals
+    reg [ADDR_WIDTH+3-1:0] bounds;
+    bounds            = 0;
+    bounds[3:0]       = last_bytes_reg;
+    bounds            = bounds + { word_counter_reg, 3'b000};
+
     error_count_we = 0;
     error_count_new = 0;
+    error_size_we = 0;
+    error_size_new = 0;
     error_state_we = 0;
     error_state_new = 0;
     if (state_reg == STATE_ERROR_GENERAL) begin
       error_count_we = 1;
       error_count_new = error_count_reg + 1;
+      error_size_we = 1;
+      error_size_new = bounds;
       error_state_we = 1;
       error_state_new = state_previous_reg;
     end
@@ -572,6 +591,7 @@ module nts_parser_ctrl #(
 
       error_cause_reg            <= 'b0;
       error_count_reg            <= 'b0;
+      error_size_reg             <= 'b0;
       error_state_reg            <= 'b0;
 
       ipdecode_ethernet_protocol_reg <= 0;
@@ -641,6 +661,9 @@ module nts_parser_ctrl #(
 
       if (error_count_we)
         error_count_reg <= error_count_new;
+
+      if (error_size_we)
+        error_size_reg <= error_size_new;
 
       if (error_state_we)
         error_state_reg <= error_state_new;

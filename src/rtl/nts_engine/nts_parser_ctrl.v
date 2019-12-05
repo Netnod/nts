@@ -131,6 +131,7 @@ module nts_parser_ctrl #(
   localparam ADDR_NAME0        =    0;
   localparam ADDR_NAME1        =    1;
   localparam ADDR_VERSION      =    2;
+  localparam ADDR_DUMMY        =    3;
   localparam ADDR_STATE        = 'h10;
   localparam ADDR_STATE_CRYPTO = 'h12;
   localparam ADDR_ERROR_STATE  = 'h13;
@@ -224,6 +225,10 @@ module nts_parser_ctrl #(
   //----------------------------------------------------------------
   // Registers including update variables and write enable.
   //----------------------------------------------------------------
+
+  reg                         api_dummy_we;
+  reg                  [31:0] api_dummy_new;
+  reg                  [31:0] api_dummy_reg;
 
   reg                         access_port_addr_we;
   reg      [ADDR_WIDTH+3-1:0] access_port_addr_new;
@@ -535,10 +540,19 @@ module nts_parser_ctrl #(
 
   always @*
   begin
+    api_dummy_we = 0;
+    api_dummy_new = 0;
     api_read_data = 0;
     if (i_api_cs) begin
       if (i_api_we) begin
-        ;
+        case (i_api_address)
+          ADDR_DUMMY:
+            begin
+              api_dummy_we = 1;
+              api_dummy_new = i_api_write_data;
+            end
+          default: ;
+        endcase
       end else begin
         if (i_api_address < 128) begin
           case (i_api_address)
@@ -556,6 +570,7 @@ module nts_parser_ctrl #(
                 api_read_data[ADDR_WIDTH+3-1:0] = error_size_reg ;
               end
             default: ;
+            ADDR_DUMMY: api_read_data = api_dummy_reg;
           endcase
         end else begin
           api_read_data = (i_api_address[0]) ? debug_buffer_read_data[31:0] : debug_buffer_read_data[63:32];
@@ -598,6 +613,7 @@ module nts_parser_ctrl #(
 
   always @*
   begin : api_debug_write
+    reg [ADDR_WIDTH-1:0] tmp;
     debug_buffer_write_enable = 0;
     debug_buffer_write_addr = 0;
     debug_buffer_write_data = 0;
@@ -612,8 +628,11 @@ module nts_parser_ctrl #(
         STATE_COPY:
           if (i_process_initial) begin
             if (word_counter_reg < (DEBUG_BUFFER_WORDS-1)) begin
-              debug_buffer_write_addr = word_counter_reg + 1;
-              debug_buffer_write_enable = 1;
+              tmp = word_counter_reg + 1;
+              if (tmp[ADDR_WIDTH-1:6] == 0) begin
+                debug_buffer_write_addr = tmp[5:0];
+                debug_buffer_write_enable = 1;
+              end
             end
           end
         default: ;
@@ -649,6 +668,8 @@ module nts_parser_ctrl #(
       access_port_addr_reg       <= 'b0;
       access_port_rd_en_reg      <= 'b0;
       access_port_wordsize_reg   <= 'b0;
+
+      api_dummy_reg              <= 32'h64_75_4d_79; //"duMy"
 
       cookie_server_id_reg       <= 'b0;
 
@@ -714,6 +735,9 @@ module nts_parser_ctrl #(
 
       if (access_port_wordsize_we)
         access_port_wordsize_reg <= access_port_wordsize_new;
+
+      if (api_dummy_we)
+        api_dummy_reg <= api_dummy_new;
 
       if (crypto_fsm_we)
         crypto_fsm_reg <= crypto_fsm_new;

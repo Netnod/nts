@@ -46,7 +46,6 @@ module nts_dispatcher #(
 
   output wire                  o_dispatch_packet_available,
   input  wire                  i_dispatch_packet_read_discard,
-  output wire [ADDR_WIDTH-1:0] o_dispatch_counter,
   output wire [7:0]            o_dispatch_data_valid,
   output wire                  o_dispatch_fifo_empty,
   input  wire                  i_dispatch_fifo_rd_start,
@@ -231,6 +230,8 @@ module nts_dispatcher #(
   reg        ntp_time_lsb_we;
   reg [31:0] ntp_time_lsb_reg;
 
+  reg        sync_reset_metastable;
+  reg        sync_reset;
   reg [31:0] systick32_reg;
 
   //----------------------------------------------------------------
@@ -257,7 +258,6 @@ module nts_dispatcher #(
   assign o_api_read_data = api_read_data;
 
   assign o_dispatch_packet_available  = mem_state_reg[ ~ current_mem_reg ] == STATE_FIFO_OUT_INIT_0;
-  assign o_dispatch_counter           = counter_reg[ ~ current_mem_reg ];
   assign o_dispatch_data_valid        = data_valid_reg[ ~ current_mem_reg ];
   assign o_dispatch_fifo_empty        = fifo_empty_reg;
   assign o_dispatch_fifo_rd_valid     = fifo_rd_valid_reg;
@@ -443,13 +443,28 @@ module nts_dispatcher #(
   end
 
   //----------------------------------------------------------------
+  // Synchronous reset conversion
+  //----------------------------------------------------------------
+
+  always @ (posedge i_clk or posedge i_areset)
+  begin
+    if (i_areset) begin
+      sync_reset_metastable <= 1;
+      sync_reset <= 1;
+    end else begin
+      sync_reset_metastable <= 0;
+      sync_reset <= sync_reset_metastable;
+    end
+  end
+
+  //----------------------------------------------------------------
   // BRAM Register Update (synchronous reset)
   //----------------------------------------------------------------
 
   always @ (posedge i_clk)
   begin : bram_reg_update
     integer i;
-    if (i_areset) begin
+    if (sync_reset) begin
       ram_r_addr_reg <= 0;
       for (i = 0; i < 2; i = i + 1)
       begin

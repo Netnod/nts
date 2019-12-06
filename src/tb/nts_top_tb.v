@@ -585,8 +585,6 @@ module nts_top_tb;
             dut.engine.parser.crypto_fsm_new,
            (dut.engine.parser.crypto_fsm_new==dut.engine.parser.CRYPTO_FSM_DONE_SUCCESS) ? "Win!" : ((dut.engine.parser.crypto_fsm_new==dut.engine.parser.CRYPTO_FSM_DONE_FAILURE)?"Fail":"...."));
       always @*
-        $display("%s:%0d dut.o_dispatch_counter=%h (ignored)",  `__FILE__, `__LINE__, dut.dispatcher.o_dispatch_counter);
-      always @*
         begin : tmp___
           integer engine_index;
           for (engine_index = 0; engine_index < ENGINES; engine_index = engine_index + 1)

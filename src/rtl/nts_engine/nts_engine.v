@@ -134,7 +134,7 @@ module nts_engine #(
   reg                          access_port_rd_dv_parser;
 
   wire [ACCESS_PORT_WIDTH-1:0] access_port_rd_data;
-  reg  [ACCESS_PORT_WIDTH-1:0] access_port_rd_data_parser;
+  reg                   [31:0] access_port_rd_data_parser;
 
   wire                         detect_unique_identifier;
   wire                         detect_nts_cookie;
@@ -616,7 +616,7 @@ module nts_engine #(
 
           access_port_wait_parser = access_port_wait;
           access_port_rd_dv_parser = access_port_rd_dv;
-          access_port_rd_data_parser = access_port_rd_data;
+          access_port_rd_data_parser = access_port_rd_data[31:0];
         end
       1'b1:
         begin
@@ -715,8 +715,7 @@ module nts_engine #(
   //----------------------------------------------------------------
 
   nts_parser_ctrl #(
-    .ADDR_WIDTH(ADDR_WIDTH),
-    .ACCESS_PORT_WIDTH(ACCESS_PORT_WIDTH)
+    .ADDR_WIDTH(ADDR_WIDTH)
   ) parser (
    .i_areset(i_areset),
    .i_clk(i_clk),

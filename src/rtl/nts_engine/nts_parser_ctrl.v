@@ -30,7 +30,6 @@
 
 module nts_parser_ctrl #(
   parameter ADDR_WIDTH = 8,
-  parameter ACCESS_PORT_WIDTH = 64,
   parameter NTS_MAX_ALLOWED_PLACEHOLDERS = 7, // 5.7 The client SHOULD NOT include more than seven NTS Cookie Placeholder extension fields in a request.
   parameter [15:0] TAG_NTS_UNIQUE_IDENTIFIER  = 'h0104,
   parameter [15:0] TAG_NTS_COOKIE             = 'h0204,
@@ -70,7 +69,7 @@ module nts_parser_ctrl #(
   output wire                   [2:0] o_access_port_wordsize,
   output wire                         o_access_port_rd_en,
   input  wire                         i_access_port_rd_dv,
-  input  wire [ACCESS_PORT_WIDTH-1:0] i_access_port_rd_data,
+  input  wire                  [31:0] i_access_port_rd_data,
 
   output wire                   [3:0] o_keymem_key_word,
   output wire                         o_keymem_get_key_with_id,

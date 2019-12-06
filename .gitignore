@@ -1,4 +1,4 @@
 *.sw?
 output
-tools/verilator-4.018/**
-tools/verilator-4.018.tgz
+toolruns/verilator-4.018/**
+toolruns/verilator-4.018.tgz

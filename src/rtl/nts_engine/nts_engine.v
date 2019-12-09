@@ -165,9 +165,8 @@ module nts_engine #(
   wire                         keymem_internal_get_current_key;
   wire                         keymem_internal_get_key_with_id;
   wire                [31 : 0] keymem_internal_server_key_id;
-  wire                 [3 : 0] keymem_internal_key_word;
+  wire                 [2 : 0] keymem_internal_key_word;
   wire                         keymem_internal_key_valid;
-  wire                         keymem_internal_key_length;
   /* verilator lint_off UNUSED */
   wire                [31 : 0] keymem_internal_key_id; //TODO implement
   /* verilator lint_on UNUSED */
@@ -752,7 +751,6 @@ module nts_engine #(
    .o_keymem_key_word(keymem_internal_key_word),
    .o_keymem_get_key_with_id(keymem_internal_get_key_with_id),
    .o_keymem_server_id(keymem_internal_server_key_id),
-   .i_keymem_key_length(keymem_internal_key_length),
    .i_keymem_key_valid(keymem_internal_key_valid),
    .i_keymem_ready(keymem_internal_ready),
 
@@ -817,7 +815,6 @@ module nts_engine #(
     .server_key_id(keymem_internal_server_key_id),
     .key_word(keymem_internal_key_word),
     .key_valid(keymem_internal_key_valid),
-    .key_length(keymem_internal_key_length),
     .key_id(keymem_internal_key_id),
     .key_data(keymem_internal_key_data),
     .ready(keymem_internal_ready)
@@ -870,7 +867,6 @@ module nts_engine #(
 
     .i_key_word   ( keymem_internal_key_word   ),
     .i_key_valid  ( keymem_internal_key_valid  ),
-    .i_key_length ( keymem_internal_key_length ),
     .i_key_data   ( keymem_internal_key_data   ),
 
     .i_unrwapped_s2c  ( ZERO[ 0:0] ),

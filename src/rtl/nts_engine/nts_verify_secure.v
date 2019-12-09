@@ -42,9 +42,8 @@ module nts_verify_secure #(
 
   output wire                         o_verify_tag_ok,
 
-  input wire                  [3 : 0] i_key_word,
+  input wire                  [2 : 0] i_key_word,
   input wire                          i_key_valid,
-  input wire                          i_key_length,
   input wire                 [31 : 0] i_key_data,
 
   input  wire                         i_unrwapped_s2c,
@@ -677,18 +676,9 @@ module nts_verify_secure #(
     key_master_new = 0;
     if (state_reg == STATE_IDLE) begin
       if (i_key_valid) begin
-        if (i_key_length) begin
-          $display("%s:%0d ERROR, 512 (256+256) bit detected, only 256 (128+128) bit keys currently supported", `__FILE__, `__LINE__);
-          //TODO set a bad key bit to indicate system in error state.
-        end else if (i_key_word[3]) begin
-          if (i_key_data != 32'h0 )
-            $display("%s:%0d ERROR, 512 (256+256) bit detected when i_key_length==0, invalid input!", `__FILE__, `__LINE__);
-          //TODO set a bad key bit to indicate system in error state.
-        end else begin
-          key_master_we = 1;
-          key_master_new = i_key_data;
-          key_master_addr = i_key_word[2:0];
-        end
+        key_master_we = 1;
+        key_master_new = i_key_data;
+        key_master_addr = i_key_word[2:0];
       end
     end
   end

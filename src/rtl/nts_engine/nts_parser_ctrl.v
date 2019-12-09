@@ -71,10 +71,9 @@ module nts_parser_ctrl #(
   input  wire                         i_access_port_rd_dv,
   input  wire                  [31:0] i_access_port_rd_data,
 
-  output wire                   [3:0] o_keymem_key_word,
+  output wire                   [2:0] o_keymem_key_word,
   output wire                         o_keymem_get_key_with_id,
   output wire                  [31:0] o_keymem_server_id,
-  input  wire                         i_keymem_key_length,
   input  wire                         i_keymem_key_valid,
   input  wire                         i_keymem_ready,
 
@@ -303,8 +302,8 @@ module nts_parser_ctrl #(
   reg                   [15:0] ipdecode_udp_length_reg;
 
   reg                          keymem_key_word_we;
-  reg                    [3:0] keymem_key_word_new;
-  reg                    [3:0] keymem_key_word_reg;
+  reg                    [2:0] keymem_key_word_new;
+  reg                    [2:0] keymem_key_word_reg;
   reg                          keymem_get_key_with_id_we;
   reg                          keymem_get_key_with_id_new;
   reg                          keymem_get_key_with_id_reg;
@@ -1165,7 +1164,7 @@ module nts_parser_ctrl #(
             if (i_keymem_key_valid == 'b0) begin
                ; // reset, zero all output
                //$display("%s:%0d STATE_VERIFY_KEY_FROM_COOKIE2", `__FILE__, `__LINE__);
-            end else if (keymem_key_word_reg == 'b1111) begin
+            end else if (keymem_key_word_reg == 'b111) begin
               keymem_get_key_with_id_we  = 'b1;
               ; // reset, zero all output
               //$display("%s:%0d STATE_VERIFY_KEY_FROM_COOKIE2", `__FILE__, `__LINE__);
@@ -1534,10 +1533,7 @@ module nts_parser_ctrl #(
             state_we  = 'b1;
             state_new = STATE_ERROR_GENERAL;
             //$display("%s:%0d i_keymem_ready=%h keymem_get_key_with_id_reg=%h i_keymem_key_valid=%h...", `__FILE__, `__LINE__, i_keymem_ready, keymem_get_key_with_id_reg, i_keymem_key_valid);
-          end else if (i_keymem_key_length) begin
-            state_we  = 'b1;
-            state_new = STATE_ERROR_GENERAL; //512 (256+256) bit keys are not supported
-          end else if (keymem_key_word_reg == 'b1111) begin
+          end else if (keymem_key_word_reg == 'b111) begin
             state_we  = 'b1;
             state_new = STATE_RX_AUTH_COOKIE;
           end

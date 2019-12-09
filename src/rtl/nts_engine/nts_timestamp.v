@@ -257,6 +257,7 @@ module nts_timestamp (
       p_version_number_reg    <= 'b0;
 
       p_reference_timestamp_seconds_reg <= 'b0;
+      p_transmit_timestamp_reg <= 'b0;
 
       state_reg <= 'b0;
 

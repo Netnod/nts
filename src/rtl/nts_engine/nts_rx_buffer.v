@@ -107,6 +107,10 @@ module nts_rx_buffer #(
   reg                         access_ws64bit_new;
   reg                         access_ws64bit_reg;
 
+  // ---- internal registers for handling synchronous reset of BRAM
+  reg sync_reset_metastable;
+  reg sync_reset;
+
   // ---- internal registers, wires for handling memory access
   reg                     ram_wr_en_we;
   reg                     ram_wr_en_new;
@@ -242,6 +246,21 @@ module nts_rx_buffer #(
   end
 
   //----------------------------------------------------------------
+  // Synchronous reset conversion
+  //----------------------------------------------------------------
+
+  always @ (posedge i_clk or posedge i_areset)
+  begin
+    if (i_areset) begin
+      sync_reset_metastable <= 1;
+      sync_reset <= 1;
+    end else begin
+      sync_reset_metastable <= 0;
+      sync_reset <= sync_reset_metastable;
+    end
+  end
+
+  //----------------------------------------------------------------
   // RAM Register Update
   // Update functionality for BRAM in the core.
   // All registers are positive edge triggered.
@@ -250,9 +269,7 @@ module nts_rx_buffer #(
 
   always @ (posedge i_clk)
   begin : ram_reg_update
-    /* verilator lint_off SYNCASYNCNET */
-    if (i_areset == 1'b1 /* used synchroniously here */) begin
-    /* verilator lint_on SYNCASYNCNET */
+    if (sync_reset) begin
      ram_addr_reg       <= 'b0;
      ram_wr_en_reg      <= 'b0;
      ram_wr_data_reg    <= 'b0;

@@ -103,6 +103,9 @@ module nts_tx_buffer #(
 
   reg            [2:0] ram_addr_lo     [0:1];
 
+  reg                  sync_reset_metastable;
+  reg                  sync_reset;
+
   reg                  word_count_we   [0:1];
   reg [ADDR_WIDTH-1:0] word_count_new  [0:1];
   reg [ADDR_WIDTH-1:0] word_count_reg  [0:1];
@@ -179,6 +182,21 @@ module nts_tx_buffer #(
   );
 
   //----------------------------------------------------------------
+  // Synchronous reset conversion
+  //----------------------------------------------------------------
+
+  always @ (posedge i_clk or posedge i_areset)
+  begin
+    if (i_areset) begin
+      sync_reset_metastable <= 1;
+      sync_reset <= 1;
+    end else begin
+      sync_reset_metastable <= 0;
+      sync_reset <= sync_reset_metastable;
+    end
+  end
+
+  //----------------------------------------------------------------
   // BRAM Synchronous register updates
   //----------------------------------------------------------------
 
@@ -186,7 +204,7 @@ module nts_tx_buffer #(
   begin : bram_reg_update
     integer i;
     for (i = 0; i < 2; i = i + 1) begin
-      if (i_areset == 1'b1) begin // synchronous reset
+      if (sync_reset) begin
         ram_addr_hi_reg[i] <= 'b0;
       end else begin
         if (ram_addr_hi_we[i])

@@ -30,8 +30,7 @@
 
 module nts_rx_buffer #(
   parameter ADDR_WIDTH = 8,
-  parameter ACCESS_PORT_WIDTH = 64,
-  parameter DEBUG = 1
+  parameter ACCESS_PORT_WIDTH = 64
 ) (
   input  wire                         i_areset, // async reset
   input  wire                         i_clk,
@@ -650,19 +649,6 @@ module nts_rx_buffer #(
         end
       default ;
     endcase
-  end
-
-  if (DEBUG>0) begin
-    always @(posedge i_clk)
-      if (i_areset == 0)
-        if (memctrl_we)
-          if (memctrl_new == MEMORY_CTRL_ERROR) begin
-            $display("%s:%0d WARNING: Memory controller error state detected!", `__FILE__, `__LINE__);
-            $display("%s:%0d          memctrl_reg: %h", `__FILE__, `__LINE__, memctrl_reg);
-            $display("%s:%0d          access_ws{8,16,32,64}bit_reg: %b", `__FILE__, `__LINE__, {access_ws8bit_reg, access_ws16bit_reg, access_ws32bit_reg, access_ws64bit_reg});
-            $display("%s:%0d          access_addr_lo_reg: %h", `__FILE__, `__LINE__, access_addr_lo_reg);
-            $display("%s:%0d          i_parser_busy: %h", `__FILE__, `__LINE__, i_parser_busy);
-          end
   end
 
 endmodule

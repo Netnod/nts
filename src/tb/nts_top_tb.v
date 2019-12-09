@@ -630,6 +630,16 @@ module nts_top_tb;
         $display("%s:%0d dut.o_dispatch_tx_fifo_rd_data_DUMMY=%h (ignored)",  `__FILE__, `__LINE__, dut.o_dispatch_tx_fifo_rd_data_DUMMY);
       always @*
         $display("%s:%0d dut.dispatcher.mac_rx_corrected=%h <-----",  `__FILE__, `__LINE__, dut.dispatcher.mac_rx_corrected);
+      always @(posedge i_clk or posedge i_areset)
+        if (i_areset == 0)
+          if (dut.engine.rx_buffer.memctrl_we)
+            if (dut.engine.rx_buffer.memctrl_new == dut.engine.rx_buffer.MEMORY_CTRL_ERROR) begin
+              $display("%s:%0d WARNING: Memory controller error state detected!", `__FILE__, `__LINE__);
+              $display("%s:%0d          memctrl_reg: %h", `__FILE__, `__LINE__, dut.engine.rx_buffer.memctrl_reg);
+              $display("%s:%0d          access_ws{8,16,32,64}bit_reg: %b", `__FILE__, `__LINE__, {dut.engine.rx_buffer.access_ws8bit_reg, dut.engine.rx_buffer.access_ws16bit_reg, dut.engine.rx_buffer.access_ws32bit_reg, dut.engine.rx_buffer.access_ws64bit_reg});
+              $display("%s:%0d          access_addr_lo_reg: %h", `__FILE__, `__LINE__, dut.engine.rx_buffer.access_addr_lo_reg);
+              $display("%s:%0d          i_parser_busy: %h", `__FILE__, `__LINE__, dut.engine.rx_buffer.i_parser_busy);
+          end
   end
 
   //----------------------------------------------------------------

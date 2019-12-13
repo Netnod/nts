@@ -233,7 +233,7 @@ $(OUTPUT)/nts_rx_buffer_tb.vvp: \
  ../src/rtl/nts_engine/nts_rx_buffer.v \
  ../src/rtl/memory/bram.v
 ifeq (,$(NO_VLINT))
-	-$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY $^
+	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY $^
 endif
 	iverilog -o $@ $^
 

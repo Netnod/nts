@@ -172,14 +172,19 @@ module nts_top #(
   // Dummy: TX
   //----------------------------------------------------------------
 
-  reg tx_receiving;
+  reg              tx_receiving;
+  reg [64*100-1:0] tx_d;
+  integer          tx_i;
 
   always @(posedge i_clk or posedge i_areset)
   begin
     if (i_areset) begin
       i_dispatch_tx_packet_read_DUMMY <= 'b0;
       i_dispatch_tx_fifo_rd_en_DUMMY  <= 'b0;
-      tx_receiving              <= 'b0;
+
+      tx_receiving  <= 'b0;
+      tx_d          <= 0;
+      tx_i          <= 0;
 
     end else begin
       i_dispatch_tx_packet_read_DUMMY <= 'b0;
@@ -188,11 +193,14 @@ module nts_top #(
         if (o_dispatch_tx_fifo_empty_DUMMY) begin
           i_dispatch_tx_packet_read_DUMMY <= 'b1;
           tx_receiving <= 'b0;
+          if (tx_i < 100) tx_d[tx_i*64+:64] <= o_dispatch_tx_fifo_rd_data_DUMMY;
         end else begin
           i_dispatch_tx_fifo_rd_en_DUMMY  <= 'b1;
         end
       end else if (o_dispatch_tx_packet_available_DUMMY) begin
         tx_receiving <= 'b1;
+        tx_d         <= 0;
+        tx_i         <= 0;
       end
     end
   end

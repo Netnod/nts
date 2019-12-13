@@ -47,6 +47,7 @@ module nts_rx_buffer #(
   output wire                         o_access_port_wait,
   input  wire      [ADDR_WIDTH+3-1:0] i_access_port_addr,
   input  wire                   [2:0] i_access_port_wordsize,
+  input  wire                  [15:0] i_access_port_burstsize,
   input  wire                         i_access_port_rd_en,
   output wire                         o_access_port_rd_dv,
   output wire [ACCESS_PORT_WIDTH-1:0] o_access_port_rd_data
@@ -63,6 +64,9 @@ module nts_rx_buffer #(
   localparam MEMORY_CTRL_READ_1ST_DLY    = 4'h4;
   localparam MEMORY_CTRL_READ_1ST        = 4'h5;
   localparam MEMORY_CTRL_READ_2ND        = 4'h6;
+  localparam MEMORY_CTRL_BURST_DLY       = 4'h7;
+  localparam MEMORY_CTRL_BURST_1ST       = 4'h8;
+  localparam MEMORY_CTRL_BURST           = 4'h9;
   localparam MEMORY_CTRL_ERROR           = 4'hf;
 
   //----------------------------------------------------------------
@@ -76,6 +80,8 @@ module nts_rx_buffer #(
 
   //--- internal registers for handling input FIFO
 
+  reg                     dispatch_fifo_rd_start_new;
+  reg                     dispatch_fifo_rd_start_reg;
   reg                     dispatch_packet_read_we;
   reg                     dispatch_packet_read_new;
   reg                     dispatch_packet_read_reg;
@@ -106,6 +112,12 @@ module nts_rx_buffer #(
   reg                         access_ws32bit_reg;
   reg                         access_ws64bit_new;
   reg                         access_ws64bit_reg;
+  reg                         burst_mem_we;
+  reg                  [55:0] burst_mem_new;
+  reg                  [55:0] burst_mem_reg;
+  reg                         burst_size_we;
+  reg                  [15:0] burst_size_new;
+  reg                  [15:0] burst_size_reg;
 
   // ---- internal registers for handling synchronous reset of BRAM
   reg sync_reset_metastable;
@@ -128,11 +140,10 @@ module nts_rx_buffer #(
   // Wires.
   //----------------------------------------------------------------
 
-  wire [63:0]             ram_rd_data;
-/* verilator lint_off UNOPTFLAT */
-  reg                     dispatch_fifo_rd_start;
-/* verilator lint_on UNOPTFLAT */
-  reg                     fifo_start;
+  reg         burst_done;
+  reg         fifo_start;
+  reg         fifo_done;
+  wire [63:0] ram_rd_data;
 
   //----------------------------------------------------------------
   // Concurrent connectivity for ports etc.
@@ -142,7 +153,7 @@ module nts_rx_buffer #(
   assign o_access_port_rd_dv      = access_dv_reg;
   assign o_access_port_rd_data    = access_out_reg;
   assign o_dispatch_packet_read   = dispatch_packet_read_reg;
-  assign o_dispatch_fifo_rd_start = dispatch_fifo_rd_start;
+  assign o_dispatch_fifo_rd_start = dispatch_fifo_rd_start_reg;
 
   //----------------------------------------------------------------
   // Memory holding the Receive buffer
@@ -205,8 +216,11 @@ module nts_rx_buffer #(
       access_ws16bit_reg       <= 'b0;
       access_ws32bit_reg       <= 'b0;
       access_ws64bit_reg       <= 'b0;
+      burst_mem_reg            <= 'b0;
+      burst_size_reg           <= 'b0;
       fifo_addr_reg            <= 'b0;
       //dispatch_fifo_rd_en_reg  <= 'b0;
+      dispatch_fifo_rd_start_reg <= 'b0;
       dispatch_packet_read_reg <= 'b0;
       memctrl_reg              <= 'b0;
     end else begin
@@ -220,20 +234,28 @@ module nts_rx_buffer #(
         access_wait_reg        <= access_wait_new;
 
       if (access_ws_we) begin
-        access_ws8bit_reg      <= access_ws8bit_new;
-        access_ws16bit_reg     <= access_ws16bit_new;
-        access_ws32bit_reg     <= access_ws32bit_new;
-        access_ws64bit_reg     <= access_ws64bit_new;
+        access_ws8bit_reg  <= access_ws8bit_new;
+        access_ws16bit_reg <= access_ws16bit_new;
+        access_ws32bit_reg <= access_ws32bit_new;
+        access_ws64bit_reg <= access_ws64bit_new;
       end
 
+      if (burst_mem_we)
+        burst_mem_reg <= burst_mem_new;
+
+      if (burst_size_we)
+        burst_size_reg <= burst_size_new;
+
       if (access_addr_lo_we)
-        access_addr_lo_reg     <= access_addr_lo_new;
+        access_addr_lo_reg <= access_addr_lo_new;
 
       if (fifo_addr_we)
-        fifo_addr_reg           <= fifo_addr_new;
+        fifo_addr_reg <= fifo_addr_new;
 
       //if (dispatch_fifo_rd_en_we)
       //  dispatch_fifo_rd_en_reg <= dispatch_fifo_rd_en_new;
+
+      dispatch_fifo_rd_start_reg <= dispatch_fifo_rd_start_new;
 
       if (dispatch_packet_read_we)
         dispatch_packet_read_reg <= dispatch_packet_read_new;
@@ -346,6 +368,10 @@ module nts_rx_buffer #(
                 memctrl_we       = 'b1;
                 memctrl_new      = MEMORY_CTRL_READ_1ST_DLY;
               end
+            4: if (i_access_port_burstsize > 0) begin
+                memctrl_we       = 'b1;
+                memctrl_new      = MEMORY_CTRL_BURST_DLY;
+               end
             default:
               begin
                 memctrl_we       = 'b1;
@@ -355,7 +381,7 @@ module nts_rx_buffer #(
           //$display("%s:%0d memctrl_we: %h memctrl_new: %h", `__FILE__, `__LINE__, memctrl_we, memctrl_new);
         end
       MEMORY_CTRL_FIFO_WRITE:
-        if (i_dispatch_fifo_empty) begin
+        if (fifo_done) begin
           memctrl_we            = 'b1;
           memctrl_new           = MEMORY_CTRL_IDLE;
         end
@@ -416,6 +442,24 @@ module nts_rx_buffer #(
             memctrl_new         = MEMORY_CTRL_ERROR;
 
         end
+      MEMORY_CTRL_BURST_DLY:
+        begin
+          memctrl_we            = 'b1;
+          memctrl_new           = MEMORY_CTRL_BURST_1ST;
+        end
+      MEMORY_CTRL_BURST_1ST:
+        if (burst_done) begin
+          memctrl_we            = 'b1;
+          memctrl_new           = MEMORY_CTRL_IDLE;
+        end else begin
+          memctrl_we            = 'b1;
+          memctrl_new           = MEMORY_CTRL_BURST;
+        end
+      MEMORY_CTRL_BURST:
+        if (burst_done) begin
+          memctrl_we            = 'b1;
+          memctrl_new           = MEMORY_CTRL_IDLE;
+        end
       MEMORY_CTRL_ERROR:
         begin
           //$display("%s:%0d WARNING: Memory controller error state detected!", `__FILE__, `__LINE__);
@@ -472,6 +516,21 @@ module nts_rx_buffer #(
           ram_addr_we  = 'b1;
           ram_addr_new = ram_addr_reg + 1;
         end
+      MEMORY_CTRL_BURST_DLY:
+        begin
+          ram_addr_we  = 'b1;
+          ram_addr_new = ram_addr_reg + 1;
+        end
+      MEMORY_CTRL_BURST_1ST:
+        begin
+          ram_addr_we  = 'b1;
+          ram_addr_new = ram_addr_reg + 1;
+        end
+      MEMORY_CTRL_BURST:
+        begin
+          ram_addr_we  = 'b1;
+          ram_addr_new = ram_addr_reg + 1;
+        end
       default: ;
     endcase
   end
@@ -483,22 +542,22 @@ module nts_rx_buffer #(
   always @*
   begin : fifo_control
     fifo_addr_we                  = 'b0;
-    //dispatch_fifo_rd_en_we        = 'b0;
-    dispatch_packet_read_we       = 'b1;
-
     fifo_addr_new                 = 'b0;
-    //dispatch_fifo_rd_en_new       = 'b0;
+
+    fifo_done                     = 'b0;
+
+    dispatch_packet_read_we       = 'b1;
     dispatch_packet_read_new      = 'b0;
 
-    dispatch_fifo_rd_start = 0;
+    dispatch_fifo_rd_start_new = 0;
 
     case (memctrl_reg)
       MEMORY_CTRL_IDLE:
         begin
           //dispatch_fifo_rd_en_we  = 'b1; // write zero to rd_en
           if (fifo_start) begin
-            dispatch_fifo_rd_start = 'b1;
-            fifo_addr_we           = 'b1; // write zero to fifo_addr_reg
+            dispatch_fifo_rd_start_new = 'b1;
+            fifo_addr_we               = 'b1; // write zero to fifo_addr_reg
           end
         end
       MEMORY_CTRL_FIFO_WRITE:
@@ -508,6 +567,7 @@ module nts_rx_buffer #(
         end else if (i_dispatch_fifo_empty) begin
           dispatch_packet_read_we  = 'b1;
           dispatch_packet_read_new = 'b1;
+          fifo_done                = 1;
         end
       default: ;
     endcase
@@ -515,7 +575,7 @@ module nts_rx_buffer #(
 
   //----------------------------------------------------------------
   // Access port
-  // Allows naligned reads
+  // Allows unaligned reads
   //----------------------------------------------------------------
 
   always @*
@@ -533,6 +593,13 @@ module nts_rx_buffer #(
     access_ws16bit_new            = 'b0;
     access_ws32bit_new            = 'b0;
     access_ws64bit_new            = 'b0;
+
+    burst_done = 0;
+    burst_size_we = 0;
+    burst_size_new = 0;
+    burst_mem_we = 0;
+    burst_mem_new = 0;
+
     case (memctrl_reg)
       MEMORY_CTRL_IDLE:
         begin
@@ -554,8 +621,11 @@ module nts_rx_buffer #(
               1: access_ws16bit_new = 'b1;
               2: access_ws32bit_new = 'b1;
               3: access_ws64bit_new = 'b1;
+              4: if (i_access_port_burstsize == 0) access_wait_we = 0; //only burst if burst>0.
               default: ;
             endcase
+            burst_size_we  = 1;
+            burst_size_new = i_access_port_burstsize;
           end
         end
       MEMORY_CTRL_READ_SIMPLE:
@@ -663,6 +733,121 @@ module nts_rx_buffer #(
               7: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 8, 56);
               default: ;
             endcase
+        end
+      MEMORY_CTRL_BURST_DLY: ;
+      MEMORY_CTRL_BURST_1ST:
+        begin
+          access_out_we  = 'b1;
+          access_out_new = 0;
+          burst_mem_we   = 1;
+          burst_mem_new   = ram_rd_data[55:0];
+          case (access_addr_lo_reg)
+            0: begin
+                 access_out_new[63-:64] = ram_rd_data;
+                 access_dv_we = 1;
+                 access_dv_new = 1;
+                 if (burst_size_reg <= 8) begin
+                   burst_done = 1;
+                 end else begin
+                   //special case: can emit in BURST_DELAY_1ST, but not done. Sigh.
+                   burst_size_we = 1;
+                   burst_size_new = burst_size_reg - 8;
+                 end
+               end
+            1: begin
+                 if (burst_size_reg <= 7) begin
+                   access_dv_we    = 1;
+                   access_dv_new   = 1;
+                   access_out_new  = { ram_rd_data[0+:56], 8'b0 };
+                   burst_done      = 1;
+                 end
+               end
+            2: begin
+                 if (burst_size_reg <= 6) begin
+                   access_dv_we    = 1;
+                   access_dv_new   = 1;
+                   access_out_new  = { ram_rd_data[0+:48], 16'b0 };
+                   burst_done      = 1;
+                 end
+               end
+            3: begin
+                 if (burst_size_reg <= 5) begin
+                   access_dv_we    = 1;
+                   access_dv_new   = 1;
+                   access_out_new  = { ram_rd_data[0+:40], 24'b0 };
+                   burst_done      = 1;
+                 end
+               end
+            4: begin
+                 if (burst_size_reg <= 4) begin
+                   access_dv_we    = 1;
+                   access_dv_new   = 1;
+                   access_out_new  = { ram_rd_data[0+:32], 32'b0 };
+                   burst_done      = 1;
+                 end
+               end
+            5: begin
+                 if (burst_size_reg <= 3) begin
+                   access_dv_we    = 1;
+                   access_dv_new   = 1;
+                   access_out_new  = { ram_rd_data[0+:24], 40'b0 };
+                   burst_done      = 1;
+                 end
+               end
+            6: begin
+                 if (burst_size_reg <= 2) begin
+                   access_dv_we    = 1;
+                   access_dv_new   = 1;
+                   access_out_new  = { ram_rd_data[0+:16], 48'b0 };
+                   burst_done      = 1;
+                 end
+               end
+            7: begin
+                 if (burst_size_reg <= 1) begin
+                   access_dv_we    = 1;
+                   access_dv_new   = 1;
+                   access_out_new  = { ram_rd_data[0+:8], 56'b0 };
+                   burst_done      = 1;
+                 end
+               end
+            default: ;
+         endcase
+        end
+      MEMORY_CTRL_BURST:
+        begin : burst_locals
+          access_dv_we   = 1;
+          access_dv_new  = 1;
+          access_out_we  = 'b1;
+          access_out_new = 0;
+          burst_mem_we   = 1;
+          burst_mem_new  = ram_rd_data[55:0];
+          case (access_addr_lo_reg)
+            0: access_out_new = ram_rd_data;
+            1: access_out_new = { burst_mem_reg[55:0], ram_rd_data[63-:8] };
+            2: access_out_new = { burst_mem_reg[47:0], ram_rd_data[63-:16] };
+            3: access_out_new = { burst_mem_reg[39:0], ram_rd_data[63-:24] };
+            4: access_out_new = { burst_mem_reg[31:0], ram_rd_data[63-:32] };
+            5: access_out_new = { burst_mem_reg[23:0], ram_rd_data[63-:40] };
+            6: access_out_new = { burst_mem_reg[15:0], ram_rd_data[63-:48] };
+            7: access_out_new = { burst_mem_reg[7:0],  ram_rd_data[63-:56] };
+          endcase
+
+          if (burst_size_reg <= 8) begin
+            burst_done = 1;
+            case (burst_size_reg)
+              1: access_out_new = access_out_new & 64'hFF00_0000_0000_0000;
+              2: access_out_new = access_out_new & 64'hFFFF_0000_0000_0000;
+              3: access_out_new = access_out_new & 64'hFFFF_FF00_0000_0000;
+              4: access_out_new = access_out_new & 64'hFFFF_FFFF_0000_0000;
+              5: access_out_new = access_out_new & 64'hFFFF_FFFF_FF00_0000;
+              6: access_out_new = access_out_new & 64'hFFFF_FFFF_FFFF_0000;
+              7: access_out_new = access_out_new & 64'hFFFF_FFFF_FFFF_FF00;
+              default: ;
+            endcase
+          end else begin
+            burst_size_we = 1;
+            burst_size_new = burst_size_reg - 8;
+          end
         end
       default ;
     endcase

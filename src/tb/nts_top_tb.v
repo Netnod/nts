@@ -450,6 +450,18 @@ module nts_top_tb;
       reg [63:0] dispatcher_counter_error;
       reg [11:0] addr;
       reg [31:0] value;
+
+      for (addr = 0; addr < 12'hFFF; addr = addr + 1) begin
+        dispatcher_read32(value, addr);
+        if (value != 0)
+          $display("%s:%0d: *** Dispatcher[%h] = %h", `__FILE__, `__LINE__, addr, value);
+      end
+      for (addr = 0; addr < 12'hFFF; addr = addr + 1) begin
+        api_read32(value, addr);
+        if (value != 0)
+          $display("%s:%0d: *** Engine[%h] = %h", `__FILE__, `__LINE__, addr, value);
+      end
+
       api_read64(engine_name, API_ADDR_ENGINE_NAME0);
       api_read32(engine_version, API_ADDR_ENGINE_VERSION);
       api_read64(clock_name, API_ADDR_CLOCK_NAME0);
@@ -492,16 +504,6 @@ module nts_top_tb;
       $display("%s:%0d: *** Dispatcher, bad frame counter:   %0d", `__FILE__, `__LINE__, dispatcher_counter_bad);
       $display("%s:%0d: *** Dispatcher, dispatched counter:  %0d", `__FILE__, `__LINE__, dispatcher_counter_dispatched);
       $display("%s:%0d: *** Dispatcher, error counter:       %0d", `__FILE__, `__LINE__, dispatcher_counter_error);
-      for (addr = 0; addr < 12'hFFF; addr = addr + 1) begin
-        dispatcher_read32(value, addr);
-        if (value != 0)
-          $display("%s:%0d: *** Dispatcher[%h] = %h", `__FILE__, `__LINE__, addr, value);
-      end
-      for (addr = 0; addr < 12'hFFF; addr = addr + 1) begin
-        api_read32(value, addr);
-        if (value != 0)
-          $display("%s:%0d: *** Engine[%h] = %h", `__FILE__, `__LINE__, addr, value);
-      end
     end
 
     $display("Test stop: %s:%0d", `__FILE__, `__LINE__);
@@ -624,12 +626,13 @@ module nts_top_tb;
       always @*
         $display("%s:%0d dut.dispatcher.current_mem: %h", `__FILE__, `__LINE__, dut.dispatcher.current_mem_reg);
       always @*
-        if (dut.i_dispatch_tx_packet_read_DUMMY)
-          $display("%s:%0d dut.o_dispatch_tx_bytes_last_word_DUMMY=%b (ignored)",  `__FILE__, `__LINE__, dut.o_dispatch_tx_bytes_last_word_DUMMY);
+        $display("%s:%0d dut.o_dispatch_tx_bytes_last_word_DUMMY=%b (ignored)",  `__FILE__, `__LINE__, dut.o_dispatch_tx_bytes_last_word_DUMMY);
       always @*
         $display("%s:%0d dut.o_dispatch_tx_fifo_rd_data_DUMMY=%h (ignored)",  `__FILE__, `__LINE__, dut.o_dispatch_tx_fifo_rd_data_DUMMY);
       always @*
-        $display("%s:%0d dut.dispatcher.mac_rx_corrected=%h <-----",  `__FILE__, `__LINE__, dut.dispatcher.mac_rx_corrected);
+        $display("%s:%0d dut.tx_d=%h (ignored)",  `__FILE__, `__LINE__, dut.tx_d); //TODO doesn't work well now. Fix later.
+      always @*
+        $display("%s:%0d dut.dispatcher.mac_rx_corrected=%h",  `__FILE__, `__LINE__, dut.dispatcher.mac_rx_corrected);
       always @(posedge i_clk or posedge i_areset)
         if (i_areset == 0)
           if (dut.engine.rx_buffer.memctrl_we)
@@ -640,6 +643,20 @@ module nts_top_tb;
               $display("%s:%0d          access_addr_lo_reg: %h", `__FILE__, `__LINE__, dut.engine.rx_buffer.access_addr_lo_reg);
               $display("%s:%0d          i_parser_busy: %h", `__FILE__, `__LINE__, dut.engine.rx_buffer.i_parser_busy);
           end
+      always @*
+        $display("%s:%0d dut.engine.parser.ipdecode_ethernet_mac_dst_reg: %h",  `__FILE__, `__LINE__, dut.engine.parser.ipdecode_ethernet_mac_dst_reg);
+      always @*
+        $display("%s:%0d dut.engine.parser.ipdecode_ethernet_mac_src_reg: %h",  `__FILE__, `__LINE__, dut.engine.parser.ipdecode_ethernet_mac_src_reg);
+      always @*
+        $display("%s:%0d dut.engine.parser.tx_header_ethernet_ipv4_udp: %h",  `__FILE__, `__LINE__, dut.engine.parser.tx_header_ethernet_ipv4_udp);
+      always @*
+        if (dut.engine.access_port_rd_dv_parser)
+          $display("%s:%0d dut.engine.access_port(parser)[%h:%h]=%h", `__FILE__, `__LINE__, dut.engine.access_port_addr_parser, dut.engine.access_port_wordsize_parser, dut.engine.access_port_rd_data_parser);
+      always @*
+        if (dut.engine.parser_txbuf_address_internal==0)
+          if (dut.engine.parser_txbuf_write_en)
+            $display("%s:%0d dut.engine.parser_txbuf[%h]=%h", `__FILE__, `__LINE__, dut.engine.parser_txbuf_address, dut.engine.parser_txbuf_write_data);
+
   end
 
   //----------------------------------------------------------------
@@ -651,7 +668,7 @@ module nts_top_tb;
     reg [63:0] old_tick_counter;
     reg [63:0] old_tick_counter_crypto;
     reg [63:0] old_tick_counter_packet;
-    reg  [3:0] old_parser_state;
+    reg  [4:0] old_parser_state;
     reg  [3:0] old_parser_state_crypto;
 
     always  @(posedge i_clk or posedge i_areset)

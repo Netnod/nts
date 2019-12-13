@@ -84,7 +84,7 @@ module nts_engine #(
 
   localparam CORE_NAME0   = 32'h4e_54_53_5f; // "NTS_"
   localparam CORE_NAME1   = 32'h45_4e_47_4e; // "ENGN"
-  localparam CORE_VERSION = 32'h30_2e_30_31; // "0.01"
+  localparam CORE_VERSION = 32'h30_2e_30_31; // "0.02". 0.02: Basic TX development. 0.01: Basic RX development
 
   localparam ADDR_NAME0         = 'h00;
   localparam ADDR_NAME1         = 'h01;
@@ -124,6 +124,9 @@ module nts_engine #(
   reg       [ADDR_WIDTH+3-1:0] access_port_addr;
   wire      [ADDR_WIDTH+3-1:0] access_port_addr_parser;
 
+  reg                   [15:0] access_port_burstsize;
+  wire                  [15:0] access_port_burstsize_parser;
+
   reg                    [2:0] access_port_wordsize;
   wire                   [2:0] access_port_wordsize_parser;
 
@@ -134,7 +137,7 @@ module nts_engine #(
   reg                          access_port_rd_dv_parser;
 
   wire [ACCESS_PORT_WIDTH-1:0] access_port_rd_data;
-  reg                   [31:0] access_port_rd_data_parser;
+  reg                   [63:0] access_port_rd_data_parser;
 
   wire                         detect_unique_identifier;
   wire                         detect_nts_cookie;
@@ -176,8 +179,11 @@ module nts_engine #(
   wire                         parser_busy;
 
   wire                         parser_txbuf_clear;
+  wire                         parser_txbuf_address_internal;
+  wire      [ADDR_WIDTH+3-1:0] parser_txbuf_address;
   wire                         parser_txbuf_write_en;
   wire                  [63:0] parser_txbuf_write_data;
+  wire                         parser_txbuf_update_length;
   wire                         parser_txbuf_ipv4_done;
   wire                         parser_txbuf_ipv6_done;
 
@@ -231,6 +237,7 @@ module nts_engine #(
   wire                    crypto_rxbuf_rd_en;
   reg                     rxbuf_crypto_rd_dv;
   reg              [63:0] rxbuf_crypto_rd_data;
+
   /* verilator lint_off UNUSED */
   wire                    crypto_txbuf_read_en;    //TODO implement
   wire             [63:0] txbuf_crypto_read_data;  //TODO implement
@@ -238,6 +245,7 @@ module nts_engine #(
   wire             [63:0] crypto_txbuf_write_data; //TODO implement
   wire [ADDR_WIDTH+3-1:0] crypto_txbuf_address;    //TODO implement
   /* verilator lint_on UNUSED */
+
   wire                    crypto_noncegen_get;
   wire             [63:0] noncegen_crypto_nonce;
   wire                    noncegen_crypto_ready;
@@ -579,6 +587,7 @@ module nts_engine #(
 
      .o_access_port_wait(access_port_wait),
      .i_access_port_addr(access_port_addr),
+     .i_access_port_burstsize(access_port_burstsize),
      .i_access_port_wordsize(access_port_wordsize),
      .i_access_port_rd_en(access_port_rd_en),
      .o_access_port_rd_dv(access_port_rd_dv),
@@ -595,6 +604,7 @@ module nts_engine #(
     muxctrl = { parser_muxctrl_crypto };
 
     access_port_addr = 0;
+    access_port_burstsize = 0;
     access_port_wordsize = 0;
     access_port_rd_en = 0;
 
@@ -610,12 +620,13 @@ module nts_engine #(
       1'b0:
         begin
           access_port_addr = access_port_addr_parser;
+          access_port_burstsize = access_port_burstsize_parser;
           access_port_wordsize = access_port_wordsize_parser;
           access_port_rd_en = access_port_rd_en_parser;
 
           access_port_wait_parser = access_port_wait;
           access_port_rd_dv_parser = access_port_rd_dv;
-          access_port_rd_data_parser = access_port_rd_data[31:0];
+          access_port_rd_data_parser = access_port_rd_data;
         end
       1'b1:
         begin
@@ -644,10 +655,18 @@ module nts_engine #(
     mux_tx_address_internal = 1;
     mux_tx_address_hi       = 0;
     mux_tx_address_lo       = 0;
-    mux_tx_write_en         = parser_txbuf_write_en;
-    mux_tx_write_data       = parser_txbuf_write_data;
+    mux_tx_write_en         = 0;
+    mux_tx_write_data       = 0;
 
     case (muxctrl)
+      2'b00:
+       begin
+         mux_tx_address_internal = parser_txbuf_address_internal;
+         mux_tx_address_hi       = parser_txbuf_address[ADDR_WIDTH+3-1:3];
+         mux_tx_address_lo       = parser_txbuf_address[2:0];
+         mux_tx_write_en         = parser_txbuf_write_en;
+         mux_tx_write_data       = parser_txbuf_write_data;
+       end
       2'b01: //IPv4 timestamp
        begin
          mux_tx_address_internal = 0;
@@ -702,6 +721,8 @@ module nts_engine #(
     .i_address_hi(mux_tx_address_hi),
     .i_address_lo(mux_tx_address_lo),
 
+    .i_parser_update_length(parser_txbuf_update_length),
+
     .i_parser_ipv4_done(parser_txbuf_ipv4_done),
     .i_parser_ipv6_done(parser_txbuf_ipv6_done),
 
@@ -736,13 +757,17 @@ module nts_engine #(
    .i_tx_empty(txbuf_parser_empty),
    .i_tx_full(txbuf_parser_full),
    .o_tx_clear(parser_txbuf_clear),
+   .o_tx_addr_internal(parser_txbuf_address_internal),
+   .o_tx_addr(parser_txbuf_address),
    .o_tx_w_en(parser_txbuf_write_en),
    .o_tx_w_data(parser_txbuf_write_data),
+   .o_tx_update_length(parser_txbuf_update_length),
    .o_tx_ipv4_done(parser_txbuf_ipv4_done),
    .o_tx_ipv6_done(parser_txbuf_ipv6_done),
 
    .i_access_port_wait(access_port_wait_parser),
    .o_access_port_addr(access_port_addr_parser),
+   .o_access_port_burstsize(access_port_burstsize_parser),
    .o_access_port_wordsize(access_port_wordsize_parser),
    .o_access_port_rd_en(access_port_rd_en_parser),
    .i_access_port_rd_dv(access_port_rd_dv_parser),

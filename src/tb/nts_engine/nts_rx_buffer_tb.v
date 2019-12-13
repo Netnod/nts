@@ -30,7 +30,8 @@
 
 module nts_rx_buffer_tb;
   parameter ADDR_WIDTH = 8;
-  parameter VERBOSE=1;
+  parameter VERBOSE = 1 ;
+  parameter TEST_BUFF_WORDS = 40;
 
   reg                     i_areset;
   reg                     i_clk;
@@ -45,12 +46,15 @@ module nts_rx_buffer_tb;
   wire                    access_port_wait;
   reg  [ADDR_WIDTH+3-1:0] access_port_addr;
   reg  [2:0]              access_port_wordsize;
+  reg  [15:0]             access_port_burstsize;
   reg                     access_port_rd_en;
   wire                    access_port_rd_dv;
   wire  [63:0]            access_port_rd_data;
 
   reg rd_start_recieved;
   reg rd_read_recieved;
+
+  reg [64*TEST_BUFF_WORDS-1:0] rd_buf;
 
   nts_rx_buffer #(ADDR_WIDTH) dut (
      .i_areset(i_areset),
@@ -65,6 +69,7 @@ module nts_rx_buffer_tb;
      .o_access_port_wait(access_port_wait),
      .i_access_port_addr(access_port_addr),
      .i_access_port_wordsize(access_port_wordsize),
+     .i_access_port_burstsize(access_port_burstsize),
      .i_access_port_rd_en(access_port_rd_en),
      .o_access_port_rd_dv(access_port_rd_dv),
      .o_access_port_rd_data(access_port_rd_data)
@@ -79,31 +84,74 @@ module nts_rx_buffer_tb;
       access_port_addr = addr;
       access_port_rd_en = 1;
       access_port_wordsize = ws;
-      #10
+      #10;
       `assert(access_port_wait);
       access_port_rd_en = 0;
-      #10
+      #10 ;
       while(access_port_wait) begin
         `assert(access_port_rd_dv == 'b0);
         #10 ;
       end
       `assert(access_port_rd_dv == 'b1);
+      if (VERBOSE>1)
+        case(ws)
+          0: $display("%s:%0d read: %h", `__FILE__, `__LINE__, access_port_rd_data[0+:8]);
+          1: $display("%s:%0d read: %h", `__FILE__, `__LINE__, access_port_rd_data[0+:16]);
+          2: $display("%s:%0d read: %h", `__FILE__, `__LINE__, access_port_rd_data[0+:32]);
+          3: $display("%s:%0d read: %h", `__FILE__, `__LINE__, access_port_rd_data[0+:64]);
+          default: ;
+        endcase
     end
+  endtask
+
+  task read_burst (input [10:0] addr, input [15:0] bytes, output [64*TEST_BUFF_WORDS-1:0] test_buff);
+  begin : read_burst
+    integer i;
+    if (VERBOSE>1) $display("%s:%0d read_burst(%h, %h, ...)", `__FILE__, `__LINE__, addr, bytes);
+    test_buff = 0;
+    #10 `assert(access_port_wait == 'b0);
+    access_port_addr = addr;
+    access_port_rd_en = 1;
+    access_port_wordsize = 4; //burst
+    access_port_burstsize = bytes;
+
+    #10;
+    if (bytes == 0) begin
+      `assert(access_port_wait==0);
+      access_port_rd_en = 0;
+    end else begin
+      `assert(access_port_wait);
+      access_port_rd_en = 0;
+      i = 0;
+      while(access_port_wait) begin
+        if (access_port_rd_dv) begin
+          `assert(i < TEST_BUFF_WORDS);
+          test_buff = { test_buff[64*TEST_BUFF_WORDS-65:0], access_port_rd_data };
+          if (VERBOSE>1) $display("%s:%0d read[%0d] = %h.", `__FILE__, `__LINE__, i, access_port_rd_data);
+          i = i + 1;
+        end
+        #10 ;
+      end
+    end
+  end
   endtask
 
   initial
       begin
         $display("Test start: %s:%0d.", `__FILE__, `__LINE__);
         i_clk = 1;
+        #5 ;
         i_areset = 1;
         i_parser_busy = 1;
         access_port_addr = 'b0;
         access_port_wordsize = 'b0;
+        access_port_burstsize = 16'h0;
         access_port_rd_en = 'b0;
         dispatch_fifo_empty = 'b0;
         dispatch_fifo_rd_valid = 0;
         dispatch_fifo_rd_data = 'b00;
         dispatch_packet_avialable = 0;
+        #5 ;
 
         #10 i_areset = 0;
 
@@ -112,6 +160,7 @@ module nts_rx_buffer_tb;
         #10 `assert(dispatch_fifo_rd_start == 'b0);
         #10 `assert(dispatch_fifo_rd_start == 'b0);
         i_parser_busy = 0;
+        #10;
         if (VERBOSE>0) $display("%s:%0d Waiting for dut to signal ready to receive.", `__FILE__, `__LINE__);
         while (rd_start_recieved == 'b0) #10;
         dispatch_packet_avialable = 'b0;
@@ -120,7 +169,9 @@ module nts_rx_buffer_tb;
         #10 { dispatch_fifo_rd_valid, dispatch_fifo_rd_data } = { 1'b1, 64'hdeadbeef00000000 };
         #10 { dispatch_fifo_rd_valid, dispatch_fifo_rd_data } = { 1'b1, 64'habad1deac0fef00d };
         #10 { dispatch_fifo_rd_valid, dispatch_fifo_rd_data } = { 1'b1, 64'h0123456789abcdef };
+        #10 { dispatch_fifo_rd_valid, dispatch_fifo_rd_data } = { 1'b1, 64'hffffffffffffffff };
         #10 { dispatch_fifo_rd_valid, dispatch_fifo_rd_data } = { 1'b0, 64'h0 };
+
         #10 dispatch_fifo_empty = 'b1;
         if (VERBOSE>0) $display("%s:%0d Waiting for dut to signal ACK fifo read.", `__FILE__, `__LINE__);
         while (rd_read_recieved == 'b0) #10;
@@ -128,6 +179,7 @@ module nts_rx_buffer_tb;
 
         if (VERBOSE>0) $display("%s:%0d 64 bit access port tests.", `__FILE__, `__LINE__);
         #100
+      $display("%s:%0d dut.memctrl_reg=%h", `__FILE__, `__LINE__, dut.memctrl_reg);
         read('b00_000, 3);
         `assert(access_port_rd_data == 64'hdeadbeef00000000);
         read('b00_000, 3);
@@ -205,6 +257,83 @@ module nts_rx_buffer_tb;
         read('b01_111, 2);
         `assert(access_port_rd_data == 64'h0d012345);
 
+        if (VERBOSE>0) $display("%s:%0d burst access port tests.", `__FILE__, `__LINE__);
+        #100
+
+        read_burst(0, 0, rd_buf);
+        `assert(rd_buf == 0);
+
+        read_burst(0, 8, rd_buf);
+        `assert(rd_buf[0+:64] == 64'hdeadbeef00000000 );
+
+        //should work twice :)
+        read_burst(0, 8, rd_buf);
+        `assert(rd_buf[0+:64] == 64'hdeadbeef00000000 );
+
+        read_burst(0, 1, rd_buf);
+        `assert(rd_buf[63-:8] == 8'hde );
+
+        read_burst(1, 1, rd_buf);
+        `assert(rd_buf[63-:8] == 8'had );
+
+        read_burst(2, 8, rd_buf);
+        `assert(rd_buf[63-:64] ==  64'hbeef00000000abad);
+
+        read_burst(2, 7, rd_buf);
+        `assert(rd_buf[63-:64] ==  64'hbeef00000000ab00);
+
+        read_burst(0, 16, rd_buf);
+        `assert(rd_buf[0+:128] == 128'hdeadbeef00000000abad1deac0fef00d );
+
+        read_burst(1, 15, rd_buf);
+        `assert(rd_buf[0+:128] == 128'hadbeef00000000abad1deac0fef00d_00 );
+
+        read_burst(7, 16, rd_buf);
+        `assert(rd_buf[0+:128] == 128'h00abad1deac0fef00d0123456789abcd );
+
+        read_burst(8, 16, rd_buf);
+        `assert(rd_buf[0+:128] == 128'habad1deac0fef00d0123456789abcdef );
+
+        read_burst(0, 24, rd_buf);
+        `assert(rd_buf[0+:196] == 196'hdeadbeef00000000abad1deac0fef00d0123456789abcdef );
+
+        read_burst(0, 23, rd_buf);
+        `assert(rd_buf[0+:196] == 196'hdeadbeef00000000abad1deac0fef00d0123456789abcd_00 );
+
+        read_burst(1, 23, rd_buf);
+        `assert(rd_buf[0+:196] == 196'hadbeef00000000abad1deac0fef00d0123456789abcdef_00 );
+
+        read_burst(2, 23, rd_buf);
+        `assert(rd_buf[0+:196] == 196'hbeef00000000abad1deac0fef00d0123456789abcdef_ff_00 );
+
+        read_burst(3, 23, rd_buf);
+        `assert(rd_buf[0+:196] == 196'hef00000000abad1deac0fef00d0123456789abcdef_ffff_00 );
+
+        read_burst(4, 23, rd_buf);
+        `assert(rd_buf[0+:196] == 196'h00000000abad1deac0fef00d0123456789abcdef_ffffff_00 );
+
+        read_burst(4, 22, rd_buf);
+        `assert(rd_buf[0+:196] == 196'h00000000abad1deac0fef00d0123456789abcdef_ffff_0000 );
+
+        read_burst(4, 21, rd_buf);
+        `assert(rd_buf[0+:196] == 196'h00000000abad1deac0fef00d0123456789abcdef_ff_000000 );
+
+        read_burst(5, 21, rd_buf);
+        `assert(rd_buf[0+:196] == 196'h000000abad1deac0fef00d0123456789abcdef_ffff_000000 );
+
+        read_burst(6, 20, rd_buf);
+        `assert(rd_buf[0+:196] == 196'h0000abad1deac0fef00d0123456789abcdef_ffff_00000000 );
+
+        read_burst(6, 19, rd_buf);
+        `assert(rd_buf[0+:196] == 196'h0000abad1deac0fef00d0123456789abcdef_ff_0000000000 );
+
+        read_burst(7, 18, rd_buf);
+        `assert(rd_buf[0+:196] == 196'h00abad1deac0fef00d0123456789abcdef_ff_000000000000 );
+
+        read_burst(7, 17, rd_buf);
+        `assert(rd_buf[0+:196] == 196'h00abad1deac0fef00d0123456789abcdef_00000000000000 );
+
+
         $display("Test stop: %s:%0d.", `__FILE__, `__LINE__);
         #40 $finish;
       end
@@ -219,9 +348,12 @@ module nts_rx_buffer_tb;
     rd_read_recieved <= 1;
   end
 
-  if (VERBOSE>1) begin
+  if (VERBOSE>2) begin
     always @(posedge i_clk)
       if (dispatch_packet_read==1) $display("%s:%0d dispatch_packet_read.", `__FILE__, `__LINE__);
+
+    always @*
+      $display("%s:%0d dispatch_packet_read: %b",  `__FILE__, `__LINE__, dispatch_packet_read);
 
     always @*
       $display("%s:%0d dispatch_packet_avialable: %b",  `__FILE__, `__LINE__, dispatch_packet_avialable);
@@ -234,6 +366,36 @@ module nts_rx_buffer_tb;
 
     always @*
       $display("%s:%0d dut.memctrl_reg=%h", `__FILE__, `__LINE__, dut.memctrl_reg);
+
+    always @*
+      $display("%s:%0d dut.burst_size_we=%h new=%h", `__FILE__, `__LINE__, dut.burst_size_we, dut.burst_size_new);
+
+    always @*
+      $display("%s:%0d dut.burst_mem_reg=%h", `__FILE__, `__LINE__, dut.burst_mem_reg);
+
+    always @*
+      $display("%s:%0d dut.burst_size_reg=%h", `__FILE__, `__LINE__, dut.burst_size_reg);
+
+    always @*
+      $display("%s:%0d dut.ram_addr_we=%h new=%h", `__FILE__, `__LINE__, dut.ram_addr_we, dut.ram_addr_new);
+
+    wire [63:0] mem_0;
+    wire [63:0] mem_1;
+    wire [63:0] mem_2;
+    wire [63:0] mem_3;
+    assign mem_0 = dut.mem.mem[0];
+    assign mem_1 = dut.mem.mem[1];
+    assign mem_2 = dut.mem.mem[2];
+    assign mem_3 = dut.mem.mem[3];
+
+    always @*
+      $display("%s:%0d dut.mem.mem[0]=%h", `__FILE__, `__LINE__, mem_0);
+    always @*
+      $display("%s:%0d dut.mem.mem[1]=%h", `__FILE__, `__LINE__, mem_1);
+    always @*
+      $display("%s:%0d dut.mem.mem[2]=%h", `__FILE__, `__LINE__, mem_2);
+    always @*
+      $display("%s:%0d dut.mem.mem[3]=%h", `__FILE__, `__LINE__, mem_3);
   end
 
   always begin

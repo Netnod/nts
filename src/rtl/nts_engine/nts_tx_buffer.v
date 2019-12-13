@@ -52,6 +52,8 @@ module nts_tx_buffer #(
   input  wire [ADDR_WIDTH-1:0] i_address_hi,
   input  wire            [2:0] i_address_lo,
 
+  input wire         i_parser_update_length,
+
   input  wire        i_parser_ipv4_done,
   input  wire        i_parser_ipv6_done,
 
@@ -83,13 +85,17 @@ module nts_tx_buffer #(
   // Registers including update variables and write enable.
   //----------------------------------------------------------------
 
+  reg                  bytes_last_word_we  [0:1];
+  reg            [3:0] bytes_last_word_new [0:1];
+  reg            [3:0] bytes_last_word_reg [0:1];
+
   reg                  current_mem_we;
   reg                  current_mem_new;
   reg                  current_mem_reg;
 
-  reg                  mem_state_we    [1:0];
-  reg            [2:0] mem_state_new   [1:0];
-  reg            [2:0] mem_state_reg   [1:0];
+  reg                  mem_state_we    [0:1];
+  reg            [2:0] mem_state_new   [0:1];
+  reg            [2:0] mem_state_reg   [0:1];
 
   reg                  ram_rd          [0:1];
   reg                  ram_wr          [0:1];
@@ -134,7 +140,7 @@ module nts_tx_buffer #(
   assign o_dispatch_tx_packet_available  = mem_state_reg[ fifo ] == STATE_FIFO_OUT;
   assign o_dispatch_tx_fifo_empty        = ram_addr_hi_reg[ fifo ] == fifo_word_count_p1;
   assign o_dispatch_tx_fifo_rd_data      = ram_rd_data[ fifo ];
-  assign o_dispatch_tx_bytes_last_word   = 0; //TODO implement
+  assign o_dispatch_tx_bytes_last_word   = bytes_last_word_reg[ fifo ];
   assign o_parser_current_empty          = mem_state_reg[ parser ] == STATE_EMPTY;
   assign o_parser_current_memory_full    = (mem_state_reg[ parser ] == STATE_HAS_DATA && ram_addr_hi_reg[ parser ] == ADDRESS_FULL) ||
                                            (mem_state_reg[ parser ] == STATE_HAS_DATA && ram_addr_hi_reg[ parser ] == ADDRESS_ALMOST_FULL && i_write_en) ||
@@ -223,6 +229,7 @@ module nts_tx_buffer #(
     if (i_areset == 1'b1) begin
       current_mem_reg   <= 'b0;
       for (i = 0; i < 2; i = i + 1) begin
+        bytes_last_word_reg[i] <= 0;
         mem_state_reg[i] <= STATE_EMPTY;
         word_count_reg[i] <= 'b0;
       end
@@ -230,6 +237,8 @@ module nts_tx_buffer #(
       if (current_mem_we)
         current_mem_reg <= current_mem_new;
       for (i = 0; i < 2; i = i + 1) begin
+        if (bytes_last_word_we[i])
+          bytes_last_word_reg[i] <= bytes_last_word_new[i];
         if (mem_state_we[i])
           mem_state_reg[i] <= mem_state_new[i];
         if (word_count_we[i])
@@ -246,6 +255,9 @@ module nts_tx_buffer #(
     begin : defaults
       integer i;
       for (i = 0; i < 2; i = i + 1) begin
+        bytes_last_word_we[i] = 0;
+        bytes_last_word_new[i] = 0;
+
         mem_state_we[i] = 0;
         mem_state_new[i] = STATE_EMPTY;
 
@@ -322,6 +334,26 @@ module nts_tx_buffer #(
                 ram_addr_hi[parser]     = i_address_hi;
               end
               //$display("%s:%0d WRITE: %h:%h = %h. wr=%h rd=%h", `__FILE__, `__LINE__, ram_addr_hi[parser], ram_addr_lo[parser], i_write_data, ram_wr[parser], ram_rd[parser] );
+            end
+            if (i_parser_update_length) begin
+              if (i_address_lo == 0) begin
+                if (i_address_hi == 0) begin
+                  word_count_we[parser] = 1;
+                  word_count_new[parser] = 0;
+                  bytes_last_word_we[parser] = 1;
+                  bytes_last_word_new[parser] = 0;
+                end else begin
+                  word_count_we[parser] = 1;
+                  word_count_new[parser] = i_address_hi - 1;
+                  bytes_last_word_we[parser] = 1;
+                  bytes_last_word_new[parser] = 8;
+                end
+              end else begin
+                word_count_we[parser] = 1;
+                word_count_new[parser] = i_address_hi;
+                bytes_last_word_we[parser] = 1;
+                bytes_last_word_new[parser] = { 1'b0, i_address_lo };
+              end
             end
             if (i_parser_ipv4_done || i_parser_ipv6_done) begin
               mem_state_we[parser] = 1;

@@ -59,17 +59,21 @@ module nts_parser_ctrl #(
   input  wire                         i_tx_empty,
   input  wire                         i_tx_full,
   output wire                         o_tx_clear,
+  output wire                         o_tx_addr_internal,
+  output wire      [ADDR_WIDTH+3-1:0] o_tx_addr,
   output wire                         o_tx_w_en,
   output wire                  [63:0] o_tx_w_data,
+  output wire                         o_tx_update_length,
   output wire                         o_tx_ipv4_done,
   output wire                         o_tx_ipv6_done,
 
   input  wire                         i_access_port_wait,
   output wire      [ADDR_WIDTH+3-1:0] o_access_port_addr,
+  output wire                  [15:0] o_access_port_burstsize,
   output wire                   [2:0] o_access_port_wordsize,
   output wire                         o_access_port_rd_en,
   input  wire                         i_access_port_rd_dv,
-  input  wire                  [31:0] i_access_port_rd_data,
+  input  wire                  [63:0] i_access_port_rd_data,
 
   output wire                   [2:0] o_keymem_key_word,
   output wire                         o_keymem_get_key_with_id,
@@ -152,20 +156,29 @@ module nts_parser_ctrl #(
   // Internal constant and parameter definitions.
   //----------------------------------------------------------------
 
-  localparam STATE_IDLE                     = 4'h0;
-  localparam STATE_COPY                     = 4'h1;
-  localparam STATE_LENGTH_CHECKS            = 4'h3;
-  localparam STATE_EXTRACT_EXT_FROM_RAM     = 4'h4;
-  localparam STATE_EXTENSIONS_EXTRACTED     = 4'h5;
-  localparam STATE_EXTRACT_COOKIE_FROM_RAM  = 4'h6;
-  localparam STATE_VERIFY_KEY_FROM_COOKIE1  = 4'h7;
-  localparam STATE_VERIFY_KEY_FROM_COOKIE2  = 4'h8;
-  localparam STATE_RX_AUTH_COOKIE           = 4'h9;
-  localparam STATE_RX_AUTH_PACKET           = 4'ha;
-  localparam STATE_TIMESTAMP                = 4'hb;
-  localparam STATE_TIMESTAMP_WAIT           = 4'hc;
-  localparam STATE_ERROR_UNIMPLEMENTED      = 4'he;
-  localparam STATE_ERROR_GENERAL            = 4'hf;
+  localparam BITS_STATE = 5;
+
+  localparam [BITS_STATE-1:0] STATE_IDLE                     = 5'h00;
+  localparam [BITS_STATE-1:0] STATE_COPY                     = 5'h01; //RX handling states
+  localparam [BITS_STATE-1:0] STATE_LENGTH_CHECKS            = 5'h02;
+  localparam [BITS_STATE-1:0] STATE_EXTRACT_EXT_FROM_RAM     = 5'h03;
+  localparam [BITS_STATE-1:0] STATE_EXTENSIONS_EXTRACTED     = 5'h04;
+  localparam [BITS_STATE-1:0] STATE_EXTRACT_COOKIE_FROM_RAM  = 5'h05;
+  localparam [BITS_STATE-1:0] STATE_VERIFY_KEY_FROM_COOKIE1  = 5'h06;
+  localparam [BITS_STATE-1:0] STATE_VERIFY_KEY_FROM_COOKIE2  = 5'h07;
+  localparam [BITS_STATE-1:0] STATE_RX_AUTH_COOKIE           = 5'h08;
+  localparam [BITS_STATE-1:0] STATE_RX_AUTH_PACKET           = 5'h09;
+  localparam [BITS_STATE-1:0] STATE_WRITE_HEADER_IPV4        = 5'h0a; //TX handling states
+  localparam [BITS_STATE-1:0] STATE_WRITE_HEADER_IPV6        = 5'h0b;
+  localparam [BITS_STATE-1:0] STATE_TIMESTAMP                = 5'h0c;
+  localparam [BITS_STATE-1:0] STATE_TIMESTAMP_WAIT           = 5'h0d;
+  localparam [BITS_STATE-1:0] STATE_UNIQUE_IDENTIFIER_COPY_0 = 5'h0e;
+  localparam [BITS_STATE-1:0] STATE_UNIQUE_IDENTIFIER_COPY_1 = 5'h0f;
+
+  localparam [BITS_STATE-1:0] STATE_TX_UPDATE_LENGTH         = 5'h1d;
+
+  localparam [BITS_STATE-1:0] STATE_ERROR_UNIMPLEMENTED      = 5'h1e;
+  localparam [BITS_STATE-1:0] STATE_ERROR_GENERAL            = 5'h1f;
 
   localparam CRYPTO_FSM_IDLE              =  0;
   localparam CRYPTO_FSM_RX_AUTH_COOKIE    =  1; // issue load nonce
@@ -215,8 +228,12 @@ module nts_parser_ctrl #(
   localparam [3:0] IP_V4        =  4'h4;
   localparam [3:0] IP_V6        =  4'h6;
 
-  //localparam ADDR_IPV4_START_NTP = 6 * 8 + 2;
-  //localparam ADDR_IPV6_START_NTP = 8 * 8 + 6;
+  localparam  [7:0] IPV4_TOS     = 0;
+  localparam  [2:0] IPV4_FLAGS   = 3'b010; // Reserved=0, must be zero. DF=1 (don't fragment). MF=0 (Last Fragment)
+  localparam [12:0] IPV4_FRAGMENT_OFFSET = 0;
+  localparam  [7:0] IPV4_TTL     = 8'hff;
+  localparam  [7:0] IP_UDP_PROTO = 8'h11; //17
+
   localparam ADDR_IPV4_START_NTP = 5 * 8 + 2;
   localparam ADDR_IPV6_START_NTP = 7 * 8 + 6;
 
@@ -231,6 +248,9 @@ module nts_parser_ctrl #(
   reg                         access_port_addr_we;
   reg      [ADDR_WIDTH+3-1:0] access_port_addr_new;
   reg      [ADDR_WIDTH+3-1:0] access_port_addr_reg;
+  reg                         access_port_burstsize_we;
+  reg                  [15:0] access_port_burstsize_new;
+  reg                  [15:0] access_port_burstsize_reg;
   reg                         access_port_rd_en_we;
   reg                         access_port_rd_en_new;
   reg                         access_port_rd_en_reg;
@@ -243,8 +263,8 @@ module nts_parser_ctrl #(
   reg                  [31:0] cookie_server_id_reg;
 
   reg                         error_state_we;
-  reg                   [3:0] error_state_new;
-  reg                   [3:0] error_state_reg;
+  reg        [BITS_STATE-1:0] error_state_new;
+  reg        [BITS_STATE-1:0] error_state_reg;
 
   reg                         error_cause_we;
   reg                  [31:0] error_cause_new;
@@ -258,14 +278,26 @@ module nts_parser_ctrl #(
   reg      [ADDR_WIDTH+3-1:0] error_size_new;
   reg      [ADDR_WIDTH+3-1:0] error_size_reg;
 
+  reg                         copy_bytes_we;
+  reg                  [15:0] copy_bytes_new;
+  reg                  [15:0] copy_bytes_reg;
+
+  reg                         copy_rx_addr_we;
+  reg      [ADDR_WIDTH+3-1:0] copy_rx_addr_new;
+  reg      [ADDR_WIDTH+3-1:0] copy_rx_addr_reg;
+
+  reg                         copy_tx_addr_we;
+  reg      [ADDR_WIDTH+3-1:0] copy_tx_addr_new;
+  reg      [ADDR_WIDTH+3-1:0] copy_tx_addr_reg;
+
   reg                         crypto_fsm_we;
   reg                   [3:0] crypto_fsm_new;
   reg                   [3:0] crypto_fsm_reg;
 
   reg                         state_we;
-  reg                   [3:0] state_new;
-  reg                   [3:0] state_reg;
-  reg                   [3:0] state_previous_reg;
+  reg        [BITS_STATE-1:0] state_new;
+  reg        [BITS_STATE-1:0] state_reg;
+  reg        [BITS_STATE-1:0] state_previous_reg;
 
   reg                         word_counter_we;
   reg        [ADDR_WIDTH-1:0] word_counter_new;
@@ -286,7 +318,12 @@ module nts_parser_ctrl #(
   reg                          memory_address_failure_reg;
   reg                          memory_address_lastbyte_read_reg;
 
-  //reg                   [63:0] previous_i_data_reg; //We receive i_data one cycle before process signal
+  reg                          ipdecode_ethernet_mac_dst_we;
+  reg                   [47:0] ipdecode_ethernet_mac_dst_new;
+  reg                   [47:0] ipdecode_ethernet_mac_dst_reg;
+  reg                          ipdecode_ethernet_mac_src_we;
+  reg                   [47:0] ipdecode_ethernet_mac_src_new;
+  reg                   [47:0] ipdecode_ethernet_mac_src_reg;
   reg                          ipdecode_ethernet_protocol_we;
   reg                   [15:0] ipdecode_ethernet_protocol_new;
   reg                   [15:0] ipdecode_ethernet_protocol_reg;
@@ -296,10 +333,22 @@ module nts_parser_ctrl #(
   reg                          ipdecode_ip4_ihl_we;
   reg                    [3:0] ipdecode_ip4_ihl_new;
   reg                    [3:0] ipdecode_ip4_ihl_reg;
+  reg                          ipdecode_ip4_ip_dst_we;
+  reg                   [31:0] ipdecode_ip4_ip_dst_new;
+  reg                   [31:0] ipdecode_ip4_ip_dst_reg;
+  reg                          ipdecode_ip4_ip_src_we;
+  reg                   [31:0] ipdecode_ip4_ip_src_new;
+  reg                   [31:0] ipdecode_ip4_ip_src_reg;
 
   reg                          ipdecode_udp_length_we;
   reg                   [15:0] ipdecode_udp_length_new;
   reg                   [15:0] ipdecode_udp_length_reg;
+  reg                          ipdecode_udp_port_dst_we;
+  reg                   [15:0] ipdecode_udp_port_dst_new;
+  reg                   [15:0] ipdecode_udp_port_dst_reg;
+  reg                          ipdecode_udp_port_src_we;
+  reg                   [15:0] ipdecode_udp_port_src_new;
+  reg                   [15:0] ipdecode_udp_port_src_reg;
 
   reg                          keymem_key_word_we;
   reg                    [2:0] keymem_key_word_new;
@@ -324,7 +373,6 @@ module nts_parser_ctrl #(
 //reg                 [ 7 : 0] timestamp_poll_new;
 //reg                 [ 7 : 0] timestamp_poll_reg;
 
-
   reg                          ntp_extension_counter_we;
   reg [NTP_EXTENSION_BITS-1:0] ntp_extension_counter_new;
   reg [NTP_EXTENSION_BITS-1:0] ntp_extension_counter_reg;
@@ -344,6 +392,10 @@ module nts_parser_ctrl #(
   reg       [ADDR_WIDTH+3-1:0] nts_authenticator_start_addr_reg;
   reg                          nts_basic_sanity_check_packet_ok_new;
   reg                          nts_basic_sanity_check_packet_ok_reg;
+  reg       [ADDR_WIDTH+3-1:0] nts_unique_identifier_addr_new;
+  reg       [ADDR_WIDTH+3-1:0] nts_unique_identifier_addr_reg;
+  reg                   [15:0] nts_unique_identifier_length_new;
+  reg                   [15:0] nts_unique_identifier_length_reg;
   reg [NTP_EXTENSION_BITS-1:0] nts_valid_placeholders_new;
   /* verilator lint_off UNUSED */
   reg [NTP_EXTENSION_BITS-1:0] nts_valid_placeholders_reg; //TODO implement
@@ -367,6 +419,16 @@ module nts_parser_ctrl #(
   reg statistics_nts_bad_keyid_new;
   reg statistics_nts_bad_keyid_reg;
 
+  reg        tx_header_index_we;
+  reg  [2:0] tx_header_index_new;
+  reg  [2:0] tx_header_index_reg;
+
+  reg [15:0] tx_ipv4_csum_new;
+  reg [15:0] tx_ipv4_csum_reg;
+
+  reg [15:0] tx_udp_length_reg; //TODO implement
+  reg [15:0] tx_udp_checksum_reg;
+
   //----------------------------------------------------------------
   // Debug buffer
   //----------------------------------------------------------------
@@ -389,6 +451,8 @@ module nts_parser_ctrl #(
 
   reg [31:0] api_read_data;
 
+  reg copy_done; //wire
+
   reg crypto_op_cookie_verify;
   reg crypto_op_cookie_loadkeys;
   reg crypto_op_c2s_verify_auth;
@@ -408,6 +472,21 @@ module nts_parser_ctrl #(
 
   reg  muxctrl_crypto;
 
+  wire     [15:0] tx_ethernet_type;
+  wire    [111:0] tx_header_ethernet;
+  wire [16*5-1:0] tx_header_ipv4_nocsum0;
+  wire [16*4-1:0] tx_header_ipv4_nocsum1;
+  wire [32*5-1:0] tx_header_ipv4;
+  //wire    [271:0] tx_header_ethernet_ipv4;
+  wire    [335:0] tx_header_ethernet_ipv4_udp;
+  wire     [63:0] tx_header_udp;
+
+  reg                    tx_address_internal;
+  reg [ADDR_WIDTH+3-1:0] tx_address;
+  reg                    tx_update_length;
+  reg                    tx_write_en;
+  reg             [63:0] tx_write_data;
+
   //----------------------------------------------------------------
   // Connectivity for ports etc.
   //----------------------------------------------------------------
@@ -422,9 +501,10 @@ module nts_parser_ctrl #(
 
   assign o_busy                 = (i_tx_empty == 'b0) || (state_reg != STATE_IDLE);
 
-  assign o_access_port_addr     = access_port_addr_reg;
-  assign o_access_port_rd_en    = access_port_rd_en_reg;
-  assign o_access_port_wordsize = access_port_wordsize_reg;
+  assign o_access_port_addr      = access_port_addr_reg;
+  assign o_access_port_burstsize = access_port_burstsize_reg;
+  assign o_access_port_rd_en     = access_port_rd_en_reg;
+  assign o_access_port_wordsize  = access_port_wordsize_reg;
 
   assign o_api_read_data = api_read_data;
 
@@ -435,8 +515,11 @@ module nts_parser_ctrl #(
   assign o_tx_clear     = state_reg == STATE_ERROR_GENERAL;
   assign o_tx_ipv4_done = detect_ipv4 && state_reg == STATE_ERROR_UNIMPLEMENTED; //TODO implement termination logic
   assign o_tx_ipv6_done = detect_ipv6 && state_reg == STATE_ERROR_UNIMPLEMENTED; //TODO implement termination logic
-  assign o_tx_w_en      = i_process_initial;   //TODO implement proper write logic
-  assign o_tx_w_data    = i_data;          //TODO implement proper write logic
+  assign o_tx_addr_internal = tx_address_internal;
+  assign o_tx_addr          = tx_address;
+  assign o_tx_update_length = tx_update_length;
+  assign o_tx_w_en          = tx_write_en;
+  assign o_tx_w_data        = tx_write_data;
 
   assign o_timestamp_record_receive_timestamp = timestamp_record_receive_timestamp_reg;
   assign o_timestamp_transmit                 = (state_reg == STATE_TIMESTAMP);
@@ -481,6 +564,26 @@ module nts_parser_ctrl #(
   assign o_statistics_nts_bad_cookie = statistics_nts_bad_cookie_reg;
   assign o_statistics_nts_bad_auth   = statistics_nts_bad_auth_reg;
   assign o_statistics_nts_bad_keyid  = statistics_nts_bad_keyid_reg;
+
+
+
+  assign tx_ethernet_type = detect_ipv4 ? E_TYPE_IPV4 : (detect_ipv6 ? E_TYPE_IPV6 : 16'hFFFF);
+  assign tx_header_ethernet = {
+                                ipdecode_ethernet_mac_src_reg,
+                                ipdecode_ethernet_mac_dst_reg,
+                                tx_ethernet_type
+                              };
+
+  assign tx_header_ipv4_nocsum0 = {
+           IP_V4, 4'h5, IPV4_TOS, 16'h0000,            //|Version|  IHL  |Type of Service|          Total Length         |
+           16'h0000, IPV4_FLAGS, IPV4_FRAGMENT_OFFSET, //|         Identification        |Flags|      Fragment Offset    |
+           IPV4_TTL, IP_UDP_PROTO };                   //|  Time to Live |    Protocol   |         Header Checksum       |
+  assign tx_header_ipv4_nocsum1 = {
+           ipdecode_ip4_ip_dst_reg,                    //|                       Source Address                          |
+           ipdecode_ip4_ip_src_reg };                  //|                    Destination Address                        |
+  assign tx_header_ipv4 = { tx_header_ipv4_nocsum0, tx_ipv4_csum_reg, tx_header_ipv4_nocsum1 };
+  assign tx_header_udp = { ipdecode_udp_port_dst_reg, ipdecode_udp_port_src_reg, tx_udp_length_reg, tx_udp_checksum_reg };
+  assign tx_header_ethernet_ipv4_udp = { tx_header_ethernet, tx_header_ipv4, tx_header_udp };
 
   //----------------------------------------------------------------
   // Functions and Tasks
@@ -557,18 +660,14 @@ module nts_parser_ctrl #(
             ADDR_NAME0: api_read_data = CORE_NAME[63:32];
             ADDR_NAME1: api_read_data = CORE_NAME[31:0];
             ADDR_VERSION: api_read_data = CORE_VERSION;
-            ADDR_STATE: api_read_data = { 28'h0, state_reg };
+            ADDR_STATE: api_read_data[BITS_STATE-1:0] = state_reg; //MSB=0 from init
             ADDR_STATE_CRYPTO: api_read_data = { 28'h0, crypto_fsm_reg };
-            ADDR_ERROR_STATE: api_read_data = { 28'h0, error_state_reg };
+            ADDR_ERROR_STATE: api_read_data[BITS_STATE-1:0] = error_state_reg; //MSB=0 from init
             ADDR_ERROR_COUNT: api_read_data = error_count_reg;
             ADDR_ERROR_CAUSE: api_read_data = error_cause_reg;
-            ADDR_ERROR_SIZE:
-              begin
-                api_read_data[31:ADDR_WIDTH+3] = 0;
-                api_read_data[ADDR_WIDTH+3-1:0] = error_size_reg ;
-              end
-            default: ;
+            ADDR_ERROR_SIZE: api_read_data[ADDR_WIDTH+3-1:0] = error_size_reg; //MSB=0 from init
             ADDR_DUMMY: api_read_data = api_dummy_reg;
+            default: ;
           endcase
         end else begin
           api_read_data = (i_api_address[0]) ? debug_buffer_read_data[31:0] : debug_buffer_read_data[63:32];
@@ -607,7 +706,6 @@ module nts_parser_ctrl #(
   //----------------------------------------------------------------
   // API debug buffer
   //----------------------------------------------------------------
-
 
   always @*
   begin : api_debug_write
@@ -664,12 +762,17 @@ module nts_parser_ctrl #(
   begin : reg_update
     if (i_areset == 1'b1) begin
       access_port_addr_reg       <= 'b0;
+      access_port_burstsize_reg  <= 'b0;
       access_port_rd_en_reg      <= 'b0;
       access_port_wordsize_reg   <= 'b0;
 
       api_dummy_reg              <= 32'h64_75_4d_79; //"duMy"
 
       cookie_server_id_reg       <= 'b0;
+
+      copy_bytes_reg             <= 'b0;
+      copy_rx_addr_reg           <= 'b0;
+      copy_tx_addr_reg           <= 0;
 
       crypto_fsm_reg             <= CRYPTO_FSM_IDLE;
 
@@ -678,10 +781,16 @@ module nts_parser_ctrl #(
       error_size_reg             <= 'b0;
       error_state_reg            <= 'b0;
 
+      ipdecode_ethernet_mac_dst_reg  <= 0;
+      ipdecode_ethernet_mac_src_reg  <= 0;
       ipdecode_ethernet_protocol_reg <= 0;
       ipdecode_ip_version_reg    <= 'b0;
       ipdecode_ip4_ihl_reg       <= 'b0;
+      ipdecode_ip4_ip_dst_reg    <= 'b0;
+      ipdecode_ip4_ip_src_reg    <= 'b0;
       ipdecode_udp_length_reg    <= 'b0;
+      ipdecode_udp_port_dst_reg  <= 'b0;
+      ipdecode_udp_port_src_reg  <= 'b0;
 
       keymem_key_word_reg        <= 'b0;
       keymem_get_key_with_id_reg <= 'b0;
@@ -696,6 +805,8 @@ module nts_parser_ctrl #(
       nts_authenticator_start_addr_reg     <= 'b0;
       nts_basic_sanity_check_packet_ok_reg <= 'b0;
       nts_cookie_start_addr_reg            <= 'b0;
+      nts_unique_identifier_addr_reg       <= 'b0;
+      nts_unique_identifier_length_reg     <= 'b0;
       nts_valid_placeholders_reg           <= 'b0;
 
       state_reg                     <= 'b0;
@@ -711,6 +822,11 @@ module nts_parser_ctrl #(
       timestamp_version_number_reg           <= 'b0;
 
     //timestamp_poll_reg                     <= 'b0;
+
+      tx_header_index_reg <= 0;
+      tx_ipv4_csum_reg <= 0;
+      tx_udp_checksum_reg <= 0; //TODO implement
+      tx_udp_length_reg <= 0;
 
       word_counter_reg           <= 'b0;
 
@@ -728,6 +844,9 @@ module nts_parser_ctrl #(
       if (access_port_addr_we)
         access_port_addr_reg <= access_port_addr_new;
 
+      if (access_port_burstsize_we)
+        access_port_burstsize_reg <= access_port_burstsize_new;
+
       if (access_port_rd_en_we)
         access_port_rd_en_reg <= access_port_rd_en_new;
 
@@ -737,11 +856,20 @@ module nts_parser_ctrl #(
       if (api_dummy_we)
         api_dummy_reg <= api_dummy_new;
 
-      if (crypto_fsm_we)
-        crypto_fsm_reg <= crypto_fsm_new;
-
       if (cookie_server_id_we)
         cookie_server_id_reg <= cookie_server_id_new;
+
+      if (copy_bytes_we)
+        copy_bytes_reg <= copy_bytes_new;
+
+      if (copy_rx_addr_we)
+        copy_rx_addr_reg <= copy_rx_addr_new;
+
+      if (copy_tx_addr_we)
+        copy_tx_addr_reg <= copy_tx_addr_new;
+
+      if (crypto_fsm_we)
+        crypto_fsm_reg <= crypto_fsm_new;
 
       if (error_cause_we)
         error_cause_reg <= error_cause_new;
@@ -755,6 +883,12 @@ module nts_parser_ctrl #(
       if (error_state_we)
         error_state_reg <= error_state_new;
 
+      if (ipdecode_ethernet_mac_dst_we)
+        ipdecode_ethernet_mac_dst_reg <= ipdecode_ethernet_mac_dst_new;
+
+      if (ipdecode_ethernet_mac_src_we)
+        ipdecode_ethernet_mac_src_reg <= ipdecode_ethernet_mac_src_new;
+
       if (ipdecode_ethernet_protocol_we)
         ipdecode_ethernet_protocol_reg <= ipdecode_ethernet_protocol_new;
 
@@ -764,8 +898,20 @@ module nts_parser_ctrl #(
       if (ipdecode_ip4_ihl_we)
         ipdecode_ip4_ihl_reg <= ipdecode_ip4_ihl_new;
 
+      if (ipdecode_ip4_ip_dst_we)
+        ipdecode_ip4_ip_dst_reg <= ipdecode_ip4_ip_dst_new;
+
+      if (ipdecode_ip4_ip_src_we)
+        ipdecode_ip4_ip_src_reg <= ipdecode_ip4_ip_src_new;
+
       if (ipdecode_udp_length_we)
         ipdecode_udp_length_reg <= ipdecode_udp_length_new;
+
+      if (ipdecode_udp_port_dst_we)
+        ipdecode_udp_port_dst_reg <= ipdecode_udp_port_dst_new;
+
+      if (ipdecode_udp_port_src_we)
+        ipdecode_udp_port_src_reg <= ipdecode_udp_port_src_new;
 
       if (keymem_key_word_we)
         keymem_key_word_reg <= keymem_key_word_new;
@@ -803,10 +949,12 @@ module nts_parser_ctrl #(
       if (ntp_extension_counter_we)
         ntp_extension_counter_reg <= ntp_extension_counter_new;
 
-      nts_authenticator_start_addr_reg <= nts_authenticator_start_addr_new;
+      nts_authenticator_start_addr_reg     <= nts_authenticator_start_addr_new;
       nts_basic_sanity_check_packet_ok_reg <= nts_basic_sanity_check_packet_ok_new;
-      nts_cookie_start_addr_reg <= nts_cookie_start_addr_new;
-      nts_valid_placeholders_reg <= nts_valid_placeholders_new;
+      nts_cookie_start_addr_reg            <= nts_cookie_start_addr_new;
+      nts_unique_identifier_addr_reg       <= nts_unique_identifier_addr_new;
+      nts_unique_identifier_length_reg     <= nts_unique_identifier_length_new;
+      nts_valid_placeholders_reg           <= nts_valid_placeholders_new;
 
       if (state_we) begin
         state_reg <= state_new;
@@ -829,6 +977,11 @@ module nts_parser_ctrl #(
 
     //if (timestamp_poll_we)
     //  timestamp_poll_reg <= timestamp_poll_new;
+
+      if (tx_header_index_we)
+        tx_header_index_reg <= tx_header_index_new;
+
+      tx_ipv4_csum_reg <= tx_ipv4_csum_new;
 
       if (word_counter_we)
         word_counter_reg <= word_counter_new;
@@ -916,6 +1069,8 @@ module nts_parser_ctrl #(
     nts_authenticator_start_addr_new = 0;
     nts_basic_sanity_check_packet_ok_new = 0;
     nts_cookie_start_addr_new = 0;
+    nts_unique_identifier_addr_new = 0;
+    nts_unique_identifier_length_new = 0;
     nts_valid_placeholders_new = 0;
 
     begin : nts_basic_sanity_check_locals
@@ -940,6 +1095,8 @@ module nts_parser_ctrl #(
 
           if (ntp_extension_tag_reg[j] == TAG_NTS_UNIQUE_IDENTIFIER) begin
             unique_idenfifiers = unique_idenfifiers + 1;
+            nts_unique_identifier_addr_new = ntp_extension_addr_reg[j];
+            nts_unique_identifier_length_new = ntp_extension_length_reg[j];
             //5.3. The string MUST be at least 32 octets long.
             if (ntp_extension_length_reg[j] < LEN_NTS_MIN_UNIQUE_IDENT) begin
               //$display("%s:%0d Length: %0d, required: %0d", `__FILE__, `__LINE__, ntp_extension_length_reg[j], LEN_NTS_MIN_UNIQUE_IDENT);
@@ -1077,10 +1234,15 @@ module nts_parser_ctrl #(
     end
   end
 
+  //----------------------------------------------------------------
+  // RX buffer Access Port control
+  //----------------------------------------------------------------
   always @*
   begin
     access_port_addr_we        = 'b0;
     access_port_addr_new       = 'b0;
+    access_port_burstsize_we   = 'b0;
+    access_port_burstsize_new  = 'b0;
     access_port_rd_en_we       = 'b0;
     access_port_rd_en_new      = 'b0;
     access_port_wordsize_we    = 'b0;
@@ -1095,35 +1257,113 @@ module nts_parser_ctrl #(
       if (access_port_rd_en_reg == 'b1)
         access_port_rd_en_we  = 'b1; //reset read signal if high
 
-      if (state_reg == STATE_EXTRACT_EXT_FROM_RAM && ntp_extension_copied_reg[ntp_extension_counter_reg] == 'b0) begin
-        //$display("%s:%0d i_access_port_rd_dv=%0d i_access_port_wait=%0d", `__FILE__, `__LINE__, i_access_port_rd_dv, i_access_port_wait);
-        if (i_access_port_rd_dv) begin
-          ;
-        end else if (i_access_port_wait == 'b0) begin
-          access_port_addr_we      = 'b1;
-          access_port_addr_new     = memory_address_reg;
-          access_port_rd_en_we     = 'b1;
-          access_port_rd_en_new    = 'b1;
-          access_port_wordsize_we  = 'b1; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit
-          access_port_wordsize_new = 2; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit
-        end
-      end else if (state_reg == STATE_EXTENSIONS_EXTRACTED && detect_nts_cookie_reg && ntp_extension_length_reg[detect_nts_cookie_index_reg] >= 8)  begin
-        ;
-      end else if (state_reg == STATE_EXTRACT_COOKIE_FROM_RAM) begin
-        //TODO add support for multiple cookies
-        if (i_access_port_rd_dv) begin
-          //$display("%s:%0d i_access_port_rd_data=%h",`__FILE__, `__LINE__, i_access_port_rd_data);
-          ;
-        end else if (i_access_port_wait == 'b0) begin
-          access_port_addr_we      = 'b1;
-          access_port_addr_new     = ntp_extension_addr_reg[detect_nts_cookie_index_reg] + 4;
-          access_port_rd_en_we     = 'b1;
-          access_port_rd_en_new    = 'b1;
-          access_port_wordsize_we  = 'b1; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit
-          access_port_wordsize_new = 2; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit
-        end
-      end
+      case (state_reg)
+        STATE_EXTRACT_EXT_FROM_RAM:
+          if (ntp_extension_copied_reg[ntp_extension_counter_reg] == 'b0) begin
+             //$display("%s:%0d i_access_port_rd_dv=%0d i_access_port_wait=%0d", `__FILE__, `__LINE__, i_access_port_rd_dv, i_access_port_wait);
+            if (i_access_port_rd_dv)
+              ;
+            else if (i_access_port_wait)
+              ;
+            else begin
+              access_port_addr_we      = 'b1;
+              access_port_addr_new     = memory_address_reg;
+              access_port_rd_en_we     = 'b1;
+              access_port_rd_en_new    = 'b1;
+              access_port_wordsize_we  = 'b1;
+              access_port_wordsize_new = 2; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit
+            end
+          end
+        STATE_EXTRACT_COOKIE_FROM_RAM:
+          if (i_access_port_rd_dv)
+            //$display("%s:%0d i_access_port_rd_data=%h",`__FILE__, `__LINE__, i_access_port_rd_data);
+            ;
+          else if (i_access_port_wait)
+            ;
+          else begin
+            access_port_addr_we      = 'b1;
+            access_port_addr_new     = ntp_extension_addr_reg[detect_nts_cookie_index_reg] + 4;
+            access_port_rd_en_we     = 'b1;
+            access_port_rd_en_new    = 'b1;
+            access_port_wordsize_we  = 'b1;
+            access_port_wordsize_new = 2; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit
+          end
+        STATE_UNIQUE_IDENTIFIER_COPY_0:
+          begin
+            access_port_addr_we       = 'b1;
+            access_port_addr_new      = nts_unique_identifier_addr_reg;
+            access_port_burstsize_we  = 'b1;
+            access_port_burstsize_new = nts_unique_identifier_length_reg;
+            access_port_rd_en_we      = 'b1;
+            access_port_rd_en_new     = 'b1;
+            access_port_wordsize_we   = 'b1;
+            access_port_wordsize_new  = 4; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit, 4: burst
+          end
+
+        STATE_UNIQUE_IDENTIFIER_COPY_1:
+          begin
+            access_port_rd_en_we      = 'b1;
+            access_port_rd_en_new     = 'b0;
+          end
+        default: ;
+      endcase
     end
+  end
+
+  //----------------------------------------------------------------
+  // RX -> TX copy process
+  //----------------------------------------------------------------
+
+  always @*
+  begin : copy_proc
+    reg [ADDR_WIDTH+3-1:0] tmp_bytes;
+
+    copy_done = 0;
+
+    copy_bytes_we = 0;
+    copy_bytes_new = 0;
+
+    copy_rx_addr_we = 0;
+    copy_rx_addr_new = 0;
+
+    copy_tx_addr_we = 0;
+    copy_tx_addr_new = 0;
+
+    tmp_bytes = copy_bytes_reg[ADDR_WIDTH+3-1:0];
+
+    case (state_reg)
+      STATE_UNIQUE_IDENTIFIER_COPY_0:
+        begin
+          copy_bytes_we     = 1;
+          copy_bytes_new    = nts_unique_identifier_length_reg;
+          copy_rx_addr_we   = 1;
+          copy_rx_addr_new  = nts_unique_identifier_addr_reg;
+          copy_tx_addr_we   = 1;
+          copy_tx_addr_new  = ipdecode_offset_ntp_ext;
+        end
+      STATE_UNIQUE_IDENTIFIER_COPY_1:
+        begin
+          if (i_access_port_rd_dv) begin
+            if (copy_bytes_reg < 8) begin
+              copy_bytes_we    = 1;
+              copy_bytes_new   = 0;
+              copy_done        = 1;
+              copy_rx_addr_we  = 1;
+              copy_rx_addr_new = copy_rx_addr_new + tmp_bytes;
+              copy_tx_addr_we  = 1;
+              copy_tx_addr_new = copy_tx_addr_reg + tmp_bytes;
+            end else begin
+              copy_bytes_we    = 1;
+              copy_bytes_new   = copy_bytes_reg - 8;
+              copy_rx_addr_we  = 1;
+              copy_rx_addr_new = copy_rx_addr_reg + 8;
+              copy_tx_addr_we  = 1;
+              copy_tx_addr_new = copy_tx_addr_reg + 8;
+            end
+          end
+        end
+      default: ;
+    endcase
   end
 
   always @*
@@ -1230,6 +1470,103 @@ module nts_parser_ctrl #(
       memory_address_failure_reg = 1;
       memory_address_lastbyte_read_reg = 1;
     end
+  end
+
+  //----------------------------------------------------------------
+  // TX IPv4 csum calculation
+  //----------------------------------------------------------------
+
+  function [16:0] calc_csum16 ( input [15:0] a, input [15:0] b );
+    calc_csum16 = { 1'b0, a } + { 1'b0, b };
+  endfunction
+
+  function [15:0] ipv4_csum ( input [16*9-1:0] header );
+
+    integer     i;
+
+    reg  [8:0] carry;
+    reg  [7:0] msb; // Largest possible msb is 8 as in 9*0xFFFF=0x8FFF7
+    reg [15:0] sum0 [0:4];
+    reg [15:0] sum1 [0:1];
+    reg [15:0] sum2;
+    reg [15:0] sum3;
+    reg [15:0] sum4;
+    reg [15:0] notsum4;
+
+  begin
+    for (i = 0; i < 4; i = i+1) begin
+      { carry[i], sum0[i] } = calc_csum16( header[i*32+:16], header[i*32+16+:16] );
+    end
+    for (i = 0; i < 2; i = i+1) begin
+      { carry[4+i], sum1[i] } = calc_csum16( sum0[2*i], sum0[2*i+1] );
+    end
+    { carry[6], sum2 } = calc_csum16( sum1[0], sum1[1] );
+    { carry[7], sum3 } = calc_csum16( sum2, header[15:0] );
+
+    msb = 0;
+    for (i = 0; i < 8; i = i + 1) begin
+      msb = msb + { 7'h0, carry[i] };
+    end
+
+    sum4 = sum3 + { 8'h0, msb }; //Cannot overflow! 0x8FFF7 = 0x8 + 0xFFF7 = 0xFFFF
+    notsum4 = ~sum4;
+    ipv4_csum = notsum4;
+  end
+  endfunction
+
+  always @*
+  begin : ipv4_calc_proc
+    reg [16*9-1:0] words;
+    words = { tx_header_ipv4_nocsum0, tx_header_ipv4_nocsum1 };
+    tx_ipv4_csum_new = ipv4_csum( words );
+  end
+
+  //----------------------------------------------------------------
+  // TX write control
+  //----------------------------------------------------------------
+
+  always @*
+  begin : tx_control
+    tx_address_internal = 0;
+    tx_address = 0;
+    tx_header_index_we = 0;
+    tx_header_index_new = 0;
+    tx_update_length = 0;
+    tx_write_en = 0;
+    tx_write_data = 0;
+    case (state_reg)
+      STATE_COPY:
+        if (i_process_initial && !i_tx_full) begin
+          if (detect_ipv4) begin
+            tx_header_index_we = 1;
+            tx_header_index_new = 5;
+          end
+        end
+      STATE_WRITE_HEADER_IPV4:
+        begin : emit_ipv4_headers
+          reg [6*64-1:0] header;
+          tx_address_internal = 1;
+          tx_header_index_we = 1;
+          tx_header_index_new = tx_header_index_reg - 1;
+          header = { tx_header_ethernet_ipv4_udp, 48'h0 };
+          tx_write_en = 1;
+          tx_write_data = header[ tx_header_index_reg*64+:64 ];
+        end
+      STATE_UNIQUE_IDENTIFIER_COPY_1:
+        begin
+          tx_address_internal = 0;
+
+          tx_address    = copy_tx_addr_reg;
+          tx_write_en   = i_access_port_rd_dv;
+          tx_write_data = i_access_port_rd_data;
+        end
+      STATE_TX_UPDATE_LENGTH:
+        begin
+          tx_address       = copy_tx_addr_reg;
+          tx_update_length = 1;
+        end
+      default: ;
+    endcase
   end
 
   //----------------------------------------------------------------
@@ -1557,7 +1894,12 @@ module nts_parser_ctrl #(
           CRYPTO_FSM_DONE_SUCCESS:
             begin
               state_we  = 'b1;
-              state_new = STATE_TIMESTAMP;
+              if (detect_ipv4)
+                state_new = STATE_WRITE_HEADER_IPV4;
+              else if (detect_ipv6)
+                state_new = STATE_WRITE_HEADER_IPV6;
+              else
+                state_new = STATE_ERROR_GENERAL; //Unexpected, should never happen
             end
           CRYPTO_FSM_DONE_FAILURE:
             begin
@@ -1566,6 +1908,11 @@ module nts_parser_ctrl #(
             end
           default: ;
         endcase
+      STATE_WRITE_HEADER_IPV4:
+        if (tx_header_index_reg == 0) begin
+          state_we  = 'b1;
+          state_new = STATE_TIMESTAMP;
+        end
       STATE_TIMESTAMP:
         begin
           state_we  = 'b1;
@@ -1573,6 +1920,21 @@ module nts_parser_ctrl #(
         end
       STATE_TIMESTAMP_WAIT:
         if (i_timestamp_busy == 'b0) begin
+          state_we  = 'b1;
+          state_new = STATE_UNIQUE_IDENTIFIER_COPY_0;
+        end
+      STATE_UNIQUE_IDENTIFIER_COPY_0:
+        begin
+          state_we  = 'b1;
+          state_new = STATE_UNIQUE_IDENTIFIER_COPY_1;
+        end
+      STATE_UNIQUE_IDENTIFIER_COPY_1:
+        if (copy_done) begin
+          state_we  = 'b1;
+          state_new = STATE_TX_UPDATE_LENGTH;
+        end
+      STATE_TX_UPDATE_LENGTH:
+        begin
           state_we  = 'b1;
           state_new = STATE_ERROR_UNIMPLEMENTED;
         end
@@ -1595,14 +1957,26 @@ module nts_parser_ctrl #(
 
   always @*
   begin
+    ipdecode_ethernet_mac_dst_we   = 'b0;
+    ipdecode_ethernet_mac_dst_new  = 'b0;
+    ipdecode_ethernet_mac_src_we   = 'b0;
+    ipdecode_ethernet_mac_src_new  = 'b0;
     ipdecode_ethernet_protocol_we  = 'b0;
     ipdecode_ethernet_protocol_new = 'b0;
     ipdecode_ip_version_we         = 'b0;
     ipdecode_ip_version_new        = 'b0;
     ipdecode_ip4_ihl_we            = 'b0;
     ipdecode_ip4_ihl_new           = 'b0;
+    ipdecode_ip4_ip_dst_we         = 'b0;
+    ipdecode_ip4_ip_dst_new        = 'b0;
+    ipdecode_ip4_ip_src_we         = 'b0;
+    ipdecode_ip4_ip_src_new        = 'b0;
     ipdecode_udp_length_we         = 'b0;
     ipdecode_udp_length_new        = 'b0;
+    ipdecode_udp_port_dst_we       = 'b0;
+    ipdecode_udp_port_dst_new      = 'b0;
+    ipdecode_udp_port_src_we       = 'b0;
+    ipdecode_udp_port_src_new      = 'b0;
 
     if (i_clear) begin
       ipdecode_ethernet_protocol_we  = 'b1;
@@ -1611,21 +1985,42 @@ module nts_parser_ctrl #(
       ipdecode_udp_length_we         = 'b1;
 
     end else if (i_process_initial) begin
-//      $display("%s:%0d %h %h", `__FILE__, `__LINE__, i_data, previous_i_data_reg);
-      if (word_counter_reg == 0) begin
+      if (state_reg == STATE_IDLE) begin
+        ipdecode_ethernet_mac_dst_we   = 'b1;
+        ipdecode_ethernet_mac_dst_new  = i_data[63:16];
+        ipdecode_ethernet_mac_src_we   = 'b1;
+        ipdecode_ethernet_mac_src_new  = { i_data[15:0], 32'h0 };
+
+      end else if (word_counter_reg == 0) begin
+        ipdecode_ethernet_mac_src_we   = 'b1;
+        ipdecode_ethernet_mac_src_new  = { ipdecode_ethernet_mac_src_reg[47:32], i_data[63:32] };
         ipdecode_ethernet_protocol_we  = 'b1;
         ipdecode_ethernet_protocol_new = i_data[31:16];
         ipdecode_ip_version_we         = 'b1;
         ipdecode_ip_version_new        = i_data[15:12];
         ipdecode_ip4_ihl_we            = 'b1;
         ipdecode_ip4_ihl_new           = i_data[11:8];
-//        $display("%s:%0d %h %h %h %h", `__FILE__, `__LINE__, ipdecode_ethernet_protocol_new, ipdecode_ip_version_new, ipdecode_ip4_ihl_new, previous_i_data_reg);
 
       end else if (detect_ipv4 && ipdecode_ip4_ihl_reg == 5) begin
-        if (word_counter_reg == 3) begin
-          ipdecode_udp_length_we   = 'b1;
-          ipdecode_udp_length_new  = i_data[15:0];
-        end
+        case (word_counter_reg)
+          2: begin
+               ipdecode_ip4_ip_src_we  = 'b1;
+               ipdecode_ip4_ip_src_new = i_data[47:16];
+               ipdecode_ip4_ip_dst_we  = 'b1;
+               ipdecode_ip4_ip_dst_new = { i_data[15:0], 16'h0000 };
+             end
+          3: begin
+               ipdecode_ip4_ip_dst_we    = 'b1;
+               ipdecode_ip4_ip_dst_new   = { ipdecode_ip4_ip_dst_reg[31:16], i_data[63:48] };
+               ipdecode_udp_port_src_we  = 'b1;
+               ipdecode_udp_port_src_new = i_data[47:32];
+               ipdecode_udp_port_dst_we  = 'b1;
+               ipdecode_udp_port_dst_new = i_data[31:16];
+               ipdecode_udp_length_we    = 'b1;
+               ipdecode_udp_length_new   = i_data[15:0];
+             end
+          default: ;
+        endcase
       end else if (detect_ipv6) begin
         if (word_counter_reg == 6) begin
           ipdecode_udp_length_we   = 'b1;

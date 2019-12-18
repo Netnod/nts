@@ -76,9 +76,11 @@ module nts_parser_ctrl #(
   input  wire                  [63:0] i_access_port_rd_data,
 
   output wire                   [2:0] o_keymem_key_word,
+  output wire                         o_keymem_get_current_key,
   output wire                         o_keymem_get_key_with_id,
   output wire                  [31:0] o_keymem_server_id,
   input  wire                         i_keymem_key_valid,
+  input  wire                  [31:0] i_keymem_key_id,
   input  wire                         i_keymem_ready,
 
   input  wire                         i_timestamp_busy,
@@ -145,12 +147,19 @@ module nts_parser_ctrl #(
   // Error causes observable over API
   //----------------------------------------------------------------
 
-  localparam ERROR_CAUSE_BAD_RXW        = 32'h42_52_58_57; //BRXW
-  localparam ERROR_CAUSE_TX_FULL        = 32'h54_46_55_4c; //TFUL
-  localparam ERROR_CAUSE_PKT_SHORT      = 32'h4c_50_4b_30; //LPK0
-  localparam ERROR_CAUSE_PKT_LONG       = 32'h4c_50_4b_31; //LPK1
-  localparam ERROR_CAUSE_PKT_UDP_ALIGN  = 32'h4c_50_4b_32; //LPK2
-  localparam ERROR_CAUSE_NTP_OUT_OF_MEM = 32'h4d_45_52_30; //MER0
+  localparam ERROR_CAUSE_BAD_RXW          = 32'h42_52_58_57; //BRXW
+  localparam ERROR_CAUSE_COOKIE1_GEN_FAIL = 32'h43_6f_47_31; //CoG1
+  localparam ERROR_CAUSE_COOKIE1_TX_FAIL  = 32'h43_6f_54_31; //CoT1
+  localparam ERROR_CAUSE_CRYPTO_BUSY      = 32'h43_42_73_79; //CBsy
+  localparam ERROR_CAUSE_IPV_CONFUSED     = 32'h49_50_56_3f; //IPV?
+  localparam ERROR_CAUSE_KEY_COOKIE_FAIL  = 32'h4b_43_6f_6b; //KCok
+  localparam ERROR_CAUSE_KEY_CURRENT_FAIL = 32'h4b_43_75_72; //KCur
+  localparam ERROR_CAUSE_KEYMEM_BUSY      = 32'h4b_42_73_79; //KBsy
+  localparam ERROR_CAUSE_NTP_OUT_OF_MEM   = 32'h4d_45_52_30; //MER0
+  localparam ERROR_CAUSE_PKT_SHORT        = 32'h4c_50_4b_30; //LPK0
+  localparam ERROR_CAUSE_PKT_LONG         = 32'h4c_50_4b_31; //LPK1
+  localparam ERROR_CAUSE_PKT_UDP_ALIGN    = 32'h4c_50_4b_32; //LPK2
+  localparam ERROR_CAUSE_TX_FULL          = 32'h54_46_55_4c; //TFUL
 
   //----------------------------------------------------------------
   // Internal constant and parameter definitions.
@@ -174,27 +183,36 @@ module nts_parser_ctrl #(
   localparam [BITS_STATE-1:0] STATE_TIMESTAMP_WAIT           = 5'h0d;
   localparam [BITS_STATE-1:0] STATE_UNIQUE_IDENTIFIER_COPY_0 = 5'h0e;
   localparam [BITS_STATE-1:0] STATE_UNIQUE_IDENTIFIER_COPY_1 = 5'h0f;
+  localparam [BITS_STATE-1:0] STATE_RETRIVE_CURRENT_KEY_0    = 5'h10;
+  localparam [BITS_STATE-1:0] STATE_RETRIVE_CURRENT_KEY_1    = 5'h11;
+  localparam [BITS_STATE-1:0] STATE_GENERATE_FIRST_COOKIE    = 5'h12;
+  localparam [BITS_STATE-1:0] STATE_EMIT_FIRST_COOKIE_TL     = 5'h13;
+  localparam [BITS_STATE-1:0] STATE_EMIT_FIRST_COOKIE_V      = 5'h14;
 
   localparam [BITS_STATE-1:0] STATE_TX_UPDATE_LENGTH         = 5'h1d;
 
   localparam [BITS_STATE-1:0] STATE_ERROR_UNIMPLEMENTED      = 5'h1e;
   localparam [BITS_STATE-1:0] STATE_ERROR_GENERAL            = 5'h1f;
 
-  localparam CRYPTO_FSM_IDLE              =  0;
-  localparam CRYPTO_FSM_RX_AUTH_COOKIE    =  1; // issue load nonce
-  localparam CRYPTO_FSM_RX_AUTH_COOKIE_W1 =  2; // wait for complete, issue load tag
-  localparam CRYPTO_FSM_RX_AUTH_COOKIE_W2 =  3; // wait for complete, issue load ciphertext
-  localparam CRYPTO_FSM_RX_AUTH_COOKIE_W3 =  4; // wait for complete, issue cookie verify
-  localparam CRYPTO_FSM_RX_AUTH_COOKIE_W4 =  5; // wait for complete, signal result
-  localparam CRYPTO_FSM_RX_AUTH_PACKET    =  6; // issue load keys
-  localparam CRYPTO_FSM_RX_AUTH_PACKET_W1 =  7; // wait for complete, issue load AD
-  localparam CRYPTO_FSM_RX_AUTH_PACKET_W2 =  8; // wait for complete, issue load nonce
-  localparam CRYPTO_FSM_RX_AUTH_PACKET_W3 =  9; // wait for complete, issue load tag
-  localparam CRYPTO_FSM_RX_AUTH_PACKET_W4 = 10; // wait for complete, issue load load ciphertext
-  localparam CRYPTO_FSM_RX_AUTH_PACKET_W5 = 11; // wait for complete, issue packet verify
-  localparam CRYPTO_FSM_RX_AUTH_PACKET_W6 = 12; // wait for complete, signal result
-  localparam CRYPTO_FSM_DONE_FAILURE      = 14;
-  localparam CRYPTO_FSM_DONE_SUCCESS      = 15;
+  localparam CRYPTO_FSM_IDLE                 = 'h00;
+  localparam CRYPTO_FSM_RX_AUTH_COOKIE       = 'h01; // issue load nonce
+  localparam CRYPTO_FSM_RX_AUTH_COOKIE_W1    = 'h02; // wait for complete, issue load tag
+  localparam CRYPTO_FSM_RX_AUTH_COOKIE_W2    = 'h03; // wait for complete, issue load ciphertext
+  localparam CRYPTO_FSM_RX_AUTH_COOKIE_W3    = 'h04; // wait for complete, issue cookie verify
+  localparam CRYPTO_FSM_RX_AUTH_COOKIE_W4    = 'h05; // wait for complete, signal result
+  localparam CRYPTO_FSM_RX_AUTH_PACKET       = 'h06; // issue load keys
+  localparam CRYPTO_FSM_RX_AUTH_PACKET_W1    = 'h07; // wait for complete, issue load AD
+  localparam CRYPTO_FSM_RX_AUTH_PACKET_W2    = 'h08; // wait for complete, issue load nonce
+  localparam CRYPTO_FSM_RX_AUTH_PACKET_W3    = 'h09; // wait for complete, issue load tag
+  localparam CRYPTO_FSM_RX_AUTH_PACKET_W4    = 'h0a; // wait for complete, issue load load ciphertext
+  localparam CRYPTO_FSM_RX_AUTH_PACKET_W5    = 'h0b; // wait for complete, issue packet verify
+  localparam CRYPTO_FSM_RX_AUTH_PACKET_W6    = 'h0c; // wait for complete, signal result
+  localparam CRYPTO_FSM_GEN_COOKIE           = 'h0d; // issue cookie renecrypt
+  localparam CRYPTO_FSM_GEN_COOKIE_W1        = 'h0e; // wait for complete
+  localparam CRYPTO_FSM_EMIT_FIRST_COOKIE    = 'h0f; // issue tx emit cookie
+  localparam CRYPTO_FSM_EMIT_FIRST_COOKIE_W1 = 'h10; // wait for complete
+  localparam CRYPTO_FSM_DONE_FAILURE         = 'h1e;
+  localparam CRYPTO_FSM_DONE_SUCCESS         = 'h1f;
 
   localparam BYTES_TAG_LEN           = 4;
 
@@ -291,8 +309,8 @@ module nts_parser_ctrl #(
   reg      [ADDR_WIDTH+3-1:0] copy_tx_addr_reg;
 
   reg                         crypto_fsm_we;
-  reg                   [3:0] crypto_fsm_new;
-  reg                   [3:0] crypto_fsm_reg;
+  reg                   [4:0] crypto_fsm_new;
+  reg                   [4:0] crypto_fsm_reg;
 
   reg                         state_we;
   reg        [BITS_STATE-1:0] state_new;
@@ -350,12 +368,18 @@ module nts_parser_ctrl #(
   reg                   [15:0] ipdecode_udp_port_src_new;
   reg                   [15:0] ipdecode_udp_port_src_reg;
 
+  reg                          keymem_get_current_key_new;
+  reg                          keymem_get_current_key_reg;
+  reg                          keymem_get_key_with_id_new;
+  reg                          keymem_get_key_with_id_reg;
+
+  reg                          keymem_key_id_we;
+  reg                   [31:0] keymem_key_id_new;
+  reg                   [31:0] keymem_key_id_reg;
+
   reg                          keymem_key_word_we;
   reg                    [2:0] keymem_key_word_new;
   reg                    [2:0] keymem_key_word_reg;
-  reg                          keymem_get_key_with_id_we;
-  reg                          keymem_get_key_with_id_new;
-  reg                          keymem_get_key_with_id_reg;
   reg                          keymem_server_id_we;
   reg                   [31:0] keymem_server_id_new;
   reg                   [31:0] keymem_server_id_reg;
@@ -457,12 +481,16 @@ module nts_parser_ctrl #(
   reg crypto_op_cookie_loadkeys;
   reg crypto_op_c2s_verify_auth;
 
+  reg                    crypto_op_cookie_rencrypt;
+  reg [ADDR_WIDTH+3-1:0] crypto_rx_addr;
+  reg              [9:0] crypto_rx_bytes;
   reg                    crypto_rx_op_copy_ad;
   reg                    crypto_rx_op_copy_nonce;
   reg                    crypto_rx_op_copy_pc;
   reg                    crypto_rx_op_copy_tag;
-  reg [ADDR_WIDTH+3-1:0] crypto_rx_addr;
-  reg              [9:0] crypto_rx_bytes;
+  reg [ADDR_WIDTH+3-1:0] crypto_tx_addr;
+  reg              [9:0] crypto_tx_bytes;
+  reg                    crypto_tx_op_store_cookie;
 
   wire detect_ipv4;
   wire detect_ipv4_bad;
@@ -508,6 +536,7 @@ module nts_parser_ctrl #(
 
   assign o_api_read_data = api_read_data;
 
+  assign o_keymem_get_current_key = keymem_get_current_key_reg;
   assign o_keymem_key_word        = keymem_key_word_reg;
   assign o_keymem_get_key_with_id = keymem_get_key_with_id_reg;
   assign o_keymem_server_id       = keymem_server_id_reg;
@@ -527,24 +556,25 @@ module nts_parser_ctrl #(
   assign o_timestamp_version_number           = timestamp_version_number_reg;
   assign o_timestamp_poll                     = 0; //TODO timestamp_poll_reg;
 
+  assign o_crypto_rx_addr          = crypto_rx_addr;
+  assign o_crypto_rx_bytes         = crypto_rx_bytes;
+
   assign o_crypto_rx_op_copy_ad    = crypto_rx_op_copy_ad;
   assign o_crypto_rx_op_copy_nonce = crypto_rx_op_copy_nonce;
   assign o_crypto_rx_op_copy_pc    = crypto_rx_op_copy_pc;
   assign o_crypto_rx_op_copy_tag   = crypto_rx_op_copy_tag;
 
-  assign o_crypto_rx_addr          = crypto_rx_addr;
-  assign o_crypto_rx_bytes         = crypto_rx_bytes;
+  assign o_crypto_tx_addr               = crypto_tx_addr;
+  assign o_crypto_tx_bytes              = crypto_tx_bytes;
 
-  assign o_crypto_tx_op_copy_ad = 0;         //TODO
+  assign o_crypto_tx_op_copy_ad         = 0; //TODO
   assign o_crypto_tx_op_store_nonce_tag = 0; //TODO
-  assign o_crypto_tx_op_store_cookie = 0;    //TODO
-  assign o_crypto_tx_addr = 0;               //TODO
-  assign o_crypto_tx_bytes = 0;              //TODO
+  assign o_crypto_tx_op_store_cookie    = crypto_tx_op_store_cookie;
 
   assign o_crypto_op_cookie_verify     = crypto_op_cookie_verify;
   assign o_crypto_op_cookie_loadkeys   = crypto_op_cookie_loadkeys;
 
-  assign o_crypto_op_cookie_rencrypt   = 0;  //TODO
+  assign o_crypto_op_cookie_rencrypt   = crypto_op_cookie_rencrypt;
 
   assign o_crypto_op_c2s_verify_auth   = crypto_op_c2s_verify_auth;
 
@@ -661,7 +691,7 @@ module nts_parser_ctrl #(
             ADDR_NAME1: api_read_data = CORE_NAME[31:0];
             ADDR_VERSION: api_read_data = CORE_VERSION;
             ADDR_STATE: api_read_data[BITS_STATE-1:0] = state_reg; //MSB=0 from init
-            ADDR_STATE_CRYPTO: api_read_data = { 28'h0, crypto_fsm_reg };
+            ADDR_STATE_CRYPTO: api_read_data = { 27'h0, crypto_fsm_reg };
             ADDR_ERROR_STATE: api_read_data[BITS_STATE-1:0] = error_state_reg; //MSB=0 from init
             ADDR_ERROR_COUNT: api_read_data = error_count_reg;
             ADDR_ERROR_CAUSE: api_read_data = error_cause_reg;
@@ -792,8 +822,10 @@ module nts_parser_ctrl #(
       ipdecode_udp_port_dst_reg  <= 'b0;
       ipdecode_udp_port_src_reg  <= 'b0;
 
-      keymem_key_word_reg        <= 'b0;
+      keymem_get_current_key_reg <= 'b0;
       keymem_get_key_with_id_reg <= 'b0;
+      keymem_key_id_reg          <= 'b0;
+      keymem_key_word_reg        <= 'b0;
       keymem_server_id_reg       <= 'b0;
 
       last_bytes_reg             <= 'b0;
@@ -913,11 +945,15 @@ module nts_parser_ctrl #(
       if (ipdecode_udp_port_src_we)
         ipdecode_udp_port_src_reg <= ipdecode_udp_port_src_new;
 
+      keymem_get_current_key_reg <= keymem_get_current_key_new;
+
+      keymem_get_key_with_id_reg <= keymem_get_key_with_id_new;
+
+      if (keymem_key_id_we)
+         keymem_key_id_reg <= keymem_key_id_new;
+
       if (keymem_key_word_we)
         keymem_key_word_reg <= keymem_key_word_new;
-
-      if (keymem_get_key_with_id_we)
-        keymem_get_key_with_id_reg <= keymem_get_key_with_id_new;
 
       if (keymem_server_id_we)
         keymem_server_id_reg <= keymem_server_id_new;
@@ -940,7 +976,6 @@ module nts_parser_ctrl #(
         ntp_extension_copied_reg [ntp_extension_counter_reg] <= ntp_extension_copied_new;
 
       if (ntp_extension_we) begin
-        //$display("%s:%0d ntp_ext[%0d] = tag:%h,length:%h,addr:%h", `__FILE__, `__LINE__, ntp_extension_counter_reg, ntp_extension_tag_new, ntp_extension_length_new, ntp_extension_addr_new);
         ntp_extension_addr_reg   [ntp_extension_counter_reg] <= ntp_extension_addr_new;
         ntp_extension_tag_reg    [ntp_extension_counter_reg] <= ntp_extension_tag_new;
         ntp_extension_length_reg [ntp_extension_counter_reg] <= ntp_extension_length_new;
@@ -1099,7 +1134,6 @@ module nts_parser_ctrl #(
             nts_unique_identifier_length_new = ntp_extension_length_reg[j];
             //5.3. The string MUST be at least 32 octets long.
             if (ntp_extension_length_reg[j] < LEN_NTS_MIN_UNIQUE_IDENT) begin
-              //$display("%s:%0d Length: %0d, required: %0d", `__FILE__, `__LINE__, ntp_extension_length_reg[j], LEN_NTS_MIN_UNIQUE_IDENT);
               evil_packet = 1;
             end
           end
@@ -1108,7 +1142,6 @@ module nts_parser_ctrl #(
             cookies = cookies + 1;
             nts_cookie_start_addr_new = ntp_extension_addr_reg[j];
             if (ntp_extension_length_reg[j] != LEN_NTS_COOKIE ) begin
-              //$display("%s:%0d Length: %0d, required: %0d", `__FILE__, `__LINE__, ntp_extension_length_reg[j], LEN_NTS_COOKIE);
               evil_packet = 1;
             end
           end
@@ -1119,7 +1152,6 @@ module nts_parser_ctrl #(
             //     the same as the body length of the NTS Cookie extension field.
             // => Approximation: same length rules
             if (ntp_extension_length_reg[j] != LEN_NTS_COOKIE ) begin
-              //$display("%s:%0d Length: %0d, required: %0d", `__FILE__, `__LINE__, ntp_extension_length_reg[j], LEN_NTS_COOKIE);
               evil_packet = 1;
             end
             // NOTE:
@@ -1131,15 +1163,12 @@ module nts_parser_ctrl #(
             authenticators = authenticators  + 1;
             nts_authenticator_start_addr_new = ntp_extension_addr_reg[j];
             if (ntp_extension_length_reg[j] != LEN_NTS_AUTHENTICATOR ) begin
-              //$display("%s:%0d Length: %0d, required: %0d", `__FILE__, `__LINE__, ntp_extension_length_reg[j], LEN_NTS_AUTHENTICATOR);
               evil_packet = 1;
             end
           end
 
         end
       end
-
-      //$display("%s:%0d Evil %b", `__FILE__, `__LINE__, evil_packet);
 
       // 5.7 Protocol Details, Client
 
@@ -1149,8 +1178,6 @@ module nts_parser_ctrl #(
 
       if ( unique_idenfifiers != 1 )
         evil_packet = 1;
-
-      //$display("%s:%0d Evil %b", `__FILE__, `__LINE__, evil_packet);
 
       // 5.7 Protocol Details, Client
 
@@ -1163,8 +1190,6 @@ module nts_parser_ctrl #(
       if ( authenticators != 1 )
         evil_packet = 1;
 
-      //$display("%s:%0d Evil %b", `__FILE__, `__LINE__, evil_packet);
-
       // 5.7 Protocol Details, Client
 
       // Exactly one NTS Authenticator and Encrypted Extension Fields
@@ -1173,8 +1198,6 @@ module nts_parser_ctrl #(
 
       if ( cookies != 1 )
         evil_packet = 1;
-
-      //$display("%s:%0d Evil %b", `__FILE__, `__LINE__, evil_packet);
 
       // 5.7 Protocol Details, Client
 
@@ -1237,6 +1260,7 @@ module nts_parser_ctrl #(
   //----------------------------------------------------------------
   // RX buffer Access Port control
   //----------------------------------------------------------------
+
   always @*
   begin
     access_port_addr_we        = 'b0;
@@ -1362,17 +1386,36 @@ module nts_parser_ctrl #(
             end
           end
         end
+      STATE_EMIT_FIRST_COOKIE_TL:
+        begin
+          copy_tx_addr_we  = 1;
+          copy_tx_addr_new = copy_tx_addr_reg + 8;
+        end
+      STATE_EMIT_FIRST_COOKIE_V:
+        if (crypto_fsm_reg == CRYPTO_FSM_DONE_SUCCESS) begin
+          copy_tx_addr_we  = 1;
+          copy_tx_addr_new = copy_tx_addr_reg + 'h60; //TODO create a constant for 68
+        end
       default: ;
     endcase
   end
 
+  //----------------------------------------------------------------
+  // Keymem control
+  //   1. Sets outputs controlling nts_keymem operation.
+  //   2. Records keymem_id to be used in new cookie generation.
+  //----------------------------------------------------------------
+
   always @*
-  begin
+  begin : keymem_control
+    keymem_get_current_key_new = 'b0;
+    keymem_get_key_with_id_new = 'b0;
+
+    keymem_key_id_we           = 'b0;
+    keymem_key_id_new          = 'b0;
+
     keymem_key_word_we         = 'b0;
     keymem_key_word_new        = 'b0;
-
-    keymem_get_key_with_id_we  = 'b1;
-    keymem_get_key_with_id_new = 'b0;
 
     keymem_server_id_we        = 'b0;
     keymem_server_id_new       = 'b0;
@@ -1381,46 +1424,52 @@ module nts_parser_ctrl #(
       STATE_EXTRACT_COOKIE_FROM_RAM:
         begin
           keymem_key_word_we         = 'b1;
-          //keymem_get_key_with_id_we  = 'b1;
           keymem_server_id_we        = 'b1;
         end
       STATE_VERIFY_KEY_FROM_COOKIE1:
-        //$display("%s:%0d STATE_VERIFY_KEY_FROM_COOKIE1 i_keymem_key_valid=%h i_keymem_ready=%h keymem_key_word_reg=%h", `__FILE__, `__LINE__, i_keymem_key_valid, i_keymem_ready, keymem_key_word_reg);
         if (i_keymem_ready == 'b1) begin
+          keymem_get_key_with_id_new = 'b1;
           keymem_key_word_we         = 'b1;
           keymem_key_word_new        = 'b0;
-          //keymem_get_key_with_id_we  = 'b1;
-          keymem_get_key_with_id_new = 'b1;
           keymem_server_id_we        = 'b1;
           keymem_server_id_new       = cookie_server_id_reg;
         end
-        //$display("%s:%0d STATE_VERIFY_KEY_FROM_COOKIE1 keymem_server_id_we = %h keymem_server_id_new = %h coookie_server_id_reg = %h", `__FILE__, `__LINE__, keymem_server_id_we, keymem_server_id_new, cookie_server_id_reg);
       STATE_VERIFY_KEY_FROM_COOKIE2:
+        if (i_keymem_ready && keymem_get_key_with_id_reg == 'b0) begin
+          if (i_keymem_key_valid == 'b0) begin
+             ; // reset, zero all output
+          end else if (keymem_key_word_reg == 'b111) begin
+            ; // reset, zero all output
+          end else begin
+            // Yay! We read a key word
+            keymem_key_word_we         = 'b1;
+            keymem_key_word_new        = keymem_key_word_reg + 1;
+            keymem_get_key_with_id_new = 'b1;
+          end
+        end
+      STATE_RETRIVE_CURRENT_KEY_0:
         begin
-          //$display("%s:%0d STATE_VERIFY_KEY_FROM_COOKIE2 i_keymem_key_valid=%h i_keymem_ready=%h keymem_key_word_reg=%h keymem_server_id_reg=%h", `__FILE__, `__LINE__, i_keymem_key_valid, i_keymem_ready, keymem_key_word_reg, keymem_server_id_reg);
-          keymem_get_key_with_id_we  = 'b1;
-          keymem_get_key_with_id_new = 'b0;
-          if (i_keymem_ready && keymem_get_key_with_id_reg == 'b0) begin
-            if (i_keymem_key_valid == 'b0) begin
-               ; // reset, zero all output
-               //$display("%s:%0d STATE_VERIFY_KEY_FROM_COOKIE2", `__FILE__, `__LINE__);
-            end else if (keymem_key_word_reg == 'b111) begin
-              keymem_get_key_with_id_we  = 'b1;
-              ; // reset, zero all output
-              //$display("%s:%0d STATE_VERIFY_KEY_FROM_COOKIE2", `__FILE__, `__LINE__);
-            end else begin
-              // Yay! We read a key word
-              keymem_key_word_we         = 'b1;
-              keymem_key_word_new        = keymem_key_word_reg + 1;
-              keymem_get_key_with_id_we  = 'b1;
-              keymem_get_key_with_id_new = 'b1;
-              //$display("%s:%0d STATE_VERIFY_KEY_FROM_COOKIE2 keymem_key_word_reg = %h keymem_key_word_new = %h", `__FILE__, `__LINE__, keymem_key_word_reg, keymem_key_word_new);
-            end
+          keymem_get_current_key_new = 'b1;
+          keymem_key_word_we         = 'b1;
+        end
+      STATE_RETRIVE_CURRENT_KEY_1:
+        if (i_keymem_ready && keymem_get_key_with_id_reg == 'b0) begin
+          if (i_keymem_key_valid == 'b0) begin
+             ; // reset, zero all output
+          end else if (keymem_key_word_reg == 'b111) begin
+            ; // reset, zero all output
+          end else begin
+            // Yay! We read a key word
+            //TODO error if key_id changes during read
+            keymem_get_current_key_new = 'b1;
+            keymem_key_id_we           = 'b1;
+            keymem_key_id_new          = i_keymem_key_id;
+            keymem_key_word_we         = 'b1;
+            keymem_key_word_new        = keymem_key_word_reg + 1;
           end
         end
       default: ;
     endcase
-    //$display("%s:%0d keymem_key_word we=%h new=%h keymem_server_id we=%h new=%h", `__FILE__, `__LINE__, keymem_key_word_we, keymem_key_word_new, keymem_server_id_we, keymem_server_id_new);
   end
 
   always @*
@@ -1431,7 +1480,6 @@ module nts_parser_ctrl #(
       if (i_access_port_rd_dv) begin
         cookie_server_id_we  = 'b1;
         cookie_server_id_new = i_access_port_rd_data[31:0];
-        //$display("%s:%0d cookie_server_id we=%h new=%h", `__FILE__, `__LINE__, cookie_server_id_we, i_access_port_rd_data[31:0]);
       end
     end
   end
@@ -1554,11 +1602,15 @@ module nts_parser_ctrl #(
         end
       STATE_UNIQUE_IDENTIFIER_COPY_1:
         begin
-          tx_address_internal = 0;
-
           tx_address    = copy_tx_addr_reg;
           tx_write_en   = i_access_port_rd_dv;
           tx_write_data = i_access_port_rd_data;
+        end
+      STATE_EMIT_FIRST_COOKIE_TL:
+        begin
+          tx_address    = copy_tx_addr_reg;
+          tx_write_en   = 1;
+          tx_write_data = { TAG_NTS_COOKIE, LEN_NTS_COOKIE, keymem_key_id_reg };
         end
       STATE_TX_UPDATE_LENGTH:
         begin
@@ -1603,15 +1655,22 @@ module nts_parser_ctrl #(
   begin : CRYPTO_FSM
     crypto_fsm_we = 0;
     crypto_fsm_new = CRYPTO_FSM_IDLE;
+
+    crypto_op_c2s_verify_auth = 0;
+    crypto_op_cookie_loadkeys = 0;
+    crypto_op_cookie_rencrypt = 0;
+    crypto_op_cookie_verify = 0;
+
+    crypto_rx_addr = 0;
+    crypto_rx_bytes = 0;
     crypto_rx_op_copy_ad = 0;
     crypto_rx_op_copy_nonce = 0;
     crypto_rx_op_copy_pc = 0;
     crypto_rx_op_copy_tag = 0;
-    crypto_rx_addr = 0;
-    crypto_rx_bytes = 0;
-    crypto_op_cookie_verify = 0;
-    crypto_op_cookie_loadkeys = 0;
-    crypto_op_c2s_verify_auth = 0;
+
+    crypto_tx_addr = 0;
+    crypto_tx_bytes = 0;
+    crypto_tx_op_store_cookie = 0;
 
     if (crypto_fsm_reg == CRYPTO_FSM_IDLE)
       muxctrl_crypto = 0;
@@ -1631,6 +1690,16 @@ module nts_parser_ctrl #(
               crypto_fsm_we  = 1;
               crypto_fsm_new = CRYPTO_FSM_RX_AUTH_PACKET;
             end
+          STATE_GENERATE_FIRST_COOKIE:
+            begin
+              crypto_fsm_we  = 1;
+              crypto_fsm_new = CRYPTO_FSM_GEN_COOKIE;
+            end
+          STATE_EMIT_FIRST_COOKIE_V:
+            begin
+              crypto_fsm_we  = 1;
+              crypto_fsm_new = CRYPTO_FSM_EMIT_FIRST_COOKIE;
+            end
           default: ;
         endcase
       CRYPTO_FSM_RX_AUTH_COOKIE:
@@ -1640,8 +1709,6 @@ module nts_parser_ctrl #(
           crypto_rx_op_copy_nonce = 1;
           crypto_rx_addr = nts_cookie_start_addr_reg + OFFSET_COOKIE_NONCE;
           crypto_rx_bytes = BYTES_COOKIE_NONCE;
-          //$display("%s:%0d new: %h, addr: %h bytes: %h",`__FILE__,`__LINE__, crypto_fsm_new, crypto_rx_addr, crypto_rx_bytes);
-
         end
       CRYPTO_FSM_RX_AUTH_COOKIE_W1:
         if (i_crypto_busy == 1'b0) begin
@@ -1737,6 +1804,30 @@ module nts_parser_ctrl #(
             crypto_fsm_new = CRYPTO_FSM_DONE_FAILURE;
           end
         end
+      CRYPTO_FSM_GEN_COOKIE:
+        if (i_crypto_busy == 1'b0) begin
+          crypto_op_cookie_rencrypt = 1;
+          crypto_fsm_we = 1;
+          crypto_fsm_new = CRYPTO_FSM_GEN_COOKIE_W1;
+        end
+      CRYPTO_FSM_GEN_COOKIE_W1:
+        if (i_crypto_busy == 1'b0) begin
+          crypto_fsm_we  = 1;
+          crypto_fsm_new = CRYPTO_FSM_DONE_SUCCESS;
+        end
+      CRYPTO_FSM_EMIT_FIRST_COOKIE:
+        if (i_crypto_busy == 1'b0) begin
+          crypto_tx_addr = copy_tx_addr_reg;
+          crypto_tx_bytes = 'h68; //TODO declare constant?
+          crypto_tx_op_store_cookie = 1;
+          crypto_fsm_we  = 1;
+          crypto_fsm_new = CRYPTO_FSM_EMIT_FIRST_COOKIE_W1;
+        end
+      CRYPTO_FSM_EMIT_FIRST_COOKIE_W1:
+        if (i_crypto_busy == 1'b0) begin
+          crypto_fsm_we  = 1;
+          crypto_fsm_new = CRYPTO_FSM_DONE_SUCCESS;
+        end
       CRYPTO_FSM_DONE_SUCCESS:
         begin
           crypto_fsm_we  = 1;
@@ -1791,7 +1882,7 @@ module nts_parser_ctrl #(
           if (i_process_initial) begin
             state_we  = 'b1;
             state_new = STATE_COPY;
-            case (i_last_word_data_valid)
+            case (i_last_word_data_valid) //TODO rewrite interface so engine/parser doesn't have to deal with this
               8'b00000001: ;
               8'b00000011: ;
               8'b00000111: ;
@@ -1830,14 +1921,12 @@ module nts_parser_ctrl #(
           if (memory_address_failure_reg == 'b1) begin
             state_we  = 'b1;
             state_new = STATE_ERROR_GENERAL;
-            //$display("%s:%0d memory_address_failure_reg %h",`__FILE__,`__LINE__, memory_address_failure_reg);
           end else if (memory_address_lastbyte_read_reg == 1'b1) begin
             state_we  = 'b1;
             state_new = STATE_EXTENSIONS_EXTRACTED;
           end else if (ntp_extension_counter_reg==NTP_EXTENSION_FIELDS-1) begin
             state_we  = 'b1;
             state_new = STATE_ERROR_GENERAL;
-            //$display("%s:%0d ",`__FILE__,`__LINE__);
           end
         end
       STATE_EXTENSIONS_EXTRACTED:
@@ -1847,7 +1936,6 @@ module nts_parser_ctrl #(
         end else begin
           state_we  = 'b1;
           state_new = STATE_ERROR_GENERAL;
-          //$display("%s:%0d packet rejected!",`__FILE__,`__LINE__);
         end
       STATE_EXTRACT_COOKIE_FROM_RAM:
         if (i_access_port_rd_dv) begin
@@ -1860,16 +1948,13 @@ module nts_parser_ctrl #(
             state_we  = 'b1;
             state_new = STATE_VERIFY_KEY_FROM_COOKIE2;
           end else begin
-            state_we  = 'b1;
-            state_new = STATE_ERROR_GENERAL;
+            set_error_state( ERROR_CAUSE_KEYMEM_BUSY );
           end
         end
       STATE_VERIFY_KEY_FROM_COOKIE2:
         if (i_keymem_ready && keymem_get_key_with_id_reg == 'b0 ) begin
           if (i_keymem_key_valid == 'b0) begin
-            state_we  = 'b1;
-            state_new = STATE_ERROR_GENERAL;
-            //$display("%s:%0d i_keymem_ready=%h keymem_get_key_with_id_reg=%h i_keymem_key_valid=%h...", `__FILE__, `__LINE__, i_keymem_ready, keymem_get_key_with_id_reg, i_keymem_key_valid);
+            set_error_state( ERROR_CAUSE_KEY_COOKIE_FAIL );
           end else if (keymem_key_word_reg == 'b111) begin
             state_we  = 'b1;
             state_new = STATE_RX_AUTH_COOKIE;
@@ -1899,7 +1984,7 @@ module nts_parser_ctrl #(
               else if (detect_ipv6)
                 state_new = STATE_WRITE_HEADER_IPV6;
               else
-                state_new = STATE_ERROR_GENERAL; //Unexpected, should never happen
+                set_error_state( ERROR_CAUSE_IPV_CONFUSED );
             end
           CRYPTO_FSM_DONE_FAILURE:
             begin
@@ -1931,8 +2016,49 @@ module nts_parser_ctrl #(
       STATE_UNIQUE_IDENTIFIER_COPY_1:
         if (copy_done) begin
           state_we  = 'b1;
-          state_new = STATE_TX_UPDATE_LENGTH;
+          state_new = STATE_RETRIVE_CURRENT_KEY_0;
         end
+      STATE_RETRIVE_CURRENT_KEY_0:
+        begin
+          state_we  = 'b1;
+          state_new = STATE_RETRIVE_CURRENT_KEY_1;
+        end
+      STATE_RETRIVE_CURRENT_KEY_1:
+        if (i_keymem_ready && keymem_get_current_key_reg == 'b0 ) begin
+          if (i_keymem_key_valid == 'b0) begin
+            set_error_state ( ERROR_CAUSE_KEY_CURRENT_FAIL );
+          end else if (keymem_key_word_reg == 'b111) begin
+            state_we  = 'b1;
+            state_new = STATE_GENERATE_FIRST_COOKIE;
+          end
+        end
+      STATE_GENERATE_FIRST_COOKIE:
+        case (crypto_fsm_reg)
+          CRYPTO_FSM_DONE_FAILURE:
+            set_error_state( ERROR_CAUSE_COOKIE1_GEN_FAIL );
+          CRYPTO_FSM_DONE_SUCCESS:
+            begin
+              state_we  = 'b1;
+              state_new = STATE_EMIT_FIRST_COOKIE_TL;
+            end
+          default: ;
+        endcase
+      STATE_EMIT_FIRST_COOKIE_TL:
+        begin
+          state_we  = 'b1;
+          state_new = STATE_EMIT_FIRST_COOKIE_V;
+        end
+      STATE_EMIT_FIRST_COOKIE_V:
+        case (crypto_fsm_reg)
+          CRYPTO_FSM_DONE_FAILURE:
+            set_error_state( ERROR_CAUSE_COOKIE1_TX_FAIL );
+          CRYPTO_FSM_DONE_SUCCESS:
+            begin
+              state_we  = 'b1;
+              state_new = STATE_TX_UPDATE_LENGTH;
+            end
+          default: ;
+        endcase
       STATE_TX_UPDATE_LENGTH:
         begin
           state_we  = 'b1;
@@ -2050,27 +2176,23 @@ module nts_parser_ctrl #(
         if (word_counter_reg == 4) begin
           timestamp_version_number_we  = 1;
           timestamp_version_number_new = i_data[45:43];
-          //$display("%s:%0d timestamp_version_number_new=%h", `__FILE__, `__LINE__, timestamp_version_number_new);
         end else if (word_counter_reg == 9) begin
           timestamp_origin_timestamp_we  = 1;
           timestamp_origin_timestamp_new = { i_data[47:0], 16'h0 };
         end else if (word_counter_reg == 10) begin
           timestamp_origin_timestamp_we  = 1;
           timestamp_origin_timestamp_new = { timestamp_origin_timestamp_reg[63:16], i_data[63:48] };
-          //$display("%s:%0d timestamp_origin_timestamp_new=%h", `__FILE__, `__LINE__, timestamp_origin_timestamp_new);
         end
       end if (detect_ipv6) begin
         if (word_counter_reg == 6) begin
           timestamp_version_number_we  = 1;
           timestamp_version_number_new = i_data[13:11];
-          //$display("%s:%0d timestamp_version_number_new=%h", `__FILE__, `__LINE__, timestamp_version_number_new);
         end else if (word_counter_reg == 11) begin
           timestamp_origin_timestamp_we  = 1;
           timestamp_origin_timestamp_new = { i_data[15:0], 48'h0 };
         end else if (word_counter_reg == 12) begin
           timestamp_origin_timestamp_we  = 1;
           timestamp_origin_timestamp_new = { timestamp_origin_timestamp_reg[63:48], i_data[63:16] };
-          //$display("%s:%0d timestamp_origin_timestamp_new=%h", `__FILE__, `__LINE__, timestamp_origin_timestamp_new);
         end
       end
     end

@@ -188,6 +188,7 @@ module nts_engine #(
   wire                         parser_txbuf_ipv6_done;
 
   wire                         txbuf_error;
+  wire                         txbuf_busy;
   wire                         txbuf_parser_full;
   wire                         txbuf_parser_empty;
 
@@ -255,8 +256,6 @@ module nts_engine #(
   //----------------------------------------------------------------
   // Concurrent connectivity for ports etc.
   //----------------------------------------------------------------
-
-  assign keymem_internal_get_current_key = 'b0;
 
   assign api_read_data_cookie = 0; //TODO implement
 
@@ -648,9 +647,9 @@ module nts_engine #(
 
   always @*
   begin : tx_mux_vars
-    reg [1:0] muxctrl;
+    reg [2:0] muxctrl;
 
-    muxctrl = { parser_muxctrl_timestamp_ipv6, parser_muxctrl_timestamp_ipv4 };
+    muxctrl = { parser_muxctrl_crypto, parser_muxctrl_timestamp_ipv6, parser_muxctrl_timestamp_ipv4 };
 
     mux_tx_address_internal = 1;
     mux_tx_address_hi       = 0;
@@ -659,34 +658,42 @@ module nts_engine #(
     mux_tx_write_data       = 0;
 
     case (muxctrl)
-      2'b00:
-       begin
-         mux_tx_address_internal = parser_txbuf_address_internal;
-         mux_tx_address_hi       = parser_txbuf_address[ADDR_WIDTH+3-1:3];
-         mux_tx_address_lo       = parser_txbuf_address[2:0];
-         mux_tx_write_en         = parser_txbuf_write_en;
-         mux_tx_write_data       = parser_txbuf_write_data;
-       end
-      2'b01: //IPv4 timestamp
-       begin
-         mux_tx_address_internal = 0;
-         mux_tx_address_hi       = 0;
-         mux_tx_address_hi[2:0]  = timestamp_tx_header_block;
-         mux_tx_address_hi       = mux_tx_address_hi + 5;
-         mux_tx_address_lo       = 2;
-         mux_tx_write_en         = timestamp_tx_wr_en;
-         mux_tx_write_data       = timestamp_tx_header_data;
-       end
-      2'b10: //IPv6 timestamp
-       begin
-         mux_tx_address_internal = 0;
-         mux_tx_address_hi       = 0;
-         mux_tx_address_hi[2:0]  = timestamp_tx_header_block;
-         mux_tx_address_hi       = mux_tx_address_hi + 7;
-         mux_tx_address_lo       = 6;
-         mux_tx_write_en         = timestamp_tx_wr_en;
-         mux_tx_write_data       = timestamp_tx_header_data;
-       end
+      3'b000:
+        begin
+          mux_tx_address_internal = parser_txbuf_address_internal;
+          mux_tx_address_hi       = parser_txbuf_address[ADDR_WIDTH+3-1:3];
+          mux_tx_address_lo       = parser_txbuf_address[2:0];
+          mux_tx_write_en         = parser_txbuf_write_en;
+          mux_tx_write_data       = parser_txbuf_write_data;
+        end
+      3'b001: //IPv4 timestamp
+        begin
+          mux_tx_address_internal = 0;
+          mux_tx_address_hi       = 0;
+          mux_tx_address_hi[2:0]  = timestamp_tx_header_block;
+          mux_tx_address_hi       = mux_tx_address_hi + 5;
+          mux_tx_address_lo       = 2;
+          mux_tx_write_en         = timestamp_tx_wr_en;
+          mux_tx_write_data       = timestamp_tx_header_data;
+        end
+      3'b010: //IPv6 timestamp
+        begin
+          mux_tx_address_internal = 0;
+          mux_tx_address_hi       = 0;
+          mux_tx_address_hi[2:0]  = timestamp_tx_header_block;
+          mux_tx_address_hi       = mux_tx_address_hi + 7;
+          mux_tx_address_lo       = 6;
+          mux_tx_write_en         = timestamp_tx_wr_en;
+          mux_tx_write_data       = timestamp_tx_header_data;
+        end
+      3'b100:
+        begin
+          mux_tx_address_internal = 0;
+          mux_tx_address_hi       = crypto_txbuf_address[ADDR_WIDTH+3-1:3];
+          mux_tx_address_lo       = crypto_txbuf_address[2:0];
+          mux_tx_write_en         = crypto_txbuf_write_en;
+          mux_tx_write_data       = crypto_txbuf_write_data;
+        end
       default: ;
     endcase;
 
@@ -703,6 +710,7 @@ module nts_engine #(
     .i_areset(i_areset), // async reset
     .i_clk(i_clk),
 
+    .o_busy(txbuf_busy),
     .o_error(txbuf_error),
 
     .o_dispatch_tx_packet_available(o_dispatch_tx_packet_available),
@@ -773,11 +781,13 @@ module nts_engine #(
    .i_access_port_rd_dv(access_port_rd_dv_parser),
    .i_access_port_rd_data(access_port_rd_data_parser),
 
-   .o_keymem_key_word(keymem_internal_key_word),
-   .o_keymem_get_key_with_id(keymem_internal_get_key_with_id),
-   .o_keymem_server_id(keymem_internal_server_key_id),
+   .i_keymem_key_id(keymem_internal_key_id),
    .i_keymem_key_valid(keymem_internal_key_valid),
    .i_keymem_ready(keymem_internal_ready),
+   .o_keymem_get_current_key(keymem_internal_get_current_key),
+   .o_keymem_get_key_with_id(keymem_internal_get_key_with_id),
+   .o_keymem_key_word(keymem_internal_key_word),
+   .o_keymem_server_id(keymem_internal_server_key_id),
 
    .i_timestamp_busy(timestamp_parser_busy),
    .o_timestamp_record_receive_timestamp(parser_timestamp_record_rectime),
@@ -926,6 +936,7 @@ module nts_engine #(
     .i_rx_rd_dv    ( rxbuf_crypto_rd_dv    ),
     .i_rx_rd_data  ( rxbuf_crypto_rd_data  ),
 
+    .i_tx_busy       ( txbuf_busy              ),
     .o_tx_read_en    ( crypto_txbuf_read_en    ),
     .i_tx_read_data  ( txbuf_crypto_read_data  ),
     .o_tx_write_en   ( crypto_txbuf_write_en   ),

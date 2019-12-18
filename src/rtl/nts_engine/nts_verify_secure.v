@@ -30,8 +30,7 @@
 
 module nts_verify_secure #(
   parameter RX_PORT_WIDTH = 64,
-  parameter ADDR_WIDTH = 8,
-  parameter DEBUG_OUTPUT = 0
+  parameter ADDR_WIDTH = 8
 )
 (
   input  wire                         i_areset, // async reset
@@ -78,6 +77,7 @@ module nts_verify_secure #(
   input  wire                         i_rx_rd_dv,
   input  wire     [RX_PORT_WIDTH-1:0] i_rx_rd_data,
 
+  input  wire                         i_tx_busy,
   output wire                         o_tx_read_en,
   input  wire                  [63:0] i_tx_read_data,
   output wire                         o_tx_write_en,
@@ -95,25 +95,26 @@ module nts_verify_secure #(
   //----------------------------------------------------------------
 
   localparam BITS_STATE = 5;
-  localparam [BITS_STATE-1:0] STATE_IDLE               = 0;
-  localparam [BITS_STATE-1:0] STATE_COPY_RX_INIT_PC    = 1;
-  localparam [BITS_STATE-1:0] STATE_COPY_RX_INIT_NONCE = 2;
-  localparam [BITS_STATE-1:0] STATE_COPY_RX_INIT_AD    = 3;
-  localparam [BITS_STATE-1:0] STATE_COPY_RX_INIT_TAG   = 4;
-  localparam [BITS_STATE-1:0] STATE_COPY_RX            = 5;
-  localparam [BITS_STATE-1:0] STATE_COPY_RX_TAG        = 6;
-  localparam [BITS_STATE-1:0] STATE_SIV_VERIFY_WAIT_0  = 7;
-  localparam [BITS_STATE-1:0] STATE_SIV_VERIFY_WAIT_1  = 8;
-  localparam [BITS_STATE-1:0] STATE_COPY_TX_INIT_AD    = 9;
-  localparam [BITS_STATE-1:0] STATE_COPY_TX            = 10;
-  localparam [BITS_STATE-1:0] STATE_AUTH_MEMSTORE_NONCE= 11;
-  localparam [BITS_STATE-1:0] STATE_SIV_AUTH_WAIT_0    = 12;
-  localparam [BITS_STATE-1:0] STATE_SIV_AUTH_WAIT_1    = 13;
-  localparam [BITS_STATE-1:0] STATE_STORE_TX_AUTH_INIT = 14;
-  localparam [BITS_STATE-1:0] STATE_STORE_TX_AUTH      = 15;
-  localparam [BITS_STATE-1:0] STATE_STORE_TX_COOKIE    = 16;
-  localparam [BITS_STATE-1:0] STATE_LOAD_KEYS_FROM_MEM = 17;
-  localparam [BITS_STATE-1:0] STATE_ERROR              = 31;
+  localparam [BITS_STATE-1:0] STATE_IDLE                 =  0;
+  localparam [BITS_STATE-1:0] STATE_COPY_RX_INIT_PC      =  1;
+  localparam [BITS_STATE-1:0] STATE_COPY_RX_INIT_NONCE   =  2;
+  localparam [BITS_STATE-1:0] STATE_COPY_RX_INIT_AD      =  3;
+  localparam [BITS_STATE-1:0] STATE_COPY_RX_INIT_TAG     =  4;
+  localparam [BITS_STATE-1:0] STATE_COPY_RX              =  5;
+  localparam [BITS_STATE-1:0] STATE_COPY_RX_TAG          =  6;
+  localparam [BITS_STATE-1:0] STATE_SIV_VERIFY_WAIT_0    =  7;
+  localparam [BITS_STATE-1:0] STATE_SIV_VERIFY_WAIT_1    =  8;
+  localparam [BITS_STATE-1:0] STATE_COPY_TX_INIT_AD      =  9;
+  localparam [BITS_STATE-1:0] STATE_COPY_TX              = 10;
+  localparam [BITS_STATE-1:0] STATE_AUTH_MEMSTORE_NONCE  = 11;
+  localparam [BITS_STATE-1:0] STATE_SIV_AUTH_WAIT_0      = 12;
+  localparam [BITS_STATE-1:0] STATE_SIV_AUTH_WAIT_1      = 13;
+  localparam [BITS_STATE-1:0] STATE_STORE_TX_AUTH_INIT   = 14;
+  localparam [BITS_STATE-1:0] STATE_STORE_TX_AUTH        = 15;
+  localparam [BITS_STATE-1:0] STATE_STORE_TX_COOKIE_INIT = 16;
+  localparam [BITS_STATE-1:0] STATE_STORE_TX_COOKIE      = 17;
+  localparam [BITS_STATE-1:0] STATE_LOAD_KEYS_FROM_MEM   = 18;
+  localparam [BITS_STATE-1:0] STATE_ERROR                = 31;
 
   /* MEM8 addresses must be lsb=0 */
   localparam [7:0] MEM8_ADDR_NONCE =  0;
@@ -809,7 +810,6 @@ module nts_verify_secure #(
           rx_rd_en = 1;
           rx_addr_next_we = 1;
           rx_addr_next_new = rx_addr_next_reg + 8;
-          //$display("%s:%0d RX READ ADDR: %h", `__FILE__, `__LINE__, rx_addr);
         end
       STATE_COPY_RX_INIT_AD:
         if (i_rx_wait == 'b0) begin
@@ -819,7 +819,6 @@ module nts_verify_secure #(
           rx_rd_en = 1;
           rx_addr_next_we = 1;
           rx_addr_next_new = rx_addr_next_reg + 8;
-          //$display("%s:%0d RX READ ADDR: %h", `__FILE__, `__LINE__, rx_addr);
         end
       STATE_COPY_RX_INIT_NONCE:
         if (i_rx_wait == 'b0) begin
@@ -829,7 +828,6 @@ module nts_verify_secure #(
           rx_rd_en = 1;
           rx_addr_next_we = 1;
           rx_addr_next_new = rx_addr_next_reg + 8;
-          //$display("%s:%0d RX READ ADDR: %h ramrx_addr_new=%h", `__FILE__, `__LINE__, rx_addr, ramrx_addr_new);
         end
       STATE_COPY_RX_INIT_TAG:
         if (i_rx_wait == 'b0) begin
@@ -853,7 +851,6 @@ module nts_verify_secure #(
               rx_rd_en = 1;
               rx_addr_next_we = 1;
               rx_addr_next_new = rx_addr_next_reg + 8;
-              //$display("%s:%0d RX READ ADDR: %h", `__FILE__, `__LINE__, rx_addr);
             end
           end
         end
@@ -861,7 +858,6 @@ module nts_verify_secure #(
         begin
           if (i_rx_wait == 'b0) begin
             if (i_rx_rd_dv) begin
-              //$display("%s:%0d RX: %h", `__FILE__, `__LINE__, i_rx_rd_data);
               core_tag_we[rx_tag_reg] = 1;
               core_tag_new = i_rx_rd_data;
               rx_tag_we = 1;
@@ -870,7 +866,6 @@ module nts_verify_secure #(
               rx_rd_en = 1;
               rx_addr_next_we = 1;
               rx_addr_next_new = rx_addr_next_reg + 8;
-              //$display("%s:%0d RX READ ADDR: %h", `__FILE__, `__LINE__, rx_addr);
             end
           end
         end
@@ -1008,7 +1003,6 @@ module nts_verify_secure #(
               end
             default: ;
           endcase
-          //$display("%s:%0d %h %h %h", `__FILE__, `__LINE__, ramtx_addr_reg, tx_wr_en, tx_wr_data);
         end
       STATE_STORE_TX_COOKIE:
         begin
@@ -1045,7 +1039,6 @@ module nts_verify_secure #(
             'hc: tx_load_ram_and_emit(0, ram_a_rdata); //C7 (S2C 3)
             default: ;
           endcase;
-          //$display("%s:%0d tx_ctr_reg=%h tx_wr_en=%h tx_addr=%h tx_wr_data=%h", `__FILE__, `__LINE__, tx_ctr_reg, tx_wr_en, tx_addr, tx_wr_data);
         end
       default: ;
     endcase
@@ -1234,7 +1227,7 @@ module nts_verify_secure #(
           state_new = STATE_STORE_TX_AUTH_INIT;
         end else if (i_op_store_tx_cookie) begin
           state_we = 1;
-          state_new = STATE_STORE_TX_COOKIE;
+          state_new = STATE_STORE_TX_COOKIE_INIT;
         end
       STATE_COPY_RX_INIT_PC:
         if (i_rx_wait == 'b0) begin
@@ -1311,6 +1304,11 @@ module nts_verify_secure #(
           state_we = 1;
           state_new = STATE_IDLE;
         end
+      STATE_STORE_TX_COOKIE_INIT:
+        if (i_tx_busy == 'b0) begin
+          state_we = 1;
+          state_new = STATE_STORE_TX_COOKIE;
+        end
       STATE_STORE_TX_COOKIE:
         if (tx_ctr_reg >= 12) begin //TODO replace with a named constant (128+128+256+256) / 64  ...
           state_we = 1;
@@ -1334,6 +1332,7 @@ module nts_verify_secure #(
     endcase
   end
 
+/*
   generate
     if (DEBUG_OUTPUT) begin
       always @(posedge i_clk) begin
@@ -1349,4 +1348,5 @@ module nts_verify_secure #(
       end
     end
   endgenerate
+*/
 endmodule

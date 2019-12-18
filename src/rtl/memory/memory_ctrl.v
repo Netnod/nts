@@ -29,7 +29,9 @@
 //
 
 module memory_ctrl #(
-  parameter ADDR_WIDTH = 8
+  parameter        ADDR_WIDTH = 8,
+  parameter        INIT_ON_RESET = 1,
+  parameter [63:0] INIT_VALUE = 0
 ) (
   input                   i_clk,
   input                   i_areset,
@@ -48,10 +50,13 @@ module memory_ctrl #(
   localparam DATA_WIDTH = 64;
   localparam BITS_STATE = 3;
 
-  localparam STATE_IDLE                      = 0;
-  localparam STATE_UNALIGNED_WRITE64_PRELOAD = 1;
-  localparam STATE_UNALIGNED_WRITE64         = 2;
-  localparam STATE_UNALIGNED_WRITE64_LAST    = 3;
+  localparam [ADDR_WIDTH-1:0] MAX_ADDR = ~ 0;
+
+  localparam STATE_INIT                      = 0;
+  localparam STATE_IDLE                      = 1;
+  localparam STATE_UNALIGNED_WRITE64_PRELOAD = 2;
+  localparam STATE_UNALIGNED_WRITE64         = 3;
+  localparam STATE_UNALIGNED_WRITE64_LAST    = 4;
   localparam STATE_ERROR                     = 7;
 
   reg                   read64_we;
@@ -105,7 +110,7 @@ module memory_ctrl #(
   assign o_error = state_reg == STATE_ERROR;
   assign o_data  = tmp_read_data;
 
-  bram_dpge #( .ADDR_WIDTH(ADDR_WIDTH), .DATA_WIDTH(64) ) ram (
+  bram_dpge #( .ADDR_WIDTH(ADDR_WIDTH), .DATA_WIDTH(64) ) ram ( //TODO: dual write port could reset faster.
      .i_clk(i_clk),
      .i_en(global_enable),
      .i_we_a(write),
@@ -123,7 +128,7 @@ module memory_ctrl #(
       addr_b_reg       <= 0;
       lo_reg           <= 0;
       read64_reg       <= 0;
-      state_reg        <= STATE_IDLE;
+      state_reg        <= INIT_ON_RESET ? STATE_INIT : STATE_IDLE;
       write_1delay_reg <= 0;
       write_2delay_reg <= 0;
 
@@ -165,7 +170,11 @@ module memory_ctrl #(
     tmp_write      = 0;
     tmp_write_data = 0;
 
-    if (state_reg == STATE_IDLE && i_addr_lo == 'b0 && i_write_64) begin
+    if (state_reg == STATE_INIT) begin
+      tmp_write      = 1;
+      tmp_write_data = INIT_VALUE;
+
+    end else if (state_reg == STATE_IDLE && i_addr_lo == 'b0 && i_write_64) begin
       tmp_write      = 1;
       tmp_write_data = i_write_data;
 
@@ -228,6 +237,16 @@ module memory_ctrl #(
     read64_new = 0;
 
     case (state_reg)
+      STATE_INIT:
+        begin
+          if (addr_a_reg == MAX_ADDR) begin
+            state_we = 1;
+            state_new = STATE_IDLE;
+          end else begin
+            addr_a_we  = 1;
+            addr_a_new = addr_a_reg + 1;
+          end
+        end
       STATE_IDLE:
         begin
           read64_we  = 1;
@@ -265,8 +284,10 @@ module memory_ctrl #(
             end
           end else begin
             //stop delayed write
-            state_we  = 1;
-            state_new = STATE_IDLE;
+            addr_a_we  = 1;
+            addr_a_new = addr_b_reg; //write addr next op
+            state_we   = 1;
+            state_new  = STATE_UNALIGNED_WRITE64_LAST;
           end
         end
       STATE_UNALIGNED_WRITE64:

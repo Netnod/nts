@@ -418,6 +418,11 @@ module nts_top_tb;
         send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160, 0);
       end
     end
+    //while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
+    //send_packet({63696'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_1}, 1840, 0);
+    while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
+    #200;
+    send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160, 0);
     #90000;
 
     //----------------------------------------------------------------
@@ -615,6 +620,15 @@ module nts_top_tb;
         $display("%s:%0d dut.engine.parser.ipdecode_udp_length_reg: %h (%0d)", `__FILE__, `__LINE__, dut.engine.parser.ipdecode_udp_length_reg, dut.engine.parser.ipdecode_udp_length_reg);
       always @*
         $display("%s:%0d dut.engine.parser.detect_ipv4: %b detect_ipv6: %b", `__FILE__, `__LINE__, dut.engine.parser.detect_ipv4, dut.engine.parser.detect_ipv6);
+      always @(posedge i_clk or posedge i_areset)
+        begin : tx_mux_inspect_locals_
+          reg [9:0] addr;
+          addr[9:3] = dut.engine.mux_tx_address_hi;
+          addr[2:0] = dut.engine.mux_tx_address_lo;
+          if (i_areset == 0)
+            if (dut.engine.mux_tx_write_en)
+              $display("%s:%0d dut.engine.mux_tx %h %h = %h",  `__FILE__, `__LINE__, dut.engine.mux_tx_address_internal, addr, dut.engine.mux_tx_write_data);
+        end
       always @*
         $display("%s:%0d dut.engine.i_dispatch_rx_fifo_rd_data: %h", `__FILE__, `__LINE__, dut.engine.i_dispatch_rx_fifo_rd_data);
       always @*
@@ -669,7 +683,7 @@ module nts_top_tb;
     reg [63:0] old_tick_counter_crypto;
     reg [63:0] old_tick_counter_packet;
     reg  [4:0] old_parser_state;
-    reg  [3:0] old_parser_state_crypto;
+    reg  [4:0] old_parser_state_crypto;
 
     always  @(posedge i_clk or posedge i_areset)
     begin

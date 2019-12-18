@@ -34,6 +34,7 @@ module nts_tx_buffer #(
   input  wire        i_areset, // async reset
   input  wire        i_clk,
 
+  output wire        o_busy,
   output wire        o_error,
 
   output wire        o_dispatch_tx_packet_available,
@@ -122,9 +123,7 @@ module nts_tx_buffer #(
 
   wire           [63:0] ram_rd_data [1:0];
   wire                  ram_error   [1:0];
-  /* verilator lint_off UNUSED */
-  wire                  ram_busy    [1:0]; //TODO handle
-  /* verilator lint_on UNUSED */
+  wire                  ram_busy    [1:0];
 
   wire                  parser;
   wire                  fifo;
@@ -137,6 +136,14 @@ module nts_tx_buffer #(
   assign parser                          = current_mem_reg;
   assign fifo                            = ~ current_mem_reg;
   assign fifo_word_count_p1              = word_count_reg[ fifo ] + 1; //TODO handle overflow
+
+  assign o_busy = ram_busy[ parser ];
+
+  assign o_error = (mem_state_reg[0] == STATE_ERROR_GENERAL) ||
+                   (mem_state_reg[1] == STATE_ERROR_GENERAL) ||
+                   ram_error[0] ||
+                   ram_error[1];
+
   assign o_dispatch_tx_packet_available  = mem_state_reg[ fifo ] == STATE_FIFO_OUT;
   assign o_dispatch_tx_fifo_empty        = ram_addr_hi_reg[ fifo ] == fifo_word_count_p1;
   assign o_dispatch_tx_fifo_rd_data      = ram_rd_data[ fifo ];
@@ -145,11 +152,6 @@ module nts_tx_buffer #(
   assign o_parser_current_memory_full    = (mem_state_reg[ parser ] == STATE_HAS_DATA && ram_addr_hi_reg[ parser ] == ADDRESS_FULL) ||
                                            (mem_state_reg[ parser ] == STATE_HAS_DATA && ram_addr_hi_reg[ parser ] == ADDRESS_ALMOST_FULL && i_write_en) ||
                                            (mem_state_reg[ parser ] > STATE_HAS_DATA); //TODO verify
-
-  assign o_error = (mem_state_reg[0] == STATE_ERROR_GENERAL) ||
-                   (mem_state_reg[1] == STATE_ERROR_GENERAL) ||
-                   ram_error[0] ||
-                   ram_error[1];
 
   //----------------------------------------------------------------
   // Memory holding the Tx buffer

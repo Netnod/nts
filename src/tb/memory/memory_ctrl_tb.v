@@ -30,7 +30,7 @@
 
 module memory_ctrl_tb;
   localparam VERBOSE=1; //0: Silent, 1: Write test name, 2: Write traces
-  localparam ADDR_WIDTH=4;
+  localparam ADDR_WIDTH=8;
   localparam DEPTH = 2**ADDR_WIDTH;
   reg                  i_clk;
   reg                  i_areset;
@@ -44,7 +44,13 @@ module memory_ctrl_tb;
   wire        o_busy;
   wire [63:0] o_data;
 
-  memory_ctrl #( .ADDR_WIDTH(ADDR_WIDTH) ) memctrl (
+  memory_ctrl #(
+    .ADDR_WIDTH(ADDR_WIDTH),
+    .INIT_ON_RESET(1),
+    .INIT_VALUE(64'hF0F1_F2F3_F4F5_F6F7)
+  )
+  dut
+  (
     .i_clk(i_clk),
     .i_areset(i_areset),
     .i_read_64(i_read_64),
@@ -60,7 +66,7 @@ module memory_ctrl_tb;
   function [63:0] generate_testpattern ( input integer i );
   begin : testpattern_scope
       reg [63:0] a;
-      a[63:56] = 8'h10 ^ i[7:0];
+      a[63:56] = 8'h10 ^ i[31:24] ^ i[23:16] ^ i[15:8] ^ i[7:0];
       a[55:48] = 8'h20 ^ i[7:0];
       a[47:40] = 8'h30 ^ i[7:0];
       a[39:32] = 8'h40 ^ i[7:0];
@@ -71,6 +77,37 @@ module memory_ctrl_tb;
       generate_testpattern = a;
     end
   endfunction
+
+  task wait_busy;
+  begin
+    while (o_busy) #10;
+  end
+  endtask
+
+  task write_append( inout [ADDR_WIDTH+3-1:0] address, input [63:0] data );
+  begin
+    if (VERBOSE > 1)
+      $display("%s:%0d write_append(%h, %h)", `__FILE__, `__LINE__, address, data);
+    i_write_64 = 1;
+    { i_addr_hi, i_addr_lo } = address;
+    i_write_data = data;
+    #10;
+    i_write_64 = 0;
+    address = address + 8;
+  end
+  endtask
+
+  task dump_ram_row(input integer row);
+    $display("%s:%0d ram[%h] = %h.", `__FILE__, `__LINE__, row, dut.ram.ram[row]);
+  endtask
+
+  task dump_ram(input integer from, input integer to);
+  begin : dumpy
+    integer i;
+    for ( i = from; i <= to; i = i + 1)
+      dump_ram_row(i);
+  end
+  endtask
 
   `define assert(condition) if(!(condition)) begin $display("ASSERT FAILED: %s:%0d %s", `__FILE__, `__LINE__, `"condition`"); $finish(1); end
 
@@ -84,11 +121,11 @@ module memory_ctrl_tb;
     i_addr_hi    = 0;
     i_addr_lo    = 0;
 
-    #10 ;
+    #20 ;
     i_areset = 0;
     #10 ;
 
-
+    wait_busy();
 
     begin : read_aligned_test
       integer i;
@@ -113,10 +150,14 @@ module memory_ctrl_tb;
       #10 ;
     end
 
-     begin : read_unligned_test
+    wait_busy();
+
+    begin : read_unligned_test
       integer i;
       integer offset;
-      reg [127:0] pattern;
+      /* verilator lint_off UNUSED */
+      reg [127:0] pattern; //some bits not used in test
+      /* verilator lint_on UNUSED */
       reg  [63:0] expected;
       for (offset = 1; offset < 8; offset = offset + 1) begin
         if (VERBOSE>0) $display("%s:%0d Test unaligned read64: %0d", `__FILE__, `__LINE__, offset);
@@ -144,11 +185,13 @@ module memory_ctrl_tb;
       #10 ;
     end
 
-     begin : write_unligned_test
+    wait_busy();
+
+    begin : write_unligned_test
       integer i;
       integer offset;
-      reg [127:0] pattern;
-      reg  [63:0] expected;
+      //reg [127:0] pattern;
+      //reg  [63:0] expected;
       for (offset = 1; offset < 8; offset = offset + 1) begin
         if (VERBOSE>0) $display("%s:%0d Test unaligned write64: %0d", `__FILE__, `__LINE__, offset);
         for (i = 0; i < DEPTH; i = i + 1) begin
@@ -232,6 +275,89 @@ module memory_ctrl_tb;
       end
     end
 
+    i_areset = 1;
+    #20;
+    i_areset = 0;
+    wait_busy();
+
+    begin : test_from_engine_sims
+      reg [ADDR_WIDTH+3-1:0] addr;
+      if (VERBOSE>0) $display("%s:%0d Test aligned write, unaligned write, unaligned read64: %0d", `__FILE__, `__LINE__, offset);
+      addr = 0;
+      write_append( addr, 64'h525400cdcd23001c );
+      write_append( addr, 64'h7300009908004500 );
+      write_append( addr, 64'h000000004000ff11 );
+      write_append( addr, 64'h1f99c23acad34d48 );
+      write_append( addr, 64'he37e101b12670000 );
+      write_append( addr, 64'h0000000000000000 );
+      `assert( addr == 'h30 );
+      addr = 'h2a;
+      write_append( addr, 64'h2401000000000000 ); //NTP
+      write_append( addr, 64'h0000000000000000 );
+      write_append( addr, 64'h0000000000000000 );
+      write_append( addr, 64'h71cc4c8cdb00980b );
+      write_append( addr, 64'h0000000100017b81 );
+      write_append( addr, 64'h0000000100018441 );
+      wait_busy();
+      write_append( addr, 64'h0104002492ae9b06 ); //NTS UI
+      write_append( addr, 64'he29f638497f018b5 );
+      write_append( addr, 64'h812485cbef5f811f );
+      write_append( addr, 64'h516a620ed8024546 );
+      write_append( addr, 64'hbb3edb5900000000 );
+      wait_busy();
+      addr = 'h7e;
+      write_append( addr, 64'h0204006830a8dce1 ); // This write used to bug out due to:
+                                                  // memctrl not supporting 1 single unaligned write
+                                                  // (did not jump to STATE_UNALIGNED_WRITE64_LAST as necessary)
+      wait_busy();
+
+      if (VERBOSE>1)
+        dump_ram(0, 20);
+
+      i_read_64 = 1;
+      { i_addr_hi, i_addr_lo } = 'h7e;
+      #10;
+
+      if (VERBOSE>1)
+         $display("%s:%0d o_data = %h expected = %h", `__FILE__, `__LINE__, o_data, 64'h0204006830a8dce1 );
+
+      `assert(o_data == 64'h0204006830a8dce1);
+      i_read_64 = 0;
+      //write_append( addr, 64'h );
+      //write_append( addr, 64'h );
+      //write_append( addr, 64'h );
+      //write_append( addr, 64'h );
+
+    end
+/*
+../src/tb/nts_top_tb.v:630 dut.engine.mux_tx 0 05a = 0104002492ae9b06
+../src/tb/nts_top_tb.v:630 dut.engine.mux_tx 0 062 = e29f638497f018b5
+../src/tb/nts_top_tb.v:630 dut.engine.mux_tx 0 06a = 812485cbef5f811f
+../src/tb/nts_top_tb.v:630 dut.engine.mux_tx 0 072 = 516a620ed8024546
+../src/tb/nts_top_tb.v:630 dut.engine.mux_tx 0 07a = bb3edb5900000000
+
+../src/tb/nts_top_tb.v:630 dut.engine.mux_tx 0 07e = 0204006830a8dce1
+../src/tb/nts_top_tb.v:614 dut.engine.parser.state_reg: 14
+../src/tb/nts_top_tb.v:707 dut.engine.parser.state_reg(19)->(20): 1 ticks
+../src/tb/nts_top_tb.v:589 State: 14 CRYPTO_FSM state 00 => 0f [....]
+../src/tb/nts_top_tb.v:714 dut.engine.parser.crypto_fsm_reg(0)->(15): 2 ticks
+../src/tb/nts_top_tb.v:589 State: 14 CRYPTO_FSM state 0f => 10 [....]
+../src/tb/nts_top_tb.v:714 dut.engine.parser.crypto_fsm_reg(15)->(16): 1 ticks
+../src/tb/nts_top_tb.v:630 dut.engine.mux_tx 0 086 = 000000000000002e
+../src/tb/nts_top_tb.v:630 dut.engine.mux_tx 0 08e = 000000000000002f
+../src/tb/nts_top_tb.v:630 dut.engine.mux_tx 0 096 = 01cca8833de77a0c
+../src/tb/nts_top_tb.v:630 dut.engine.mux_tx 0 09e = e9e7d6b2081e2bc6
+../src/tb/nts_top_tb.v:630 dut.engine.mux_tx 0 0a6 = c418b4e5b15e6b78
+../src/tb/nts_top_tb.v:630 dut.engine.mux_tx 0 0ae = 03a1003738f723ad
+../src/tb/nts_top_tb.v:630 dut.engine.mux_tx 0 0b6 = 3e0f2c3c67012d97
+../src/tb/nts_top_tb.v:630 dut.engine.mux_tx 0 0be = be5fba1aa63feb15
+../src/tb/nts_top_tb.v:630 dut.engine.mux_tx 0 0c6 = dccb1ec93b470602
+../src/tb/nts_top_tb.v:630 dut.engine.mux_tx 0 0ce = 3701f7ed0b795138
+../src/tb/nts_top_tb.v:630 dut.engine.mux_tx 0 0d6 = 197428c797dfa8b9
+../src/tb/nts_top_tb.v:630 dut.engine.mux_tx 0 0de = 27b1c6a832704bb3
+ */
+
+
     $display("Test stop: %s:%0d", `__FILE__, `__LINE__);
     $finish;
   end
@@ -239,4 +365,10 @@ module memory_ctrl_tb;
   always begin
     #5 i_clk = ~i_clk;
   end
+
+  always @(posedge i_clk or posedge i_areset)
+    if (i_areset == 0)
+      if (o_error)
+        $display("s:%0d WARNING: o_error", `__FILE__, `__LINE__);
+
 endmodule

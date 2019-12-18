@@ -30,7 +30,7 @@
 
 .PHONY: DIRS VVP clean default all verilator \
  lint lint_rtl lint_memory lint_engine lint_dispatcher lint_top int_tb lint-submodules \
- sim-api sim-engine sim-parser sim-rxbuf sim-txbuf sim-secure sim
+ sim-api sim-engine sim-memctrl sim-parser sim-rxbuf sim-txbuf sim-secure sim
 
 AES_SRC_PATH = ../sub/aes/src/rtl
 AES_SRC = $(AES_SRC_PATH)/aes_core.v $(AES_SRC_PATH)/aes_decipher_block.v $(AES_SRC_PATH)/aes_encipher_block.v $(AES_SRC_PATH)/aes_inv_sbox.v $(AES_SRC_PATH)/aes_key_mem.v  $(AES_SRC_PATH)/aes_sbox.v
@@ -78,6 +78,9 @@ sim-api: $(OUTPUT)/nts_api_tb.vvp
 	vvp $^
 
 sim-engine: $(OUTPUT)/nts_engine_tb.vvp
+	vvp $^
+
+sim-memctrl: $(OUTPUT)/memory_ctrl_tb.vvp
 	vvp $^
 
 sim-dispatcher: $(OUTPUT)/nts_dispatcher_tb.vvp
@@ -200,7 +203,7 @@ $(OUTPUT)/memory_ctrl_tb.vvp: \
  ../src/rtl/memory/memory_ctrl.v \
  ../src/rtl/memory/bram_dpge.v
 ifeq (,$(NO_VLINT))
-	-$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY $^
+	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY $^
 endif
 	iverilog -o $@ $^
 

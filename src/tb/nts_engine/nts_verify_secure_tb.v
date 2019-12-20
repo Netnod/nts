@@ -33,7 +33,7 @@
 //
 
 module nts_verify_secure_tb #(
-  parameter verbose = 1 // 0: Silent. 1. Informative messages. 2. Traces. 3. Extreme traces.
+  parameter verbose = 2 // 0: Silent. 1. Informative messages. 2. Traces. 3. Extreme traces.
 );
   localparam [255:0] TEST1_C2S = { 128'h2be26209_fdc335d0_13aeb45a_ecd91f1a,
                                    128'ha4e1055b_8f7fdae8_c592b87d_09200b74 };
@@ -76,9 +76,8 @@ module nts_verify_secure_tb #(
   wire                   o_error;
   wire                   o_verify_tag_ok;
 
-  reg            [3 : 0] i_key_word;
+  reg            [2 : 0] i_key_word;
   reg                    i_key_valid;
-  reg                    i_key_length;
   reg           [31 : 0] i_key_data;
 
   reg                    i_unwrapped_s2c;
@@ -98,12 +97,17 @@ module nts_verify_secure_tb #(
   reg                    i_op_store_tx_cookie;
   reg                    i_op_cookie_loadkeys;
   reg                    i_op_cookie_rencrypt;
+  reg                    i_op_cookiebuf_appendcookie;
+  reg                    i_op_cookiebuf_reset;
+
+  reg              [63:0] i_cookie_prefix;
 
   reg  [ADDR_WIDTH+3-1:0] i_copy_rx_addr;
   reg               [9:0] i_copy_rx_bytes;
 
   reg  [ADDR_WIDTH+3-1:0] i_copy_tx_addr;
   reg               [9:0] i_copy_tx_bytes;
+
 
   reg                     i_rx_wait;
   wire [ADDR_WIDTH+3-1:0] o_rx_addr;
@@ -112,6 +116,7 @@ module nts_verify_secure_tb #(
   reg                     i_rx_rd_dv;
   reg [RX_PORT_WIDTH-1:0] i_rx_rd_data;
 
+  reg                     i_tx_busy;
   wire                    o_tx_read_en;
   reg              [63:0] i_tx_read_data;
   wire                    o_tx_write_en;
@@ -143,7 +148,6 @@ module nts_verify_secure_tb #(
 
     .i_key_word(i_key_word),
     .i_key_valid(i_key_valid),
-    .i_key_length(i_key_length),
     .i_key_data(i_key_data),
 
     .i_unrwapped_s2c(i_unwrapped_s2c),
@@ -163,6 +167,10 @@ module nts_verify_secure_tb #(
     .i_op_store_tx_cookie(i_op_store_tx_cookie),
     .i_op_cookie_loadkeys(i_op_cookie_loadkeys),
     .i_op_cookie_rencrypt(i_op_cookie_rencrypt),
+    .i_op_cookiebuf_reset(i_op_cookiebuf_reset),
+    .i_op_cookiebuf_appendcookie(i_op_cookiebuf_appendcookie),
+
+    .i_cookie_prefix(i_cookie_prefix),
 
     .i_copy_rx_addr(i_copy_rx_addr),
     .i_copy_rx_bytes(i_copy_rx_bytes),
@@ -176,6 +184,7 @@ module nts_verify_secure_tb #(
     .i_rx_rd_dv(i_rx_rd_dv),
     .i_rx_rd_data(i_rx_rd_data),
 
+    .i_tx_busy(i_tx_busy),
     .o_tx_read_en(o_tx_read_en),
     .i_tx_read_data(i_tx_read_data),
     .o_tx_write_en(o_tx_write_en),
@@ -202,9 +211,8 @@ module nts_verify_secure_tb #(
     begin : write_key
       reg [3:0] i;
       for (i = 0; i < 8; i = i + 1) begin
-        i_key_word = i[3:0];
+        i_key_word = i[2:0];
         i_key_valid = 1;
-        i_key_length = 0; //256(128+128). 512bit(256+256) not yet supported.
         i_key_data = key[i*32+:32];
         if (verbose>1)
           $display("%s:%0d key: %h (%h) keyid: %h", `__FILE__, `__LINE__, i_key_data, i_key_word, keyid );
@@ -212,7 +220,6 @@ module nts_verify_secure_tb #(
       end
       i_key_word = 0;
       i_key_valid = 0;
-      i_key_length = 0;
       i_key_data = 0;
       #10;
     end
@@ -541,13 +548,38 @@ module nts_verify_secure_tb #(
   end
   endtask
 
-  task dump_ram_row ( input [7:0] row);
+  task cookiebuf_reset;
+  begin
+    wait_busy();
+    i_op_cookiebuf_reset = 1;
+    #10;
+    i_op_cookiebuf_reset = 0;
+    `assert(o_busy == 'b0); //TODO change behaivor to be more similar to other ops?
+    //wait_busy();
+  end
+  endtask
+
+  task cookiebuf_record_cookie( input [63:0] cookie_prefix );
+  begin
+    wait_busy();
+    i_cookie_prefix = cookie_prefix;
+    i_op_cookiebuf_appendcookie = 1;
+    #10;
+    i_op_cookiebuf_appendcookie = 0;
+    i_cookie_prefix = 0;
+    `assert(o_busy);
+    wait_busy();
+  end
+  endtask
+
+  task dump_ram_row ( input [9:0] row);
     $display("%s:%0d dump_ram - dut.mem.ram[0x%h]=0x%h", `__FILE__, `__LINE__, row, dut.mem.ram[row]);
   endtask
 
-  task dump_ram( input [7:0] first, input [7:0] last);
+  task dump_ram( input [9:0] first, input [9:0] last);
   begin : dump_ram
-    reg [7:0] i ;
+    reg [9:0] i ;
+    $display("%s:%0d dump_ram( %h...%h )", `__FILE__, `__LINE__, first, last );
     for (i = first; i <= last; i = i + 1)
       dump_ram_row(i);
   end
@@ -680,7 +712,6 @@ module nts_verify_secure_tb #(
     input [127:0] testname_str,
     input [255:0] masterkey_value,
     input  [31:0] masterkey_keyid,
-    //input         masterkey_length,
     input [831:0] cookie,
     input         expect_success,
     input [255:0] expect_c2s,
@@ -690,8 +721,7 @@ module nts_verify_secure_tb #(
     if (verbose>1) begin
       $display("%s:%0d Unwrap [%s] start...", `__FILE__, `__LINE__, testname_str);
     end
-    //reset_rx();
-    write_key(masterkey_keyid, masterkey_value/*, masterkey_length*/);
+    write_key(masterkey_keyid, masterkey_value);
 
     begin : unwrap_cookie
       reg         valid_cookie;
@@ -751,7 +781,7 @@ module nts_verify_secure_tb #(
     output [831:0] cookie_out
   );
   begin
-    write_key(masterkey_keyid, masterkey_value/*, masterkey_length*/);
+    write_key(masterkey_keyid, masterkey_value);
     begin : unwrap_recursive_cookie
       reg         valid_cookie;
       reg  [31:0] cookie_keyid;
@@ -788,21 +818,10 @@ module nts_verify_secure_tb #(
     `assert( dut.key_c2s_reg == expect_c2s );
     `assert( dut.key_s2c_reg == expect_s2c );
 
-    if (verbose>0) begin
+    if (verbose>1) begin
       $display("%s:%0d Unwrap_reursive [%s][%0d] executed with result: %d. Cookie: %h...", `__FILE__, `__LINE__, testname_str, recursions,o_verify_tag_ok, cookie);
     end
     cookie_rencrypt();
-
-    cookie_out =
-         {
-           NTP_TAG_NTS_COOKIE, 16'h0068,
-           masterkey_keyid,
-           dut.mem.ram[0], dut.mem.ram[1],
-           dut.core_tag_out,
-           dut.mem.ram[2], dut.mem.ram[3], dut.mem.ram[4], dut.mem.ram[5],
-           dut.mem.ram[6], dut.mem.ram[7], dut.mem.ram[8], dut.mem.ram[9]
-         };
-    $display("%s:%0d Cookie: %h...", `__FILE__, `__LINE__, cookie_out);
 
     i_op_store_tx_cookie = 1;
     i_copy_tx_addr = mem_tx_baseaddr;
@@ -819,7 +838,7 @@ module nts_verify_secure_tb #(
            mem_tx[0], mem_tx[1], mem_tx[2], mem_tx[3], mem_tx[4], mem_tx[5],
            mem_tx[6], mem_tx[7], mem_tx[8], mem_tx[9], mem_tx[10], mem_tx[11]
          };
-    $display("%s:%0d Cookie: %h...", `__FILE__, `__LINE__, cookie_out);
+    if (verbose>1) $display("%s:%0d Cookie: %h...", `__FILE__, `__LINE__, cookie_out);
   end
   endtask
 
@@ -861,6 +880,77 @@ module nts_verify_secure_tb #(
   end
   endtask
 
+  task cookie_buffer_test (
+    input [127:0] testname_str,
+    input integer cookies_to_generate,
+    input [255:0] masterkey_value,
+    input  [31:0] masterkey_keyid,
+    input [831:0] cookie
+  );
+  begin : cookie_buffer_test
+    integer i;
+      reg         valid_cookie;
+      reg  [31:0] cookie_keyid;
+      reg [127:0] cookie_nonce;
+      reg [127:0] cookie_tag;
+      reg [511:0] cookie_ciphertext;
+      reg   [9:0] tmp;
+    if (verbose>0) begin
+      $display("%s:%0d cookie_buffer [%s] start...", `__FILE__, `__LINE__, testname_str);
+    end
+
+    nonce_set = 0;
+    i_areset = 1;
+    #10;
+    i_areset = 0;
+    #100;
+
+    write_key(masterkey_keyid, masterkey_value);
+
+    split_chrony_cookie(
+           cookie,
+           valid_cookie,
+           cookie_keyid,
+           cookie_nonce,
+           cookie_tag,
+           cookie_ciphertext[511:256],
+           cookie_ciphertext[255:0] );
+
+    write_rx_nonce(cookie_nonce);
+    write_rx_pc(cookie_ciphertext);
+    write_rx_tag(cookie_tag);
+
+    if (verbose>1) begin
+      $display("%s:%0d cookie_buffer: cookie: %h", `__FILE__, `__LINE__, cookie );
+      $display("%s:%0d cookie_buffer: keyid:  %h", `__FILE__, `__LINE__, cookie_keyid );
+      $display("%s:%0d cookie_buffer: NONCE:  %h", `__FILE__, `__LINE__, cookie_nonce );
+      $display("%s:%0d cookie_buffer: CIPHER: %h", `__FILE__, `__LINE__, cookie_ciphertext );
+      $display("%s:%0d cookie_buffer: TAG:    %h", `__FILE__, `__LINE__, cookie_tag );
+    end
+
+    `assert(valid_cookie);
+
+    verify_cookie();
+    cookiebuf_reset();
+    for (i = 0; i < cookies_to_generate; i = i + 1) begin
+      if (verbose>1)
+         $display("%s:%0d cookie_buffer: rencrypt cookie", `__FILE__, `__LINE__);
+
+      cookie_rencrypt();
+
+      if (verbose>1)
+         $display("%s:%0d cookie_buffer: rencrypt cookie", `__FILE__, `__LINE__);
+
+      cookiebuf_record_cookie( { NTP_TAG_NTS_COOKIE, 16'h0068, cookie_keyid } );
+
+    end
+    tmp = cookies_to_generate[9:0];
+    tmp = tmp * ('h68/8);
+    tmp = tmp + 768 - 1;
+    dump_ram(768, tmp);
+  end
+  endtask
+
   //----------------------------------------------------------------
   // Testbench start
   //----------------------------------------------------------------
@@ -884,10 +974,14 @@ module nts_verify_secure_tb #(
     i_op_store_tx_nonce_tag = 0;
     i_op_store_tx_cookie = 0;
     i_op_cookie_loadkeys = 0;
+    i_op_cookiebuf_appendcookie = 0;
+    i_op_cookiebuf_reset = 0;
+
     i_copy_rx_addr = 0;
     i_copy_rx_bytes = 0;
     i_copy_tx_addr = 0;
     i_copy_tx_bytes = 0;
+    i_tx_busy = 0;
     i_tx_read_data = 0;
 
     nonce_set = 0;
@@ -974,18 +1068,11 @@ module nts_verify_secure_tb #(
       NTS_TEST_COOKIE1_S2C
     );
 
+    cookie_buffer_test("crypt7", 7, NTS_TEST_REQUEST_MASTER_KEY, NTS_TEST_REQUEST_MASTER_KEY_ID, NTS_TEST_COOKIE1);
+
     $display("Test stop: %s:%0d", `__FILE__, `__LINE__);
     $finish;
   end
-
-/*
-  always @*
-  begin
-    if (verbose>2)
-      if (dut.core_ack_reg)
-        $display("%s:%0d Read: %h", `__FILE__, `__LINE__, dut.core_block_rd);
-  end
-*/
 
   //----------------------------------------------------------------
   // Testbench model: RX-Buff

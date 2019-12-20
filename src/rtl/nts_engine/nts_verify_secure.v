@@ -67,6 +67,9 @@ module nts_verify_secure #(
   input  wire                         i_op_cookie_loadkeys,
   input  wire                         i_op_cookie_rencrypt,
 
+  input  wire                         i_op_cookiebuf_reset,
+  input  wire                         i_op_cookiebuf_appendcookie,
+
   input  wire                         i_op_verify_c2s,
   input  wire                         i_op_generate_tag,
 
@@ -83,6 +86,8 @@ module nts_verify_secure #(
   output wire                         o_tx_write_en,
   output wire                  [63:0] o_tx_write_data,
   output wire      [ADDR_WIDTH+3-1:0] o_tx_address,
+
+  input wire                   [63:0] i_cookie_prefix,
 
   output wire                         o_noncegen_get,
   input  wire                [63 : 0] i_noncegen_nonce,
@@ -114,12 +119,17 @@ module nts_verify_secure #(
   localparam [BITS_STATE-1:0] STATE_STORE_TX_COOKIE_INIT = 16;
   localparam [BITS_STATE-1:0] STATE_STORE_TX_COOKIE      = 17;
   localparam [BITS_STATE-1:0] STATE_LOAD_KEYS_FROM_MEM   = 18;
+  localparam [BITS_STATE-1:0] STATE_STORE_COOKIEBUF      = 19;
   localparam [BITS_STATE-1:0] STATE_ERROR                = 31;
 
+  localparam BRAM_WIDTH = 10;
+  localparam [15:BRAM_WIDTH-1] CORE_ADDR_MSB_ZERO=0;
+
   /* MEM8 addresses must be lsb=0 */
-  localparam [7:0] MEM8_ADDR_NONCE =  0;
-  localparam [7:0] MEM8_ADDR_PC    =  2; // 0 + 64sizeof(nonce)                 Nonce is 128 bit, 2x64 blocks
-  localparam [7:0] MEM8_ADDR_AD    = 10; // 0 + 64sizeof(nonce) + 64sizeof(PC). PC is 512 bit, 8x64 blocks
+  localparam [BRAM_WIDTH-1:0] MEM8_ADDR_NONCE   =   0;
+  localparam [BRAM_WIDTH-1:0] MEM8_ADDR_PC      = 256;
+  localparam [BRAM_WIDTH-1:0] MEM8_ADDR_AD      = 512;
+  localparam [BRAM_WIDTH-1:0] MEM8_ADDR_COOKIES = 768;
 
   localparam MODE_DECRYPT = 0;
   localparam MODE_ENCRYPT = 1;
@@ -188,8 +198,8 @@ module nts_verify_secure #(
   //----------------------------------------------------------------
 
   reg                    ramrx_addr_we;
-  reg              [7:0] ramrx_addr_new;
-  reg              [7:0] ramrx_addr_reg; //Memory address in internal mem.
+  reg   [BRAM_WIDTH-1:0] ramrx_addr_new;
+  reg   [BRAM_WIDTH-1:0] ramrx_addr_reg; //Memory address in internal mem.
 
   reg                    rx_addr_last_we;
   reg [ADDR_WIDTH+3-1:0] rx_addr_last_new;
@@ -208,8 +218,8 @@ module nts_verify_secure #(
   //----------------------------------------------------------------
 
   reg                    ramtx_addr_we;
-  reg              [7:0] ramtx_addr_new;
-  reg              [7:0] ramtx_addr_reg; //Memory address in internal mem.
+  reg   [BRAM_WIDTH-1:0] ramtx_addr_new;
+  reg   [BRAM_WIDTH-1:0] ramtx_addr_reg; //Memory address in internal mem.
 
   reg                    tx_addr_last_we;
   reg [ADDR_WIDTH+3-1:0] tx_addr_last_new;
@@ -228,8 +238,28 @@ module nts_verify_secure #(
   //----------------------------------------------------------------
 
   reg                    ramld_addr_we;
-  reg              [7:0] ramld_addr_new;
-  reg              [7:0] ramld_addr_reg; //Memory address in internal mem.
+  reg   [BRAM_WIDTH-1:0] ramld_addr_new;
+  reg   [BRAM_WIDTH-1:0] ramld_addr_reg; //Memory address in internal mem.
+
+  //----------------------------------------------------------------
+  // Registers - Cookie buffer related
+  //----------------------------------------------------------------
+
+  reg       cookie_ctr_we;
+  reg [3:0] cookie_ctr_new;
+  reg [3:0] cookie_ctr_reg;
+
+  reg        cookie_prefix_we;
+  reg [63:0] cookie_prefix_new;
+  reg [63:0] cookie_prefix_reg;
+
+  reg                  ramcookie_addr_load_we;
+  reg [BRAM_WIDTH-1:0] ramcookie_addr_load_new;
+  reg [BRAM_WIDTH-1:0] ramcookie_addr_load_reg;
+
+  reg                  ramcookie_addr_write_we;
+  reg [BRAM_WIDTH-1:0] ramcookie_addr_write_new;
+  reg [BRAM_WIDTH-1:0] ramcookie_addr_write_reg;
 
   //----------------------------------------------------------------
   // Registers - Misc.
@@ -264,6 +294,14 @@ module nts_verify_secure #(
   wire [127 : 0] core_tag_out;
   wire           core_tag_ok;
   wire           core_ready;
+
+  //----------------------------------------------------------------
+  // Wires - Cookie buffer related
+  //----------------------------------------------------------------
+
+  reg        ramcookie_ld;
+  reg        ramcookie_wr;
+  reg [63:0] ramcookie_wdata;
 
   //----------------------------------------------------------------
   // Wires - RX-Buff related
@@ -302,17 +340,17 @@ module nts_verify_secure #(
   reg          ramnc_we;    // Nonce copy RAM wires (mux input)
   reg  [127:0] ramnc_wdata; // Nonce copy RAM wires (mux input)
 
-  reg          ram_a_en;    // Memory port A
-  reg          ram_a_we;
-  reg    [7:0] ram_a_addr;
-  reg   [63:0] ram_a_wdata;
-  wire  [63:0] ram_a_rdata;
+  reg                    ram_a_en;    // Memory port A
+  reg                    ram_a_we;
+  reg   [BRAM_WIDTH-1:0] ram_a_addr;
+  reg             [63:0] ram_a_wdata;
+  wire            [63:0] ram_a_rdata;
 
-  reg          ram_b_en;    // Memory port B
-  reg          ram_b_we;
-  reg    [7:0] ram_b_addr;
-  reg   [63:0] ram_b_wdata;
-  wire  [63:0] ram_b_rdata;
+  reg                    ram_b_en;    // Memory port B
+  reg                    ram_b_we;
+  reg   [BRAM_WIDTH-1:0] ram_b_addr;
+  reg             [63:0] ram_b_wdata;
+  wire            [63:0] ram_b_rdata;
 
   //----------------------------------------------------------------
   // Wires - Nonce generation
@@ -346,23 +384,24 @@ module nts_verify_secure #(
 
   assign core_key = { key_current_reg[255:128], 128'h0, key_current_reg[127:0], 128'h0 }; // TODO update when adding s2c support
 
-  assign core_ad_start = { 9'h0, MEM8_ADDR_AD[7:1] };
+
+  assign core_ad_start = { CORE_ADDR_MSB_ZERO, MEM8_ADDR_AD[BRAM_WIDTH-1:1] };
 
   assign core_block_rd = { ram_a_rdata, ram_b_rdata };
 
   assign core_config_mode = AEAD_AES_SIV_CMAC_256;
 
-  assign core_nonce_start = { 9'h0, MEM8_ADDR_NONCE[7:1] };
+  assign core_nonce_start = { CORE_ADDR_MSB_ZERO, MEM8_ADDR_NONCE[BRAM_WIDTH-1:1] };
   assign core_nonce_length = 16;
 
-  assign core_pc_start = { 9'h0, MEM8_ADDR_PC[7:1] };
+  assign core_pc_start = { CORE_ADDR_MSB_ZERO, MEM8_ADDR_PC[BRAM_WIDTH-1:1] };
   assign core_pc_length = core_pc_length_mux_reg ? 64 /* 512 = 2x256 C2S, S2C, 128+128bits keys */ : 0;
 
   assign core_tag_in = { core_tag_reg[0], core_tag_reg[1] };
 
   assign o_busy = (state_reg != STATE_IDLE) || (nonce_a_valid_reg==1'b0) || (nonce_b_valid_reg==1'b0);
 
-  assign o_error = (state_reg == STATE_ERROR) || (core_addr[15:ADDR_WIDTH-1] != 0);
+  assign o_error = (state_reg == STATE_ERROR) || (core_addr[15:BRAM_WIDTH-1] != 0);
 
   assign o_noncegen_get = nonce_generate_reg;
 
@@ -385,7 +424,7 @@ module nts_verify_secure #(
   // Used as 128bit Read/Write when talking to AES-SIV core.
   //----------------------------------------------------------------
 
-  bram_dp2w #( .ADDR_WIDTH(8), .DATA_WIDTH(64) ) mem (
+  bram_dp2w #( .ADDR_WIDTH( BRAM_WIDTH ), .DATA_WIDTH(64) ) mem (
     .i_clk(i_clk),
     .i_en_a(ram_a_en),
     .i_en_b(ram_b_en),
@@ -435,6 +474,8 @@ module nts_verify_secure #(
   always @(posedge i_clk or posedge i_areset)
   begin : reg_update
     if (i_areset) begin
+      cookie_ctr_reg <= 0;
+      cookie_prefix_reg <= 0;
       core_ack_reg <= 0;
       core_ad_length_reg <= 0;
       core_config_encdec_reg <= 0;
@@ -454,6 +495,8 @@ module nts_verify_secure #(
       ramld_addr_reg <= 0;
       ramrx_addr_reg <= 0;
       ramtx_addr_reg <= 0;
+      ramcookie_addr_load_reg <= MEM8_ADDR_NONCE;
+      ramcookie_addr_write_reg <= MEM8_ADDR_COOKIES;
       rx_addr_reg <= 0;
       rx_rd_en_reg <= 0;
       rx_addr_last_reg <= 0;
@@ -465,6 +508,12 @@ module nts_verify_secure #(
       tx_ctr_reg <= 0;
       verify_tag_ok_reg <= 0;
     end else begin
+      if (cookie_ctr_we)
+        cookie_ctr_reg <= cookie_ctr_new;
+
+      if (cookie_prefix_we)
+        cookie_prefix_reg <= cookie_prefix_new;
+
       core_ack_reg <= core_cs; // Memory always responds next cycle
 
       if (core_ad_length_we)
@@ -513,6 +562,12 @@ module nts_verify_secure #(
 
       if (nonce_generate_we)
         nonce_generate_reg <= nonce_generate_new;
+
+      if (ramcookie_addr_load_we)
+        ramcookie_addr_load_reg <= ramcookie_addr_load_new;
+
+      if (ramcookie_addr_write_we)
+        ramcookie_addr_write_reg <= ramcookie_addr_write_new;
 
       if (ramld_addr_we)
         ramld_addr_reg <= ramld_addr_new;
@@ -651,15 +706,25 @@ module nts_verify_secure #(
           ram_b_addr = ramld_addr_reg + 1;
           ram_b_wdata = 0;
         end
+      STATE_STORE_COOKIEBUF:
+        begin
+          ram_a_en = ramcookie_ld;
+          ram_a_we = 0;
+          ram_a_addr = ramcookie_addr_load_reg;
+          ram_b_en = ramcookie_wr;
+          ram_b_we = 1;
+          ram_b_addr = ramcookie_addr_write_reg;
+          ram_b_wdata = ramcookie_wdata;
+        end
       default:
         begin
           ram_a_en = core_cs;
           ram_a_we = core_we;
-          ram_a_addr = { core_addr[6:0], 1'b0 }; //1'b0: 64bit MSB
+          ram_a_addr = { core_addr[BRAM_WIDTH-2:0], 1'b0 }; //1'b0: 64bit MSB
           ram_a_wdata = core_block_wr[127:64];
           ram_b_en = core_cs;
           ram_b_we = core_we;
-          ram_b_addr = { core_addr[6:0], 1'b1 }; //1'b1: 64bit LSB
+          ram_b_addr = { core_addr[BRAM_WIDTH-2:0], 1'b1 }; //1'b1: 64bit LSB
           ram_b_wdata = core_block_wr[63:0];
         end
     endcase
@@ -1026,7 +1091,7 @@ module nts_verify_secure #(
               begin
                 ramtx_addr_we = 1;
                 ramtx_addr_new = MEM8_ADDR_PC;
-                tx_load_ram_and_emit(0, core_tag_out[127:64]); 
+                tx_load_ram_and_emit(0, core_tag_out[127:64]);
               end
             'h4: tx_load_ram_and_emit(1, core_tag_out[63:0]); //Load from MEM8_ADDR_PC
             'h5: tx_load_ram_and_emit(1, ram_a_rdata); //C0 (C2S 0)
@@ -1172,6 +1237,98 @@ module nts_verify_secure #(
   end
 
   //----------------------------------------------------------------
+  // CookieBuff Handler Helper tasks
+  //----------------------------------------------------------------
+
+  task cookie_load_ram_and_store (
+    input        ramload,
+    input [63:0] data_out
+  );
+  begin
+    ramcookie_ld = ramload;
+    ramcookie_wr = 1;
+    ramcookie_wdata = data_out;
+  end
+  endtask
+
+  //----------------------------------------------------------------
+  // Cookie Buffer control
+  //----------------------------------------------------------------
+
+  always @*
+  begin : cookie_buf
+
+    cookie_prefix_we = 0;
+    cookie_prefix_new = 0;
+
+    cookie_ctr_we = 0;
+    cookie_ctr_new = 0;
+
+    ramcookie_addr_load_we = 0;
+    ramcookie_addr_load_new = 0;
+    ramcookie_addr_write_we = 0;
+    ramcookie_addr_write_new = 0;
+    ramcookie_ld = 0;
+    ramcookie_wr = 0;
+    ramcookie_wdata = 0;
+
+    case (state_reg)
+      STATE_IDLE:
+        if (i_op_cookiebuf_reset) begin
+          ramcookie_addr_write_we = 1;
+          ramcookie_addr_write_new = MEM8_ADDR_COOKIES;
+        end
+        else if (i_op_cookiebuf_appendcookie) begin
+          cookie_ctr_we = 1;
+          cookie_ctr_new = 0;
+          cookie_prefix_we = 1;
+          cookie_prefix_new = i_cookie_prefix;
+          ramcookie_addr_load_we = 1;
+          ramcookie_addr_load_new = MEM8_ADDR_NONCE;
+        end
+      STATE_STORE_COOKIEBUF:
+        begin
+          cookie_ctr_we = 1;
+          cookie_ctr_new = cookie_ctr_reg + 1;
+          ramcookie_addr_load_we = 1;
+          ramcookie_addr_load_new = ramcookie_addr_load_reg + 1;
+          ramcookie_addr_write_we = 1;
+          ramcookie_addr_write_new = ramcookie_addr_write_reg + 1;
+
+          case (cookie_ctr_reg)
+            'h0: //Load only
+              begin
+                cookie_load_ram_and_store(1, cookie_prefix_reg);
+              end
+            'h1: cookie_load_ram_and_store(1, ram_a_rdata); //Nonce MSB from previous cycle
+            'h2: cookie_load_ram_and_store(0, ram_a_rdata); //Nonce LSB from previous cycle
+            'h3: //Tag0
+              begin
+                ramcookie_addr_load_we = 1;
+                ramcookie_addr_load_new = MEM8_ADDR_PC;
+                cookie_load_ram_and_store(0, core_tag_out[127:64]);
+              end
+            'h4: cookie_load_ram_and_store(1, core_tag_out[63:0]); //Load from MEM8_ADDR_PC
+            'h5: cookie_load_ram_and_store(1, ram_a_rdata); //C0 (C2S 0)
+            'h6: cookie_load_ram_and_store(1, ram_a_rdata); //C1 (C2S 1)
+            'h7: cookie_load_ram_and_store(1, ram_a_rdata); //C2 (C2S 2)
+            'h8: cookie_load_ram_and_store(1, ram_a_rdata); //C3 (C2S 3)
+            'h9: cookie_load_ram_and_store(1, ram_a_rdata); //C4 (S2C 0)
+            'ha: cookie_load_ram_and_store(1, ram_a_rdata); //C5 (S2C 1)
+            'hb: cookie_load_ram_and_store(1, ram_a_rdata); //C6 (S2C 2)
+            'hc: cookie_load_ram_and_store(0, ram_a_rdata); //C7 (S2C 3)
+            default:
+              begin
+                ramcookie_addr_load_we = 0;
+                ramcookie_addr_write_we = 0;
+              end
+          endcase;
+        end
+      default: ;
+    endcase
+  end
+
+  //----------------------------------------------------------------
   // Finite State Machine
   //----------------------------------------------------------------
 
@@ -1228,6 +1385,9 @@ module nts_verify_secure #(
         end else if (i_op_store_tx_cookie) begin
           state_we = 1;
           state_new = STATE_STORE_TX_COOKIE_INIT;
+        end else if (i_op_cookiebuf_appendcookie) begin
+          state_we = 1;
+          state_new = STATE_STORE_COOKIEBUF;
         end
       STATE_COPY_RX_INIT_PC:
         if (i_rx_wait == 'b0) begin
@@ -1316,6 +1476,11 @@ module nts_verify_secure #(
         end
       STATE_LOAD_KEYS_FROM_MEM:
         if (ramld_addr_reg >= MEM8_ADDR_PC + 8) begin //TODO replace with named constant.
+          state_we = 1;
+          state_new = STATE_IDLE;
+        end
+      STATE_STORE_COOKIEBUF:
+        if (cookie_ctr_reg >= 12) begin //TODO replace with a named constant (128+128+256+256) / 64  ...
           state_we = 1;
           state_new = STATE_IDLE;
         end

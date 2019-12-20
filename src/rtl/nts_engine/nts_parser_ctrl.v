@@ -188,6 +188,11 @@ module nts_parser_ctrl #(
   localparam [BITS_STATE-1:0] STATE_GENERATE_FIRST_COOKIE    = 5'h12;
   localparam [BITS_STATE-1:0] STATE_EMIT_FIRST_COOKIE_TL     = 5'h13;
   localparam [BITS_STATE-1:0] STATE_EMIT_FIRST_COOKIE_V      = 5'h14;
+  localparam [BITS_STATE-1:0] STATE_RESET_EXTRA_COOKIES      = 5'h15;
+  localparam [BITS_STATE-1:0] STATE_ADDITIONAL_COOKIES_CTRL  = 5'h16;
+  localparam [BITS_STATE-1:0] STATE_GENERATE_EXTRA_COOKIE    = 5'h17;
+  localparam [BITS_STATE-1:0] STATE_RECORD_EXTRA_COOKIE      = 5'h18;
+
 
   localparam [BITS_STATE-1:0] STATE_TX_UPDATE_LENGTH         = 5'h1d;
 
@@ -279,6 +284,10 @@ module nts_parser_ctrl #(
   reg                         cookie_server_id_we;
   reg                  [31:0] cookie_server_id_new;
   reg                  [31:0] cookie_server_id_reg;
+
+  reg                         cookies_count_we;
+  reg                   [2:0] cookies_count_new;
+  reg                   [2:0] cookies_count_reg;
 
   reg                         error_state_we;
   reg        [BITS_STATE-1:0] error_state_new;
@@ -420,10 +429,8 @@ module nts_parser_ctrl #(
   reg       [ADDR_WIDTH+3-1:0] nts_unique_identifier_addr_reg;
   reg                   [15:0] nts_unique_identifier_length_new;
   reg                   [15:0] nts_unique_identifier_length_reg;
-  reg [NTP_EXTENSION_BITS-1:0] nts_valid_placeholders_new;
-  /* verilator lint_off UNUSED */
-  reg [NTP_EXTENSION_BITS-1:0] nts_valid_placeholders_reg; //TODO implement
-  /* verilator lint_on UNUSED */
+  reg                    [2:0] nts_valid_placeholders_new;
+  reg                    [2:0] nts_valid_placeholders_reg;
   reg       [ADDR_WIDTH+3-1:0] nts_cookie_start_addr_new;
   reg       [ADDR_WIDTH+3-1:0] nts_cookie_start_addr_reg;
 
@@ -799,6 +806,7 @@ module nts_parser_ctrl #(
       api_dummy_reg              <= 32'h64_75_4d_79; //"duMy"
 
       cookie_server_id_reg       <= 'b0;
+      cookies_count_reg          <= 0;
 
       copy_bytes_reg             <= 'b0;
       copy_rx_addr_reg           <= 'b0;
@@ -890,6 +898,9 @@ module nts_parser_ctrl #(
 
       if (cookie_server_id_we)
         cookie_server_id_reg <= cookie_server_id_new;
+
+      if (cookies_count_we)
+        cookies_count_reg <= cookies_count_new;
 
       if (copy_bytes_we)
         copy_bytes_reg <= copy_bytes_new;
@@ -1109,12 +1120,15 @@ module nts_parser_ctrl #(
     nts_valid_placeholders_new = 0;
 
     begin : nts_basic_sanity_check_locals
-      reg [NTP_EXTENSION_BITS:0] i;
+      reg   [NTP_EXTENSION_BITS:0] i;
       reg [NTP_EXTENSION_BITS-1:0] j;
-      reg [NTP_EXTENSION_BITS-1:0] unique_idenfifiers;
-      reg [NTP_EXTENSION_BITS-1:0] cookies;
-      reg [NTP_EXTENSION_BITS-1:0] cookie_placeholders;
+
       reg [NTP_EXTENSION_BITS-1:0] authenticators;
+      reg [NTP_EXTENSION_BITS-1:0] cookies;
+      reg [NTP_EXTENSION_BITS-1:0] unique_idenfifiers;
+
+      reg [2:0] cookie_placeholders;
+
       reg evil_packet;
 
       evil_packet = 0;
@@ -1147,7 +1161,12 @@ module nts_parser_ctrl #(
           end
 
           if (ntp_extension_tag_reg[j] == TAG_NTS_COOKIE_PLACEHOLDER) begin
-            cookie_placeholders = cookie_placeholders + 1;
+            if (cookie_placeholders < 7) begin
+              cookie_placeholders = cookie_placeholders + 1;
+            end else begin
+              evil_packet = 1; //5.7 The client SHOULD NOT include more than seven
+                               //    NTS Cookie Placeholder extension fields in a request.
+            end
             //5.5. The body length of the NTS Cookie Placeholder extension field MUST be
             //     the same as the body length of the NTS Cookie extension field.
             // => Approximation: same length rules
@@ -2055,10 +2074,36 @@ module nts_parser_ctrl #(
           CRYPTO_FSM_DONE_SUCCESS:
             begin
               state_we  = 'b1;
-              state_new = STATE_TX_UPDATE_LENGTH;
+              state_new = STATE_RESET_EXTRA_COOKIES;
             end
           default: ;
         endcase
+      STATE_RESET_EXTRA_COOKIES:
+        begin //TODO implement, crypto_fsm_reg...
+          state_we  = 'b1;
+          state_new = STATE_ADDITIONAL_COOKIES_CTRL;
+        end
+      STATE_ADDITIONAL_COOKIES_CTRL:
+        if (cookies_count_reg < nts_valid_placeholders_reg) begin // for(i=0; i<nts_valid_placeholders; i++) {
+                                                                  //   generateCookie();
+                                                                  //   storeCookie();
+                                                                  // }
+          state_we  = 'b1;
+          state_new = STATE_GENERATE_EXTRA_COOKIE;
+        end else begin
+          state_we  = 'b1;
+          state_new = STATE_TX_UPDATE_LENGTH;
+        end
+      STATE_GENERATE_EXTRA_COOKIE:
+        begin //TODO implement, crypto_fsm_reg...
+          state_we  = 'b1;
+          state_new = STATE_RECORD_EXTRA_COOKIE;
+        end
+      STATE_RECORD_EXTRA_COOKIE:
+        begin //TODO implement, crypto_fsm_reg
+          state_we  = 'b1;
+          state_new = STATE_ADDITIONAL_COOKIES_CTRL; //jump back, while(
+        end
       STATE_TX_UPDATE_LENGTH:
         begin
           state_we  = 'b1;
@@ -2074,6 +2119,30 @@ module nts_parser_ctrl #(
           state_we  = 'b1;
           state_new = STATE_IDLE;
         end
+    endcase
+  end
+
+  //----------------------------------------------------------------
+  // Additional Cookie Generation
+  //----------------------------------------------------------------
+
+  always @*
+  begin
+    cookies_count_we = 0;
+    cookies_count_new = 0;
+
+    case (state_reg)
+      STATE_GENERATE_FIRST_COOKIE:
+        begin
+          cookies_count_we = 1;
+          cookies_count_new = 0;
+        end
+      STATE_ADDITIONAL_COOKIES_CTRL:
+        if (cookies_count_reg < nts_valid_placeholders_reg) begin
+          cookies_count_we = 1;
+          cookies_count_new = cookies_count_reg + 1;
+        end
+      default: ;
     endcase
   end
 

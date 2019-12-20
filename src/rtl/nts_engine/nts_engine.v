@@ -929,6 +929,10 @@ module nts_engine #(
     .i_op_verify_c2s   ( parser_crypto_op_c2s_verify_auth   ), //Authenticate an incomming packet using C2S key
     .i_op_generate_tag ( parser_crypto_op_s2c_generate_auth ), //Authenticate an outbound packet using S2C key
 
+    .i_op_cookiebuf_reset(0), //TODO implement support
+    .i_op_cookiebuf_appendcookie(0), //TODO implement support
+    .i_cookie_prefix(0), //TODO implement support
+
     .i_rx_wait     ( rxbuf_crypto_wait     ),
     .o_rx_addr     ( crypto_rxbuf_addr     ),
     .o_rx_wordsize ( crypto_rxbuf_wordsize ),

@@ -1,6 +1,6 @@
 module nts_top #(
   parameter ENGINES         = 1, //Beware: only ENGINES=1 supported for now
-  parameter ADDR_WIDTH      = 7,
+  parameter ADDR_WIDTH      = 8,
   parameter API_ADDR_WIDTH  = 12,
   parameter API_RW_WIDTH    = 32,
   parameter MAC_DATA_WIDTH  = 64

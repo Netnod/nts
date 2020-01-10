@@ -221,15 +221,18 @@ module nts_engine #(
   wire                    parser_crypto_rx_op_copy_pc;
   wire                    parser_crypto_rx_op_copy_tag;
   wire [ADDR_WIDTH+3-1:0] parser_crypto_rx_addr;
-  wire              [9:0] parser_crypto_rx_bytes;
+  wire [ADDR_WIDTH+3-1:0] parser_crypto_rx_bytes;
   wire                    parser_crypto_tx_op_copy_ad;
   wire                    parser_crypto_tx_op_store_nonce_tag;
   wire                    parser_crypto_tx_op_store_cookie;
   wire [ADDR_WIDTH+3-1:0] parser_crypto_tx_addr;
-  wire              [9:0] parser_crypto_tx_bytes;
+  wire [ADDR_WIDTH+3-1:0] parser_crypto_tx_bytes;
+  wire             [63:0] parser_crypto_cookieprefix;
   wire                    parser_crypto_op_cookie_verify;
   wire                    parser_crypto_op_cookie_loadkeys;
   wire                    parser_crypto_op_cookie_rencrypt;
+  wire                    parser_crypto_op_cookiebuf_reset;
+  wire                    parser_crypto_op_cookiebuf_append;
   wire                    parser_crypto_op_c2s_verify_auth;
   wire                    parser_crypto_op_s2c_generate_auth;
   reg                     rxbuf_crypto_wait;
@@ -239,9 +242,9 @@ module nts_engine #(
   reg                     rxbuf_crypto_rd_dv;
   reg              [63:0] rxbuf_crypto_rd_data;
 
+  wire                    crypto_txbuf_read_en;
+  wire             [63:0] txbuf_crypto_read_data;
   /* verilator lint_off UNUSED */
-  wire                    crypto_txbuf_read_en;    //TODO implement
-  wire             [63:0] txbuf_crypto_read_data;  //TODO implement
   wire                    crypto_txbuf_write_en;   //TODO implement
   wire             [63:0] crypto_txbuf_write_data; //TODO implement
   wire [ADDR_WIDTH+3-1:0] crypto_txbuf_address;    //TODO implement
@@ -269,8 +272,6 @@ module nts_engine #(
   assign o_noncegen_get        = crypto_noncegen_get; //TODO incorporate internally later
   assign noncegen_crypto_nonce = i_noncegen_data;     //TODO incorporate internally later
   assign noncegen_crypto_ready = i_noncegen_ready;    //TODO incorporate internally later
-
-  assign txbuf_crypto_read_data = 0; //TODO implement
 
   assign ZERO = 0;
 
@@ -725,6 +726,9 @@ module nts_engine #(
     .i_write_en(mux_tx_write_en),
     .i_write_data(mux_tx_write_data),
 
+    .i_read_en(crypto_txbuf_read_en),
+    .o_read_data(txbuf_crypto_read_data),
+
     .i_address_internal(mux_tx_address_internal),
     .i_address_hi(mux_tx_address_hi),
     .i_address_lo(mux_tx_address_lo),
@@ -798,6 +802,8 @@ module nts_engine #(
 
    .i_crypto_busy(crypto_parser_busy),
    .i_crypto_verify_tag_ok(crypto_parser_verify_tag_ok),
+
+   .o_crypto_cookieprefix(parser_crypto_cookieprefix),
    .o_crypto_rx_op_copy_ad(parser_crypto_rx_op_copy_ad),
    .o_crypto_rx_op_copy_nonce(parser_crypto_rx_op_copy_nonce),
    .o_crypto_rx_op_copy_pc(parser_crypto_rx_op_copy_pc),
@@ -812,6 +818,8 @@ module nts_engine #(
    .o_crypto_op_cookie_verify(parser_crypto_op_cookie_verify),
    .o_crypto_op_cookie_loadkeys(parser_crypto_op_cookie_loadkeys),
    .o_crypto_op_cookie_rencrypt(parser_crypto_op_cookie_rencrypt),
+   .o_crypto_op_cookiebuf_append(parser_crypto_op_cookiebuf_append),
+   .o_crypto_op_cookiebuf_reset(parser_crypto_op_cookiebuf_reset),
    .o_crypto_op_c2s_verify_auth(parser_crypto_op_c2s_verify_auth),
    .o_crypto_op_s2c_generate_auth(parser_crypto_op_s2c_generate_auth),
 
@@ -929,9 +937,9 @@ module nts_engine #(
     .i_op_verify_c2s   ( parser_crypto_op_c2s_verify_auth   ), //Authenticate an incomming packet using C2S key
     .i_op_generate_tag ( parser_crypto_op_s2c_generate_auth ), //Authenticate an outbound packet using S2C key
 
-    .i_op_cookiebuf_reset(0), //TODO implement support
-    .i_op_cookiebuf_appendcookie(0), //TODO implement support
-    .i_cookie_prefix(0), //TODO implement support
+    .i_op_cookiebuf_reset(parser_crypto_op_cookiebuf_reset),
+    .i_op_cookiebuf_appendcookie(parser_crypto_op_cookiebuf_append),
+    .i_cookie_prefix(parser_crypto_cookieprefix),
 
     .i_rx_wait     ( rxbuf_crypto_wait     ),
     .o_rx_addr     ( crypto_rxbuf_addr     ),

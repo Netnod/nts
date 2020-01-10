@@ -103,10 +103,10 @@ module nts_verify_secure_tb #(
   reg              [63:0] i_cookie_prefix;
 
   reg  [ADDR_WIDTH+3-1:0] i_copy_rx_addr;
-  reg               [9:0] i_copy_rx_bytes;
+  reg  [ADDR_WIDTH+3-1:0] i_copy_rx_bytes;
 
   reg  [ADDR_WIDTH+3-1:0] i_copy_tx_addr;
-  reg               [9:0] i_copy_tx_bytes;
+  reg  [ADDR_WIDTH+3-1:0] i_copy_tx_bytes;
 
 
   reg                     i_rx_wait;
@@ -340,7 +340,7 @@ module nts_verify_secure_tb #(
   endtask
 
   task write_rx_ad(
-    input              [9:0] bytes_count,
+    input [ADDR_WIDTH+3-1:0] bytes_count,
     input          [16383:0] ad
   );
   begin : write_rx_ad
@@ -388,8 +388,8 @@ module nts_verify_secure_tb #(
   endtask
 
   task write_tx_ad(
-    input     [9:0] bytes_count,
-    input [16383:0] ad
+    input [ADDR_WIDTH+3-1:0] bytes_count,
+    input          [16383:0] ad
   );
   begin : write_tx_ad
     integer i;
@@ -548,6 +548,33 @@ module nts_verify_secure_tb #(
   end
   endtask
 
+  task store_nonce_tag (
+    output [255:0] nonce_tag
+  );
+  begin : store_nonce_tag
+    reg [63:0] a;
+    reg [63:0] b;
+    reg [63:0] c;
+    reg [63:0] d;
+    wait_busy();
+    i_op_store_tx_nonce_tag = 1;
+    i_copy_tx_addr = 64; // some address, whatever
+    i_copy_tx_bytes = 32; //nonce=16, tag=16
+    #10;
+    i_op_store_tx_nonce_tag = 0;
+    i_copy_tx_addr = 0;
+    i_copy_tx_bytes = 0;
+    `assert(o_busy);
+    wait_busy();
+    a = mem_tx_func(64);
+    b = mem_tx_func(64+1*8);
+    c = mem_tx_func(64+2*8);
+    d = mem_tx_func(64+3*8);
+    //$display("%s:%0d %h %h %h %h", `__FILE__, `__LINE__, a, b, c, d );
+    nonce_tag = { a, b, c, d };
+  end
+  endtask
+
   task cookiebuf_reset;
   begin
     wait_busy();
@@ -612,13 +639,13 @@ module nts_verify_secure_tb #(
   endtask
 
   task test_verify (
-     input    [63:0] description,
-     input           expect_success,
-     input   [255:0] c2s,
-     input     [9:0] ad_bytes_count,
-     input [16383:0] ad,
-     input   [127:0] nonce,
-     input   [127:0] tag
+     input             [63:0] description,
+     input                    expect_success,
+     input            [255:0] c2s,
+     input [ADDR_WIDTH+3-1:0] ad_bytes_count,
+     input          [16383:0] ad,
+     input            [127:0] nonce,
+     input            [127:0] tag
   );
   begin : test_verify
     if (verbose>1) begin : test_verify_debug
@@ -651,12 +678,12 @@ module nts_verify_secure_tb #(
   endtask
 
   task test_generate_tag (
-     input    [63:0] description,
-     input   [255:0] s2c,
-     input     [9:0] ad_bytes_count,
-     input [16383:0] ad,
-     input   [127:0] nonce,
-     input   [127:0] tag
+     input             [63:0] description,
+     input            [255:0] s2c,
+     input [ADDR_WIDTH+3-1:0] ad_bytes_count,
+     input          [16383:0] ad,
+     input            [127:0] nonce,
+     input            [127:0] tag
   );
   begin
     if (verbose>1) begin
@@ -674,12 +701,26 @@ module nts_verify_secure_tb #(
     #10;
     i_areset = 0;
 
+    cookiebuf_reset();
     write_s2c(s2c);
     write_tx_ad( ad_bytes_count, ad );
 
     generate_tag();
 
     `assert( dut.core_tag_out == tag );
+
+    begin : test_generate_tag_locals
+      reg [255:0] nonce_tag;
+      reg [255:0] expected_nonce_tag;
+      integer i;
+      store_nonce_tag( nonce_tag );
+
+      expected_nonce_tag = { nonce, tag };
+      if (verbose > 2)
+        for (i = 255; i > 0; i = i - 64)
+          $display("%s:%0d test_generate_tag [ %s ] NT[%0d-:64] Expected: %h... Calculated: %h...", `__FILE__, `__LINE__, description, i, expected_nonce_tag[i-:64], nonce_tag[i-:64]);
+      `assert( nonce_tag == expected_nonce_tag );
+    end
 
     if (verbose>0)
       $display("%s:%0d test_generate_tag [ %s ] completed. Good tag! Expected: %h... Calculated: %h...", `__FILE__, `__LINE__, description, tag[127-:32], dut.core_tag_out[127-:32]);

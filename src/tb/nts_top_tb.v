@@ -1,4 +1,6 @@
 module nts_top_tb;
+  localparam ADDR_WIDTH = 10;
+
   localparam [11:0] API_ADDR_ENGINE_BASE        = 12'h000;
   localparam [11:0] API_ADDR_ENGINE_NAME0       = API_ADDR_ENGINE_BASE;
   localparam [11:0] API_ADDR_ENGINE_NAME1       = API_ADDR_ENGINE_BASE + 1;
@@ -370,7 +372,7 @@ module nts_top_tb;
   // Design Under Test (DUT)
   //----------------------------------------------------------------
 
-  nts_top #( .ENGINES(ENGINES) ) dut (
+  nts_top #( .ENGINES(ENGINES), .ADDR_WIDTH(ADDR_WIDTH) ) dut (
     .i_areset(i_areset),
     .i_clk(i_clk),
 
@@ -435,7 +437,7 @@ module nts_top_tb;
     while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
     #200;
     send_packet({57552'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_3}, 7984, 0); //same key _2 packets, but 7 placeholders
-    #90000;
+    #900000;
 
     //----------------------------------------------------------------
     // Human readable Debug
@@ -634,9 +636,8 @@ module nts_top_tb;
         $display("%s:%0d dut.engine.parser.detect_ipv4: %b detect_ipv6: %b", `__FILE__, `__LINE__, dut.engine.parser.detect_ipv4, dut.engine.parser.detect_ipv6);
       always @(posedge i_clk or posedge i_areset)
         begin : tx_mux_inspect_locals_
-          reg [9:0] addr;
-          addr[9:3] = dut.engine.mux_tx_address_hi;
-          addr[2:0] = dut.engine.mux_tx_address_lo;
+          reg [ADDR_WIDTH+3-1:0] addr;
+          addr = { dut.engine.mux_tx_address_hi, dut.engine.mux_tx_address_lo };
           if (i_areset == 0)
             if (dut.engine.mux_tx_write_en)
               $display("%s:%0d dut.engine.mux_tx %h %h = %h",  `__FILE__, `__LINE__, dut.engine.mux_tx_address_internal, addr, dut.engine.mux_tx_write_data);
@@ -686,6 +687,8 @@ module nts_top_tb;
         $display("%s:%0d dut.engine.parser.cookies_count_reg: %h", `__FILE__, `__LINE__, dut.engine.parser.cookies_count_reg);
       always @*
         $display("%s:%0d dut.engine.parser.nts_valid_placeholders_reg: %h", `__FILE__, `__LINE__, dut.engine.parser.nts_valid_placeholders_reg);
+      always @*
+        $display("%s:%0d dut.engine.crypto.state_reg: %h", `__FILE__, `__LINE__, dut.engine.crypto.state_reg);
   end
 
   //----------------------------------------------------------------
@@ -697,7 +700,7 @@ module nts_top_tb;
     reg [63:0] old_tick_counter;
     reg [63:0] old_tick_counter_crypto;
     reg [63:0] old_tick_counter_packet;
-    reg  [4:0] old_parser_state;
+    reg  [5:0] old_parser_state;
     reg  [4:0] old_parser_state_crypto;
 
     always  @(posedge i_clk or posedge i_areset)

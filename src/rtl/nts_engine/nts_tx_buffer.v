@@ -49,6 +49,10 @@ module nts_tx_buffer #(
   input  wire        i_write_en,
   input  wire [63:0] i_write_data,
 
+  input  wire        i_read_en,
+  output wire [63:0] o_read_data,
+
+
   input  wire                  i_address_internal,
   input  wire [ADDR_WIDTH-1:0] i_address_hi,
   input  wire            [2:0] i_address_lo,
@@ -110,6 +114,10 @@ module nts_tx_buffer #(
 
   reg            [2:0] ram_addr_lo     [0:1];
 
+  reg                  read_cycle_new;
+  reg                  read_cycle_reg;
+  reg           [63:0] read_data;
+
   reg                  sync_reset_metastable;
   reg                  sync_reset;
 
@@ -142,7 +150,9 @@ module nts_tx_buffer #(
   assign o_error = (mem_state_reg[0] == STATE_ERROR_GENERAL) ||
                    (mem_state_reg[1] == STATE_ERROR_GENERAL) ||
                    ram_error[0] ||
-                   ram_error[1];
+                   ram_error[1] ||
+                   (mem_state_reg[parser] == STATE_EMPTY && i_read_en);
+                   //TODO raise error if multiple command signals risen
 
   assign o_dispatch_tx_packet_available  = mem_state_reg[ fifo ] == STATE_FIFO_OUT;
   assign o_dispatch_tx_fifo_empty        = ram_addr_hi_reg[ fifo ] == fifo_word_count_p1;
@@ -152,6 +162,7 @@ module nts_tx_buffer #(
   assign o_parser_current_memory_full    = (mem_state_reg[ parser ] == STATE_HAS_DATA && ram_addr_hi_reg[ parser ] == ADDRESS_FULL) ||
                                            (mem_state_reg[ parser ] == STATE_HAS_DATA && ram_addr_hi_reg[ parser ] == ADDRESS_ALMOST_FULL && i_write_en) ||
                                            (mem_state_reg[ parser ] > STATE_HAS_DATA); //TODO verify
+  assign o_read_data = read_data;
 
   //----------------------------------------------------------------
   // Memory holding the Tx buffer
@@ -229,7 +240,8 @@ module nts_tx_buffer #(
   begin : reg_update
     integer i;
     if (i_areset == 1'b1) begin
-      current_mem_reg   <= 'b0;
+      current_mem_reg <= 0;
+      read_cycle_reg  <= 0;
       for (i = 0; i < 2; i = i + 1) begin
         bytes_last_word_reg[i] <= 0;
         mem_state_reg[i] <= STATE_EMPTY;
@@ -238,6 +250,7 @@ module nts_tx_buffer #(
     end else begin
       if (current_mem_we)
         current_mem_reg <= current_mem_new;
+      read_cycle_reg <= read_cycle_new;
       for (i = 0; i < 2; i = i + 1) begin
         if (bytes_last_word_we[i])
           bytes_last_word_reg[i] <= bytes_last_word_new[i];
@@ -247,6 +260,16 @@ module nts_tx_buffer #(
           word_count_reg[i] <= word_count_new[i];
       end
     end
+  end
+
+  //----------------------------------------------------------------
+  // Parser/Crypto read port.
+  //----------------------------------------------------------------
+  always @*
+  begin
+    read_data = 64'hdeadbeefbaadf00d;
+    if (read_cycle_reg)
+      read_data = ram_rd_data[parser];
   end
 
   always @*
@@ -279,6 +302,7 @@ module nts_tx_buffer #(
         word_count_new[i] = 0;
       end
     end
+    read_cycle_new = 0;
 
     if (i_parser_clear) begin
       mem_state_we  [parser] = 1;
@@ -314,9 +338,16 @@ module nts_tx_buffer #(
 
               //$display("%s:%0d WRITE: %h:%h = %h. wr=%h rd=%h", `__FILE__, `__LINE__, ram_addr_hi[parser], ram_addr_lo[parser], i_write_data, ram_wr[parser], ram_rd[parser] );
             end
+
           end
         STATE_HAS_DATA:
           begin
+            if (i_read_en) begin
+              ram_addr_lo[parser] = i_address_lo;
+              ram_addr_hi[parser] = i_address_hi;
+              ram_rd[parser] = 1;
+              read_cycle_new = 1;
+            end
             if (i_write_en) begin
 
               ram_wr_data[parser] = i_write_data;

@@ -92,20 +92,24 @@ module nts_parser_ctrl #(
 
   input  wire                         i_crypto_busy,
   input  wire                         i_crypto_verify_tag_ok,
+
+  output wire                  [63:0] o_crypto_cookieprefix,
   output wire                         o_crypto_rx_op_copy_ad,
   output wire                         o_crypto_rx_op_copy_nonce,
   output wire                         o_crypto_rx_op_copy_pc,
   output wire                         o_crypto_rx_op_copy_tag,
   output wire      [ADDR_WIDTH+3-1:0] o_crypto_rx_addr,
-  output wire                   [9:0] o_crypto_rx_bytes,
+  output wire      [ADDR_WIDTH+3-1:0] o_crypto_rx_bytes,
   output wire                         o_crypto_tx_op_copy_ad,
   output wire                         o_crypto_tx_op_store_nonce_tag,
   output wire                         o_crypto_tx_op_store_cookie,
   output wire      [ADDR_WIDTH+3-1:0] o_crypto_tx_addr,
-  output wire                   [9:0] o_crypto_tx_bytes,
+  output wire      [ADDR_WIDTH+3-1:0] o_crypto_tx_bytes,
   output wire                         o_crypto_op_cookie_verify,
   output wire                         o_crypto_op_cookie_loadkeys,
   output wire                         o_crypto_op_cookie_rencrypt,
+  output wire                         o_crypto_op_cookiebuf_append,
+  output wire                         o_crypto_op_cookiebuf_reset,
   output wire                         o_crypto_op_c2s_verify_auth,
   output wire                         o_crypto_op_s2c_generate_auth,
 
@@ -165,59 +169,67 @@ module nts_parser_ctrl #(
   // Internal constant and parameter definitions.
   //----------------------------------------------------------------
 
-  localparam BITS_STATE = 5;
+  localparam BITS_STATE = 6;
 
-  localparam [BITS_STATE-1:0] STATE_IDLE                     = 5'h00;
-  localparam [BITS_STATE-1:0] STATE_COPY                     = 5'h01; //RX handling states
-  localparam [BITS_STATE-1:0] STATE_LENGTH_CHECKS            = 5'h02;
-  localparam [BITS_STATE-1:0] STATE_EXTRACT_EXT_FROM_RAM     = 5'h03;
-  localparam [BITS_STATE-1:0] STATE_EXTENSIONS_EXTRACTED     = 5'h04;
-  localparam [BITS_STATE-1:0] STATE_EXTRACT_COOKIE_FROM_RAM  = 5'h05;
-  localparam [BITS_STATE-1:0] STATE_VERIFY_KEY_FROM_COOKIE1  = 5'h06;
-  localparam [BITS_STATE-1:0] STATE_VERIFY_KEY_FROM_COOKIE2  = 5'h07;
-  localparam [BITS_STATE-1:0] STATE_RX_AUTH_COOKIE           = 5'h08;
-  localparam [BITS_STATE-1:0] STATE_RX_AUTH_PACKET           = 5'h09;
-  localparam [BITS_STATE-1:0] STATE_WRITE_HEADER_IPV4        = 5'h0a; //TX handling states
-  localparam [BITS_STATE-1:0] STATE_WRITE_HEADER_IPV6        = 5'h0b;
-  localparam [BITS_STATE-1:0] STATE_TIMESTAMP                = 5'h0c;
-  localparam [BITS_STATE-1:0] STATE_TIMESTAMP_WAIT           = 5'h0d;
-  localparam [BITS_STATE-1:0] STATE_UNIQUE_IDENTIFIER_COPY_0 = 5'h0e;
-  localparam [BITS_STATE-1:0] STATE_UNIQUE_IDENTIFIER_COPY_1 = 5'h0f;
-  localparam [BITS_STATE-1:0] STATE_RETRIVE_CURRENT_KEY_0    = 5'h10;
-  localparam [BITS_STATE-1:0] STATE_RETRIVE_CURRENT_KEY_1    = 5'h11;
-  localparam [BITS_STATE-1:0] STATE_GENERATE_FIRST_COOKIE    = 5'h12;
-  localparam [BITS_STATE-1:0] STATE_EMIT_FIRST_COOKIE_TL     = 5'h13;
-  localparam [BITS_STATE-1:0] STATE_EMIT_FIRST_COOKIE_V      = 5'h14;
-  localparam [BITS_STATE-1:0] STATE_RESET_EXTRA_COOKIES      = 5'h15;
-  localparam [BITS_STATE-1:0] STATE_ADDITIONAL_COOKIES_CTRL  = 5'h16;
-  localparam [BITS_STATE-1:0] STATE_GENERATE_EXTRA_COOKIE    = 5'h17;
-  localparam [BITS_STATE-1:0] STATE_RECORD_EXTRA_COOKIE      = 5'h18;
+  localparam [BITS_STATE-1:0] STATE_IDLE                     = 6'h00;
+  localparam [BITS_STATE-1:0] STATE_COPY                     = 6'h01; //RX handling states
+  localparam [BITS_STATE-1:0] STATE_LENGTH_CHECKS            = 6'h02;
+  localparam [BITS_STATE-1:0] STATE_EXTRACT_EXT_FROM_RAM     = 6'h03;
+  localparam [BITS_STATE-1:0] STATE_EXTENSIONS_EXTRACTED     = 6'h04;
+  localparam [BITS_STATE-1:0] STATE_EXTRACT_COOKIE_FROM_RAM  = 6'h05;
+  localparam [BITS_STATE-1:0] STATE_VERIFY_KEY_FROM_COOKIE1  = 6'h06;
+  localparam [BITS_STATE-1:0] STATE_VERIFY_KEY_FROM_COOKIE2  = 6'h07;
+  localparam [BITS_STATE-1:0] STATE_RX_AUTH_COOKIE           = 6'h08;
+  localparam [BITS_STATE-1:0] STATE_RX_AUTH_PACKET           = 6'h09;
 
+  localparam [BITS_STATE-1:0] STATE_WRITE_HEADER_IPV4        = 6'h0a; //TX handling states
+  localparam [BITS_STATE-1:0] STATE_WRITE_HEADER_IPV6        = 6'h0b;
+  localparam [BITS_STATE-1:0] STATE_TIMESTAMP                = 6'h0c;
+  localparam [BITS_STATE-1:0] STATE_TIMESTAMP_WAIT           = 6'h0d;
+  localparam [BITS_STATE-1:0] STATE_UNIQUE_IDENTIFIER_COPY_0 = 6'h0e;
+  localparam [BITS_STATE-1:0] STATE_UNIQUE_IDENTIFIER_COPY_1 = 6'h0f;
+  localparam [BITS_STATE-1:0] STATE_RETRIVE_CURRENT_KEY_0    = 6'h10;
+  localparam [BITS_STATE-1:0] STATE_RETRIVE_CURRENT_KEY_1    = 6'h11;
+  localparam [BITS_STATE-1:0] STATE_GENERATE_FIRST_COOKIE    = 6'h12;
+  localparam [BITS_STATE-1:0] STATE_EMIT_FIRST_COOKIE_TL     = 6'h13;
+  localparam [BITS_STATE-1:0] STATE_EMIT_FIRST_COOKIE_V      = 6'h14;
+  localparam [BITS_STATE-1:0] STATE_RESET_EXTRA_COOKIES      = 6'h15;
+  localparam [BITS_STATE-1:0] STATE_ADDITIONAL_COOKIES_CTRL  = 6'h16;
+  localparam [BITS_STATE-1:0] STATE_GENERATE_EXTRA_COOKIE    = 6'h17;
+  localparam [BITS_STATE-1:0] STATE_RECORD_EXTRA_COOKIE      = 6'h18;
+  localparam [BITS_STATE-1:0] STATE_COPY_PACKET_TO_CRYPTO_AD = 6'h19;
+  localparam [BITS_STATE-1:0] STATE_TX_AUTH_PACKET           = 6'h1a;
+  localparam [BITS_STATE-1:0] STATE_TX_EMIT_TL_NL_CL         = 6'h1b;
+  localparam [BITS_STATE-1:0] STATE_TX_EMIT_NONCE_CIPHERTEXT = 6'h1c;
+  localparam [BITS_STATE-1:0] STATE_TX_UPDATE_LENGTH         = 6'h1d;
 
-  localparam [BITS_STATE-1:0] STATE_TX_UPDATE_LENGTH         = 5'h1d;
-
-  localparam [BITS_STATE-1:0] STATE_ERROR_UNIMPLEMENTED      = 5'h1e;
-  localparam [BITS_STATE-1:0] STATE_ERROR_GENERAL            = 5'h1f;
+  localparam [BITS_STATE-1:0] STATE_ERROR_UNIMPLEMENTED      = 6'h2e;
+  localparam [BITS_STATE-1:0] STATE_ERROR_GENERAL            = 6'h2f;
 
   localparam CRYPTO_FSM_IDLE                 = 'h00;
-  localparam CRYPTO_FSM_RX_AUTH_COOKIE       = 'h01; // issue load nonce
-  localparam CRYPTO_FSM_RX_AUTH_COOKIE_W1    = 'h02; // wait for complete, issue load tag
-  localparam CRYPTO_FSM_RX_AUTH_COOKIE_W2    = 'h03; // wait for complete, issue load ciphertext
-  localparam CRYPTO_FSM_RX_AUTH_COOKIE_W3    = 'h04; // wait for complete, issue cookie verify
-  localparam CRYPTO_FSM_RX_AUTH_COOKIE_W4    = 'h05; // wait for complete, signal result
-  localparam CRYPTO_FSM_RX_AUTH_PACKET       = 'h06; // issue load keys
-  localparam CRYPTO_FSM_RX_AUTH_PACKET_W1    = 'h07; // wait for complete, issue load AD
-  localparam CRYPTO_FSM_RX_AUTH_PACKET_W2    = 'h08; // wait for complete, issue load nonce
-  localparam CRYPTO_FSM_RX_AUTH_PACKET_W3    = 'h09; // wait for complete, issue load tag
-  localparam CRYPTO_FSM_RX_AUTH_PACKET_W4    = 'h0a; // wait for complete, issue load load ciphertext
-  localparam CRYPTO_FSM_RX_AUTH_PACKET_W5    = 'h0b; // wait for complete, issue packet verify
-  localparam CRYPTO_FSM_RX_AUTH_PACKET_W6    = 'h0c; // wait for complete, signal result
-  localparam CRYPTO_FSM_GEN_COOKIE           = 'h0d; // issue cookie renecrypt
-  localparam CRYPTO_FSM_GEN_COOKIE_W1        = 'h0e; // wait for complete
+  localparam CRYPTO_FSM_WAIT_THEN_SUCCESS    = 'h01; // wait for complete. Always indicate success.
+  localparam CRYPTO_FSM_RX_AUTH_COOKIE       = 'h02; // issue load nonce
+  localparam CRYPTO_FSM_RX_AUTH_COOKIE_W1    = 'h03; // wait for complete, issue load tag
+  localparam CRYPTO_FSM_RX_AUTH_COOKIE_W2    = 'h04; // wait for complete, issue load ciphertext
+  localparam CRYPTO_FSM_RX_AUTH_COOKIE_W3    = 'h05; // wait for complete, issue cookie verify
+  localparam CRYPTO_FSM_RX_AUTH_COOKIE_W4    = 'h06; // wait for complete, signal result
+  localparam CRYPTO_FSM_RX_AUTH_PACKET       = 'h07; // issue load keys
+  localparam CRYPTO_FSM_RX_AUTH_PACKET_W1    = 'h08; // wait for complete, issue load AD
+  localparam CRYPTO_FSM_RX_AUTH_PACKET_W2    = 'h09; // wait for complete, issue load nonce
+  localparam CRYPTO_FSM_RX_AUTH_PACKET_W3    = 'h0a; // wait for complete, issue load tag
+  localparam CRYPTO_FSM_RX_AUTH_PACKET_W4    = 'h0b; // wait for complete, issue load load ciphertext
+  localparam CRYPTO_FSM_RX_AUTH_PACKET_W5    = 'h0c; // wait for complete, issue packet verify
+  localparam CRYPTO_FSM_RX_AUTH_PACKET_W6    = 'h0d; // wait for complete, signal result
+  localparam CRYPTO_FSM_GEN_COOKIE           = 'h0e; // issue cookie renecrypt
   localparam CRYPTO_FSM_EMIT_FIRST_COOKIE    = 'h0f; // issue tx emit cookie
-  localparam CRYPTO_FSM_EMIT_FIRST_COOKIE_W1 = 'h10; // wait for complete
+  localparam CRYPTO_FSM_COOKIEBUF_RESET      = 'h10; // issue cookiebuf reset
+  localparam CRYPTO_FSM_COOKIEBUF_APPEND     = 'h11; // issue cookiebuf append
+  localparam CRYPTO_FSM_COPY_TX_TO_AD        = 'h12; // issue copy
+  localparam CRYPTO_FSM_TX_AUTH_PACKET       = 'h13; // issue authenticate & encrypt encrypted payload
+  localparam CRYPTO_FSM_STORE_TAG_NONCE      = 'h14;
   localparam CRYPTO_FSM_DONE_FAILURE         = 'h1e;
   localparam CRYPTO_FSM_DONE_SUCCESS         = 'h1f;
+
 
   localparam BYTES_TAG_LEN           = 4;
 
@@ -450,6 +462,12 @@ module nts_parser_ctrl #(
   reg statistics_nts_bad_keyid_new;
   reg statistics_nts_bad_keyid_reg;
 
+  reg [15:0] tx_authenticator_length_new;
+  reg [15:0] tx_authenticator_length_reg;
+
+  reg [15:0] tx_ciphertext_length_new;
+  reg [15:0] tx_ciphertext_length_reg;
+
   reg        tx_header_index_we;
   reg  [2:0] tx_header_index_new;
   reg  [2:0] tx_header_index_reg;
@@ -484,20 +502,25 @@ module nts_parser_ctrl #(
 
   reg copy_done; //wire
 
-  reg crypto_op_cookie_verify;
-  reg crypto_op_cookie_loadkeys;
-  reg crypto_op_c2s_verify_auth;
-
+  reg             [63:0] crypto_cookieprefix;
+  reg                    crypto_op_cookie_loadkeys;
   reg                    crypto_op_cookie_rencrypt;
+  reg                    crypto_op_cookie_verify;
+  reg                    crypto_op_cookiebuf_append;
+  reg                    crypto_op_cookiebuf_reset;
+  reg                    crypto_op_c2s_verify_auth;
+  reg                    crypto_op_s2c_generate_auth;
   reg [ADDR_WIDTH+3-1:0] crypto_rx_addr;
-  reg              [9:0] crypto_rx_bytes;
+  reg [ADDR_WIDTH+3-1:0] crypto_rx_bytes;
   reg                    crypto_rx_op_copy_ad;
   reg                    crypto_rx_op_copy_nonce;
   reg                    crypto_rx_op_copy_pc;
   reg                    crypto_rx_op_copy_tag;
   reg [ADDR_WIDTH+3-1:0] crypto_tx_addr;
-  reg              [9:0] crypto_tx_bytes;
+  reg [ADDR_WIDTH+3-1:0] crypto_tx_bytes;
+  reg                    crypto_tx_op_copy_ad;
   reg                    crypto_tx_op_store_cookie;
+  reg                    crypto_tx_op_store_nonce_tag;
 
   wire detect_ipv4;
   wire detect_ipv4_bad;
@@ -574,18 +597,19 @@ module nts_parser_ctrl #(
   assign o_crypto_tx_addr               = crypto_tx_addr;
   assign o_crypto_tx_bytes              = crypto_tx_bytes;
 
-  assign o_crypto_tx_op_copy_ad         = 0; //TODO
-  assign o_crypto_tx_op_store_nonce_tag = 0; //TODO
+  assign o_crypto_tx_op_copy_ad         = crypto_tx_op_copy_ad;
   assign o_crypto_tx_op_store_cookie    = crypto_tx_op_store_cookie;
+  assign o_crypto_tx_op_store_nonce_tag = crypto_tx_op_store_nonce_tag;
 
-  assign o_crypto_op_cookie_verify     = crypto_op_cookie_verify;
+  assign o_crypto_cookieprefix = crypto_cookieprefix;
+
   assign o_crypto_op_cookie_loadkeys   = crypto_op_cookie_loadkeys;
-
   assign o_crypto_op_cookie_rencrypt   = crypto_op_cookie_rencrypt;
-
+  assign o_crypto_op_cookie_verify     = crypto_op_cookie_verify;
+  assign o_crypto_op_cookiebuf_append  = crypto_op_cookiebuf_append;
+  assign o_crypto_op_cookiebuf_reset   = crypto_op_cookiebuf_reset;
   assign o_crypto_op_c2s_verify_auth   = crypto_op_c2s_verify_auth;
-
-  assign o_crypto_op_s2c_generate_auth = 0;  //TODO
+  assign o_crypto_op_s2c_generate_auth = crypto_op_s2c_generate_auth;
 
   assign o_muxctrl_timestamp_ipv4 = ((state_reg == STATE_TIMESTAMP) || (state_reg == STATE_TIMESTAMP_WAIT)) && (detect_ipv4) && (detect_ipv4_bad=='b0);
   assign o_muxctrl_timestamp_ipv6 = ((state_reg == STATE_TIMESTAMP) || (state_reg == STATE_TIMESTAMP_WAIT)) && (detect_ipv6);
@@ -863,6 +887,8 @@ module nts_parser_ctrl #(
 
     //timestamp_poll_reg                     <= 'b0;
 
+      tx_authenticator_length_reg <= 0;
+      tx_ciphertext_length_reg <= 0;
       tx_header_index_reg <= 0;
       tx_ipv4_csum_reg <= 0;
       tx_udp_checksum_reg <= 0; //TODO implement
@@ -1023,6 +1049,9 @@ module nts_parser_ctrl #(
 
     //if (timestamp_poll_we)
     //  timestamp_poll_reg <= timestamp_poll_new;
+
+      tx_authenticator_length_reg <= tx_authenticator_length_new;
+      tx_ciphertext_length_reg <= tx_ciphertext_length_new;
 
       if (tx_header_index_we)
         tx_header_index_reg <= tx_header_index_new;
@@ -1415,6 +1444,19 @@ module nts_parser_ctrl #(
           copy_tx_addr_we  = 1;
           copy_tx_addr_new = copy_tx_addr_reg + 'h60; //TODO create a constant for 68
         end
+      STATE_TX_EMIT_TL_NL_CL:
+        begin
+          copy_tx_addr_we  = 1;
+          copy_tx_addr_new = copy_tx_addr_reg + BYTES_AUTH_OVERHEAD;
+        end
+      STATE_TX_EMIT_NONCE_CIPHERTEXT:
+        if (crypto_fsm_reg == CRYPTO_FSM_DONE_SUCCESS) begin : emit_nonce_ct_tmp
+          reg [ADDR_WIDTH+3-1:0] ciphertext_length;
+          ciphertext_length = tx_ciphertext_length_reg[ADDR_WIDTH+3-1:0];
+
+          copy_tx_addr_we  = 1;
+          copy_tx_addr_new = copy_tx_addr_reg + BYTES_AUTH_NONCE + ciphertext_length;
+        end
       default: ;
     endcase
   end
@@ -1594,8 +1636,14 @@ module nts_parser_ctrl #(
 
   always @*
   begin : tx_control
+
+    reg [15:0] nonce_length;
+    nonce_length = BYTES_AUTH_NONCE; //typecast from length undefined to 16bit
+
+    tx_authenticator_length_new = BYTES_AUTH_OVERHEAD /*TL, NL, CL */ + BYTES_AUTH_NONCE + tx_ciphertext_length_reg;
     tx_address_internal = 0;
     tx_address = 0;
+    tx_ciphertext_length_new = BYTES_AUTH_TAG + LEN_NTS_COOKIE * nts_valid_placeholders_reg;
     tx_header_index_we = 0;
     tx_header_index_new = 0;
     tx_update_length = 0;
@@ -1630,6 +1678,12 @@ module nts_parser_ctrl #(
           tx_address    = copy_tx_addr_reg;
           tx_write_en   = 1;
           tx_write_data = { TAG_NTS_COOKIE, LEN_NTS_COOKIE, keymem_key_id_reg };
+        end
+      STATE_TX_EMIT_TL_NL_CL:
+        begin
+          tx_address    = copy_tx_addr_reg;
+          tx_write_en   = 1;
+          tx_write_data = { TAG_NTS_AUTHENTICATOR, tx_authenticator_length_reg, nonce_length, tx_ciphertext_length_reg };
         end
       STATE_TX_UPDATE_LENGTH:
         begin
@@ -1675,10 +1729,15 @@ module nts_parser_ctrl #(
     crypto_fsm_we = 0;
     crypto_fsm_new = CRYPTO_FSM_IDLE;
 
-    crypto_op_c2s_verify_auth = 0;
+    crypto_cookieprefix = 0;
+
     crypto_op_cookie_loadkeys = 0;
     crypto_op_cookie_rencrypt = 0;
     crypto_op_cookie_verify = 0;
+    crypto_op_cookiebuf_append = 0;
+    crypto_op_cookiebuf_reset = 0;
+    crypto_op_c2s_verify_auth = 0;
+    crypto_op_s2c_generate_auth = 0;
 
     crypto_rx_addr = 0;
     crypto_rx_bytes = 0;
@@ -1689,7 +1748,9 @@ module nts_parser_ctrl #(
 
     crypto_tx_addr = 0;
     crypto_tx_bytes = 0;
+    crypto_tx_op_copy_ad = 0;
     crypto_tx_op_store_cookie = 0;
+    crypto_tx_op_store_nonce_tag = 0;
 
     if (crypto_fsm_reg == CRYPTO_FSM_IDLE)
       muxctrl_crypto = 0;
@@ -1719,8 +1780,44 @@ module nts_parser_ctrl #(
               crypto_fsm_we  = 1;
               crypto_fsm_new = CRYPTO_FSM_EMIT_FIRST_COOKIE;
             end
+          STATE_RESET_EXTRA_COOKIES:
+            begin
+              crypto_fsm_we  = 1;
+              crypto_fsm_new = CRYPTO_FSM_COOKIEBUF_RESET;
+            end
+          STATE_GENERATE_EXTRA_COOKIE:
+            begin
+              crypto_fsm_we  = 1;
+              crypto_fsm_new = CRYPTO_FSM_GEN_COOKIE;
+            end
+          STATE_RECORD_EXTRA_COOKIE:
+            begin
+              crypto_fsm_we  = 1;
+              crypto_fsm_new = CRYPTO_FSM_COOKIEBUF_APPEND;
+            end
+          STATE_COPY_PACKET_TO_CRYPTO_AD:
+            begin
+              crypto_fsm_we  = 1;
+              crypto_fsm_new = CRYPTO_FSM_COPY_TX_TO_AD;
+            end
+          STATE_TX_AUTH_PACKET:
+            begin
+              crypto_fsm_we  = 1;
+              crypto_fsm_new = CRYPTO_FSM_TX_AUTH_PACKET;
+            end
+          STATE_TX_EMIT_TL_NL_CL: ; // No-operation. Performed by other parser logic.
+          STATE_TX_EMIT_NONCE_CIPHERTEXT:
+            begin
+              crypto_fsm_we  = 1;
+              crypto_fsm_new = CRYPTO_FSM_STORE_TAG_NONCE;
+            end
           default: ;
         endcase
+      CRYPTO_FSM_WAIT_THEN_SUCCESS:
+        if (i_crypto_busy == 1'b0) begin
+          crypto_fsm_we  = 1;
+          crypto_fsm_new = CRYPTO_FSM_DONE_SUCCESS;
+        end
       CRYPTO_FSM_RX_AUTH_COOKIE:
         if (i_crypto_busy == 1'b0) begin
           crypto_fsm_we  = 1;
@@ -1827,12 +1924,7 @@ module nts_parser_ctrl #(
         if (i_crypto_busy == 1'b0) begin
           crypto_op_cookie_rencrypt = 1;
           crypto_fsm_we = 1;
-          crypto_fsm_new = CRYPTO_FSM_GEN_COOKIE_W1;
-        end
-      CRYPTO_FSM_GEN_COOKIE_W1:
-        if (i_crypto_busy == 1'b0) begin
-          crypto_fsm_we  = 1;
-          crypto_fsm_new = CRYPTO_FSM_DONE_SUCCESS;
+          crypto_fsm_new = CRYPTO_FSM_WAIT_THEN_SUCCESS;
         end
       CRYPTO_FSM_EMIT_FIRST_COOKIE:
         if (i_crypto_busy == 1'b0) begin
@@ -1840,12 +1932,47 @@ module nts_parser_ctrl #(
           crypto_tx_bytes = 'h68; //TODO declare constant?
           crypto_tx_op_store_cookie = 1;
           crypto_fsm_we  = 1;
-          crypto_fsm_new = CRYPTO_FSM_EMIT_FIRST_COOKIE_W1;
+          crypto_fsm_new = CRYPTO_FSM_WAIT_THEN_SUCCESS;
         end
-      CRYPTO_FSM_EMIT_FIRST_COOKIE_W1:
+      CRYPTO_FSM_COOKIEBUF_RESET:
         if (i_crypto_busy == 1'b0) begin
           crypto_fsm_we  = 1;
-          crypto_fsm_new = CRYPTO_FSM_DONE_SUCCESS;
+          crypto_fsm_new = CRYPTO_FSM_WAIT_THEN_SUCCESS;
+          crypto_op_cookiebuf_reset = 1;
+        end
+      CRYPTO_FSM_COOKIEBUF_APPEND:
+        if (i_crypto_busy == 1'b0) begin
+          crypto_fsm_we  = 1;
+          crypto_fsm_new = CRYPTO_FSM_WAIT_THEN_SUCCESS;
+          crypto_cookieprefix = { TAG_NTS_COOKIE, LEN_NTS_COOKIE, keymem_key_id_reg };
+          crypto_op_cookiebuf_append = 1;
+        end
+      CRYPTO_FSM_COPY_TX_TO_AD:
+        if (i_crypto_busy == 1'b0) begin : crypto_fsm_copy_tx_to_ad
+          reg [ADDR_WIDTH+3-1:0] ntp_start;
+          ntp_start = (detect_ipv4) ? ADDR_IPV4_START_NTP : ADDR_IPV6_START_NTP;
+
+          crypto_fsm_we  = 1;
+          crypto_fsm_new = CRYPTO_FSM_WAIT_THEN_SUCCESS;
+          crypto_tx_op_copy_ad = 1;
+          crypto_tx_addr = ntp_start;
+          //crypto_tx_addr = 0;
+          crypto_tx_bytes = copy_tx_addr_reg - ntp_start;
+        end
+      CRYPTO_FSM_TX_AUTH_PACKET:
+        begin
+          crypto_fsm_we  = 1;
+          crypto_fsm_new = CRYPTO_FSM_WAIT_THEN_SUCCESS;
+          crypto_op_s2c_generate_auth = 1;
+        end
+      CRYPTO_FSM_STORE_TAG_NONCE:
+        begin
+          crypto_fsm_we  = 1;
+          crypto_fsm_new = CRYPTO_FSM_WAIT_THEN_SUCCESS;
+          crypto_tx_op_store_nonce_tag = 1;
+          crypto_tx_addr = copy_tx_addr_reg;
+          crypto_tx_bytes = BYTES_AUTH_NONCE + tx_ciphertext_length_reg[ADDR_WIDTH+3-1:0];
+          //$display("%s:%0d **** TX addr: %h tx_bytes: %h", `__FILE__, `__LINE__, crypto_tx_addr, crypto_tx_bytes);
         end
       CRYPTO_FSM_DONE_SUCCESS:
         begin
@@ -2079,7 +2206,7 @@ module nts_parser_ctrl #(
           default: ;
         endcase
       STATE_RESET_EXTRA_COOKIES:
-        begin //TODO implement, crypto_fsm_reg...
+        if (crypto_fsm_reg == CRYPTO_FSM_DONE_SUCCESS) begin
           state_we  = 'b1;
           state_new = STATE_ADDITIONAL_COOKIES_CTRL;
         end
@@ -2092,17 +2219,37 @@ module nts_parser_ctrl #(
           state_new = STATE_GENERATE_EXTRA_COOKIE;
         end else begin
           state_we  = 'b1;
-          state_new = STATE_TX_UPDATE_LENGTH;
+          state_new = STATE_COPY_PACKET_TO_CRYPTO_AD;
         end
       STATE_GENERATE_EXTRA_COOKIE:
-        begin //TODO implement, crypto_fsm_reg...
+        if (crypto_fsm_reg == CRYPTO_FSM_DONE_SUCCESS) begin
           state_we  = 'b1;
           state_new = STATE_RECORD_EXTRA_COOKIE;
         end
       STATE_RECORD_EXTRA_COOKIE:
-        begin //TODO implement, crypto_fsm_reg
+        if (crypto_fsm_reg == CRYPTO_FSM_DONE_SUCCESS) begin
           state_we  = 'b1;
           state_new = STATE_ADDITIONAL_COOKIES_CTRL; //jump back, while(
+        end
+      STATE_COPY_PACKET_TO_CRYPTO_AD:
+        if (crypto_fsm_reg == CRYPTO_FSM_DONE_SUCCESS) begin
+          state_we  = 'b1;
+          state_new = STATE_TX_AUTH_PACKET;
+        end
+      STATE_TX_AUTH_PACKET:
+        if (crypto_fsm_reg == CRYPTO_FSM_DONE_SUCCESS) begin
+          state_we  = 'b1;
+          state_new = STATE_TX_EMIT_TL_NL_CL;
+        end
+      STATE_TX_EMIT_TL_NL_CL:
+        begin
+          state_we  = 'b1;
+          state_new = STATE_TX_EMIT_NONCE_CIPHERTEXT;
+        end
+      STATE_TX_EMIT_NONCE_CIPHERTEXT:
+        if (crypto_fsm_reg == CRYPTO_FSM_DONE_SUCCESS) begin
+          state_we  = 'b1;
+          state_new = STATE_TX_UPDATE_LENGTH; //TODO <-- update
         end
       STATE_TX_UPDATE_LENGTH:
         begin

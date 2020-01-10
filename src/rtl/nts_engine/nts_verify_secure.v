@@ -55,13 +55,13 @@ module nts_verify_secure #(
   input  wire                         i_op_copy_rx_pc,
   input  wire                         i_op_copy_rx_tag,
   input  wire      [ADDR_WIDTH+3-1:0] i_copy_rx_addr,
-  input  wire                   [9:0] i_copy_rx_bytes,
+  input  wire      [ADDR_WIDTH+3-1:0] i_copy_rx_bytes,
 
   input  wire                         i_op_copy_tx_ad,
   input  wire                         i_op_store_tx_nonce_tag,
   input  wire                         i_op_store_tx_cookie,
   input  wire      [ADDR_WIDTH+3-1:0] i_copy_tx_addr,
-  input  wire                   [9:0] i_copy_tx_bytes,
+  input  wire      [ADDR_WIDTH+3-1:0] i_copy_tx_bytes,
 
   input  wire                         i_op_cookie_verify,
   input  wire                         i_op_cookie_loadkeys,
@@ -989,6 +989,7 @@ module nts_verify_secure #(
           tx_addr_last_new = i_copy_tx_addr + i_copy_tx_bytes;
           tx_addr_next_we = 1;
           tx_addr_next_new = i_copy_tx_addr;
+          //$display("%s:%0d ****** tx_addr_last_new: %h i_copy_tx_addr: %h i_copy_tx_bytes: %h", `__FILE__, `__LINE__, tx_addr_last_new, i_copy_tx_addr, i_copy_tx_bytes);
         end
         else if (i_op_store_tx_nonce_tag) begin
           tx_addr_last_we = 1;
@@ -1028,6 +1029,7 @@ module nts_verify_secure #(
           tx_addr = tx_addr_next_reg;
           tx_addr_next_we = 1;
           tx_addr_next_new = tx_addr_next_reg + 8;
+          //$display("%s:%0d ****** tx_addr: %h tx_addr_last_reg: %h i_tx_read_data: %h", `__FILE__, `__LINE__, tx_addr, tx_addr_last_reg, i_tx_read_data);
         end
       STATE_STORE_TX_AUTH_INIT:
         begin
@@ -1131,11 +1133,13 @@ module nts_verify_secure #(
         begin
           if (i_op_copy_rx_ad) begin
             core_ad_length_we = 1;
-            core_ad_length_new = { 10'b0, i_copy_rx_bytes };
+            core_ad_length_new[19:ADDR_WIDTH+3] = 0;
+            core_ad_length_new[ADDR_WIDTH+3-1:0] = i_copy_rx_bytes;
           end
           if (i_op_copy_tx_ad) begin
             core_ad_length_we = 1;
-            core_ad_length_new = { 10'b0, i_copy_tx_bytes };
+            core_ad_length_new[19:ADDR_WIDTH+3] = 0;
+            core_ad_length_new[ADDR_WIDTH+3-1:0] = i_copy_tx_bytes;
           end
           if (i_op_verify_c2s) begin
             core_config_we = 1;

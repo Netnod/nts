@@ -95,6 +95,7 @@ module nts_verify_secure_tb #(
   reg                    i_op_generate_tag;
   reg                    i_op_store_tx_nonce_tag;
   reg                    i_op_store_tx_cookie;
+  reg                    i_op_store_tx_cookiebuf;
   reg                    i_op_cookie_loadkeys;
   reg                    i_op_cookie_rencrypt;
   reg                    i_op_cookiebuf_appendcookie;
@@ -165,6 +166,7 @@ module nts_verify_secure_tb #(
     .i_op_generate_tag(i_op_generate_tag),
     .i_op_store_tx_nonce_tag(i_op_store_tx_nonce_tag),
     .i_op_store_tx_cookie(i_op_store_tx_cookie),
+    .i_op_store_tx_cookiebuf(i_op_store_tx_cookiebuf),
     .i_op_cookie_loadkeys(i_op_cookie_loadkeys),
     .i_op_cookie_rencrypt(i_op_cookie_rencrypt),
     .i_op_cookiebuf_reset(i_op_cookiebuf_reset),
@@ -575,6 +577,21 @@ module nts_verify_secure_tb #(
   end
   endtask
 
+  task store_cookiebuffer;
+  begin
+    wait_busy();
+    i_op_store_tx_cookiebuf = 1;
+    i_copy_tx_addr = 64+4*8; // some address, whatever. offsetted 0 from last task store_nonce_tag write.
+    i_copy_tx_bytes = 0; //unused
+    #10;
+    i_op_store_tx_cookiebuf = 0;
+    i_copy_tx_addr = 0;
+    i_copy_tx_bytes = 0;
+    `assert(o_busy);
+    wait_busy();
+  end
+  endtask
+
   task cookiebuf_reset;
   begin
     wait_busy();
@@ -921,6 +938,10 @@ module nts_verify_secure_tb #(
   end
   endtask
 
+  function [63:0] inspect_dut_ram( input [9:0] i );
+    inspect_dut_ram = dut.mem.ram[i];
+  endfunction
+
   task cookie_buffer_test (
     input [127:0] testname_str,
     input integer cookies_to_generate,
@@ -930,12 +951,14 @@ module nts_verify_secure_tb #(
   );
   begin : cookie_buffer_test
     integer i;
-      reg         valid_cookie;
-      reg  [31:0] cookie_keyid;
-      reg [127:0] cookie_nonce;
-      reg [127:0] cookie_tag;
-      reg [511:0] cookie_ciphertext;
-      reg   [9:0] tmp;
+    reg         valid_cookie;
+    reg  [31:0] cookie_keyid;
+    reg [127:0] cookie_nonce;
+    reg [127:0] cookie_tag;
+    reg [511:0] cookie_ciphertext;
+    reg   [9:0] tmp;
+    reg  [63:0] expected64;
+    reg  [63:0] actual64;
     if (verbose>0) begin
       $display("%s:%0d cookie_buffer [%s] start...", `__FILE__, `__LINE__, testname_str);
     end
@@ -988,7 +1011,27 @@ module nts_verify_secure_tb #(
     tmp = cookies_to_generate[9:0];
     tmp = tmp * ('h68/8);
     tmp = tmp + 768 - 1;
-    dump_ram(768, tmp);
+
+    if (verbose>1) begin
+      $display("%s:%0d cookie_buffer: RAM before cookie encryption", `__FILE__, `__LINE__);
+      dump_ram(768, tmp);
+    end
+    expected64 = { 32'h02040068, masterkey_keyid };
+    actual64 = inspect_dut_ram(768);
+    //$display("%s:%0d XXX %h", `__FILE__, `__LINE__, inspect_dut_ram(768));
+    `assert( expected64 === actual64 );
+
+    generate_tag();
+    if (verbose>1) begin
+      $display("%s:%0d cookie_buffer: RAM after cookie encryption", `__FILE__, `__LINE__);
+      dump_ram(768, tmp);
+    end
+    expected64 = { 32'h02040068, masterkey_keyid }; //we should NOT get the expected value. Reverse logic.
+    actual64 = inspect_dut_ram(768);
+    //$display("%s:%0d YYY %h %h", `__FILE__, `__LINE__, { 32'h02040068, masterkey_keyid }, inspect_dut_ram(768));
+    `assert( expected64 !== actual64 );
+
+    store_cookiebuffer();
   end
   endtask
 
@@ -1014,6 +1057,7 @@ module nts_verify_secure_tb #(
     i_op_generate_tag = 0;
     i_op_store_tx_nonce_tag = 0;
     i_op_store_tx_cookie = 0;
+    i_op_store_tx_cookiebuf = 0;
     i_op_cookie_loadkeys = 0;
     i_op_cookiebuf_appendcookie = 0;
     i_op_cookiebuf_reset = 0;
@@ -1222,4 +1266,14 @@ module nts_verify_secure_tb #(
   always begin
     #5 i_clk = ~i_clk;
   end
+
+  //----------------------------------------------------------------
+  // Useful debug output
+  //----------------------------------------------------------------
+
+  if (verbose>1) begin
+    always @(posedge i_clk or posedge i_areset)
+      if (dut.core_start_reg) dump_siv();
+  end
+
 endmodule

@@ -225,6 +225,7 @@ module nts_engine #(
   wire                    parser_crypto_tx_op_copy_ad;
   wire                    parser_crypto_tx_op_store_nonce_tag;
   wire                    parser_crypto_tx_op_store_cookie;
+  wire                    parser_crypto_store_tx_cookiebuf; //TODO implement
   wire [ADDR_WIDTH+3-1:0] parser_crypto_tx_addr;
   wire [ADDR_WIDTH+3-1:0] parser_crypto_tx_bytes;
   wire             [63:0] parser_crypto_cookieprefix;
@@ -261,6 +262,8 @@ module nts_engine #(
   //----------------------------------------------------------------
 
   assign api_read_data_cookie = 0; //TODO implement
+
+  assign parser_crypto_store_tx_cookiebuf = 0; //TODO implement
 
   assign o_busy                          = parser_busy;
 
@@ -927,6 +930,7 @@ module nts_engine #(
     .i_op_copy_tx_ad         ( parser_crypto_tx_op_copy_ad         ), //Read packet stored in TX buff for transfer
     .i_op_store_tx_nonce_tag ( parser_crypto_tx_op_store_nonce_tag ), //Write raw packet auth: (nonce)(tag)
     .i_op_store_tx_cookie    ( parser_crypto_tx_op_store_cookie    ), //Write raw cookie: (nonce)(tag)(ciphertext)
+    .i_op_store_tx_cookiebuf ( parser_crypto_store_tx_cookiebuf    ), //Write cookie buffer. First issue i_op_generate_tag, then parser_crypto_tx_op_store_nonce_tag, then i_op_store_tx_cookiebuf
     .i_copy_tx_addr          ( parser_crypto_tx_addr               ), //Specify memory address in TX buf
     .i_copy_tx_bytes         ( parser_crypto_tx_bytes              ),
 

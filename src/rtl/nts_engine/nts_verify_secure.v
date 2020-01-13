@@ -60,6 +60,7 @@ module nts_verify_secure #(
   input  wire                         i_op_copy_tx_ad,
   input  wire                         i_op_store_tx_nonce_tag,
   input  wire                         i_op_store_tx_cookie,
+  input  wire                         i_op_store_tx_cookiebuf,
   input  wire      [ADDR_WIDTH+3-1:0] i_copy_tx_addr,
   input  wire      [ADDR_WIDTH+3-1:0] i_copy_tx_bytes,
 
@@ -120,10 +121,13 @@ module nts_verify_secure #(
   localparam [BITS_STATE-1:0] STATE_STORE_TX_COOKIE      = 17;
   localparam [BITS_STATE-1:0] STATE_LOAD_KEYS_FROM_MEM   = 18;
   localparam [BITS_STATE-1:0] STATE_STORE_COOKIEBUF      = 19;
+  localparam [BITS_STATE-1:0] STATE_STORE_TX_CB_INIT     = 20;
+  localparam [BITS_STATE-1:0] STATE_STORE_TX_CB          = 21;
   localparam [BITS_STATE-1:0] STATE_ERROR                = 31;
 
   localparam BRAM_WIDTH = 10;
   localparam [15:BRAM_WIDTH-1] CORE_ADDR_MSB_ZERO=0;
+  localparam [19:BRAM_WIDTH+3] CORE_LENGTH_MSB_ZERO=0; // {MSB, length64, LSB}, LSB=3'b000
 
   /* MEM8 addresses must be lsb=0 */
   localparam [BRAM_WIDTH-1:0] MEM8_ADDR_NONCE   =   0;
@@ -133,6 +137,17 @@ module nts_verify_secure #(
 
   localparam MODE_DECRYPT = 0;
   localparam MODE_ENCRYPT = 1;
+
+  localparam [1:0] MUX_CIPHERTEXT_NONE         = 2'b00;
+  localparam [1:0] MUX_CIPHERTEXT_PC512        = 2'b01;
+  localparam [1:0] MUX_CIPHERTEXT_PC_COOKIEBUF = 2'b10;
+
+  localparam [5:0] MUX_RAM_CORE   = 6'b000001;
+  localparam [5:0] MUX_RAM_RX     = 6'b000010;
+  localparam [5:0] MUX_RAM_TX     = 6'b000100;
+  localparam [5:0] MUX_RAM_NONCE  = 6'b001000;
+  localparam [5:0] MUX_RAM_LOAD   = 6'b010000;
+  localparam [5:0] MUX_RAM_COOKIE = 6'b100000;
 
   localparam AEAD_AES_SIV_CMAC_256 = 1'h0;
 
@@ -189,9 +204,9 @@ module nts_verify_secure #(
   reg [19 : 0] core_ad_length_new;
   reg          core_ad_length_we;
 
-  reg          core_pc_length_mux_reg;
-  reg          core_pc_length_mux_new;
-  reg          core_pc_length_mux_we;
+  reg    [1:0] core_pc_mux_reg;
+  reg    [1:0] core_pc_mux_new;
+  reg    [0:0] core_pc_mux_we;
 
   //----------------------------------------------------------------
   // Registers - RX buffer access related
@@ -230,8 +245,8 @@ module nts_verify_secure #(
   reg [ADDR_WIDTH+3-1:0] tx_addr_next_reg; //Memory address in RX buffer.
 
   reg                    tx_ctr_we;
-  reg              [3:0] tx_ctr_new;
-  reg              [3:0] tx_ctr_reg;
+  reg   [BRAM_WIDTH-1:0] tx_ctr_new;
+  reg   [BRAM_WIDTH-1:0] tx_ctr_reg;
 
   //----------------------------------------------------------------
   // Registers - Self references. Load C2S, S2C from RAM
@@ -261,6 +276,10 @@ module nts_verify_secure #(
   reg [BRAM_WIDTH-1:0] ramcookie_addr_write_new;
   reg [BRAM_WIDTH-1:0] ramcookie_addr_write_reg;
 
+  reg                  cookiebuffer_length_we;
+  reg [BRAM_WIDTH-1:0] cookiebuffer_length_new;
+  reg [BRAM_WIDTH-1:0] cookiebuffer_length_reg;
+
   //----------------------------------------------------------------
   // Registers - Misc.
   //----------------------------------------------------------------
@@ -278,11 +297,11 @@ module nts_verify_secure #(
   wire           core_config_mode;
 
   wire  [15 : 0] core_ad_start;
-  wire  [15 : 0] core_pc_start;
+  reg   [15 : 0] core_pc_start;
   wire  [15 : 0] core_nonce_start;
 
   wire  [19 : 0] core_nonce_length;
-  wire  [19 : 0] core_pc_length;
+  reg   [19 : 0] core_pc_length;
 
   wire           core_cs;       // Core RAM wires (mux input)
   wire           core_we;       // Core RAM wires (mux input)
@@ -394,9 +413,6 @@ module nts_verify_secure #(
   assign core_nonce_start = { CORE_ADDR_MSB_ZERO, MEM8_ADDR_NONCE[BRAM_WIDTH-1:1] };
   assign core_nonce_length = 16;
 
-  assign core_pc_start = { CORE_ADDR_MSB_ZERO, MEM8_ADDR_PC[BRAM_WIDTH-1:1] };
-  assign core_pc_length = core_pc_length_mux_reg ? 64 /* 512 = 2x256 C2S, S2C, 128+128bits keys */ : 0;
-
   assign core_tag_in = { core_tag_reg[0], core_tag_reg[1] };
 
   assign o_busy = (state_reg != STATE_IDLE) || (nonce_a_valid_reg==1'b0) || (nonce_b_valid_reg==1'b0);
@@ -439,6 +455,34 @@ module nts_verify_secure #(
   );
 
   //----------------------------------------------------------------
+  // AES-SIV Core control mux
+  //----------------------------------------------------------------
+
+  always @*
+  begin : ciphertext_ctrl_mux
+    core_pc_start = 0;
+    core_pc_length = 0;
+    case (core_pc_mux_reg)
+      MUX_CIPHERTEXT_NONE: //No Ciphertext
+        begin
+          core_pc_start = { CORE_ADDR_MSB_ZERO, MEM8_ADDR_PC[BRAM_WIDTH-1:1] }; //unused.
+          core_pc_length = 0;
+        end
+      MUX_CIPHERTEXT_PC512: //64 bytes of ciphertext. 512 = 2x256 C2S, S2C, 128+128bits keys */
+        begin
+          core_pc_start = { CORE_ADDR_MSB_ZERO, MEM8_ADDR_PC[BRAM_WIDTH-1:1] };
+          core_pc_length = 64;
+        end
+      MUX_CIPHERTEXT_PC_COOKIEBUF:
+        begin
+          core_pc_start = { CORE_ADDR_MSB_ZERO, MEM8_ADDR_COOKIES[BRAM_WIDTH-1:1] };
+          core_pc_length = { CORE_LENGTH_MSB_ZERO, cookiebuffer_length_reg, 3'b000 };
+        end
+      default: ;
+    endcase
+  end
+
+  //----------------------------------------------------------------
   // AES-SIV Core
   //----------------------------------------------------------------
 
@@ -467,6 +511,7 @@ module nts_verify_secure #(
     .ready(core_ready)
   );
 
+
   //----------------------------------------------------------------
   // Register update
   //----------------------------------------------------------------
@@ -476,10 +521,11 @@ module nts_verify_secure #(
     if (i_areset) begin
       cookie_ctr_reg <= 0;
       cookie_prefix_reg <= 0;
+      cookiebuffer_length_reg <= 0;
       core_ack_reg <= 0;
       core_ad_length_reg <= 0;
       core_config_encdec_reg <= 0;
-      core_pc_length_mux_reg <= 0;
+      core_pc_mux_reg <= MUX_CIPHERTEXT_NONE;
       core_start_reg <= 0;
       core_tag_reg[0] <= 0;
       core_tag_reg[1] <= 0;
@@ -514,6 +560,9 @@ module nts_verify_secure #(
       if (cookie_prefix_we)
         cookie_prefix_reg <= cookie_prefix_new;
 
+      if (cookiebuffer_length_we)
+        cookiebuffer_length_reg <= cookiebuffer_length_new;
+
       core_ack_reg <= core_cs; // Memory always responds next cycle
 
       if (core_ad_length_we)
@@ -525,8 +574,8 @@ module nts_verify_secure #(
 
       core_start_reg <= core_start_new;
 
-      if (core_pc_length_mux_we)
-       core_pc_length_mux_reg <= core_pc_length_mux_new;
+      if (core_pc_mux_we)
+       core_pc_mux_reg <= core_pc_mux_new;
 
       if (core_tag_we[0])
         core_tag_reg[0] <= core_tag_new;
@@ -639,6 +688,10 @@ module nts_verify_secure #(
 
   always @*
   begin : ram_mux
+    reg [5:0] mux;
+
+    mux = MUX_RAM_CORE;
+
     ram_a_en = 0;
     ram_a_we = 0;
     ram_a_addr = 0;
@@ -648,22 +701,34 @@ module nts_verify_secure #(
     ram_b_we = 0;
     ram_b_addr = 0;
     ram_b_wdata = 0;
+
     case (state_reg)
-      STATE_COPY_RX:
+      STATE_COPY_RX:             mux = MUX_RAM_RX;
+      STATE_AUTH_MEMSTORE_NONCE: mux = MUX_RAM_NONCE;
+      STATE_COPY_TX:             mux = MUX_RAM_TX;
+      STATE_STORE_TX_AUTH_INIT:  mux = MUX_RAM_TX;
+      STATE_STORE_TX_AUTH:       mux = MUX_RAM_TX;
+      STATE_STORE_TX_COOKIE:     mux = MUX_RAM_TX;
+      STATE_STORE_TX_CB_INIT:    mux = MUX_RAM_TX;
+      STATE_STORE_TX_CB:         mux = MUX_RAM_TX;
+      STATE_LOAD_KEYS_FROM_MEM:  mux = MUX_RAM_LOAD;
+      STATE_STORE_COOKIEBUF:     mux = MUX_RAM_COOKIE;
+      default: ;
+    endcase
+
+    case (mux)
+      default: //MUX_RAM_CORE
         begin
-          ram_a_en = ramrx_en;
-          ram_a_we = ramrx_we;
-          ram_a_addr = ramrx_addr_reg;
-          ram_a_wdata = ramrx_wdata;
+          ram_a_en = core_cs;
+          ram_a_we = core_we;
+          ram_a_addr = { core_addr[BRAM_WIDTH-2:0], 1'b0 }; //1'b0: 64bit MSB
+          ram_a_wdata = core_block_wr[127:64];
+          ram_b_en = core_cs;
+          ram_b_we = core_we;
+          ram_b_addr = { core_addr[BRAM_WIDTH-2:0], 1'b1 }; //1'b1: 64bit LSB
+          ram_b_wdata = core_block_wr[63:0];
         end
-      STATE_COPY_TX:
-        begin
-          ram_a_en = ramtx_en;
-          ram_a_we = ramtx_we;
-          ram_a_addr = ramtx_addr_reg;
-          ram_a_wdata = ramtx_wdata;
-        end
-      STATE_AUTH_MEMSTORE_NONCE:
+      MUX_RAM_NONCE:
         begin
           ram_a_en = ramnc_en;
           ram_a_we = ramnc_we;
@@ -674,28 +739,21 @@ module nts_verify_secure #(
           ram_b_addr = MEM8_ADDR_NONCE + 1;
           ram_b_wdata = ramnc_wdata[63:0];
         end
-      STATE_STORE_TX_AUTH_INIT:
+      MUX_RAM_RX:
+        begin
+          ram_a_en = ramrx_en;
+          ram_a_we = ramrx_we;
+          ram_a_addr = ramrx_addr_reg;
+          ram_a_wdata = ramrx_wdata;
+        end
+      MUX_RAM_TX:
         begin
           ram_a_en = ramtx_en;
           ram_a_we = ramtx_we;
           ram_a_addr = ramtx_addr_reg;
           ram_a_wdata = ramtx_wdata;
         end
-      STATE_STORE_TX_AUTH:
-        begin
-          ram_a_en = ramtx_en;
-          ram_a_we = ramtx_we;
-          ram_a_addr = ramtx_addr_reg;
-          ram_a_wdata = ramtx_wdata;
-        end
-      STATE_STORE_TX_COOKIE:
-        begin
-          ram_a_en = ramtx_en;
-          ram_a_we = ramtx_we;
-          ram_a_addr = ramtx_addr_reg;
-          ram_a_wdata = ramtx_wdata;
-        end
-      STATE_LOAD_KEYS_FROM_MEM:
+      MUX_RAM_LOAD:
         begin
           ram_a_en = ramld_en;
           ram_a_we = 0;
@@ -706,7 +764,7 @@ module nts_verify_secure #(
           ram_b_addr = ramld_addr_reg + 1;
           ram_b_wdata = 0;
         end
-      STATE_STORE_COOKIEBUF:
+      MUX_RAM_COOKIE:
         begin
           ram_a_en = ramcookie_ld;
           ram_a_we = 0;
@@ -715,17 +773,6 @@ module nts_verify_secure #(
           ram_b_we = 1;
           ram_b_addr = ramcookie_addr_write_reg;
           ram_b_wdata = ramcookie_wdata;
-        end
-      default:
-        begin
-          ram_a_en = core_cs;
-          ram_a_we = core_we;
-          ram_a_addr = { core_addr[BRAM_WIDTH-2:0], 1'b0 }; //1'b0: 64bit MSB
-          ram_a_wdata = core_block_wr[127:64];
-          ram_b_en = core_cs;
-          ram_b_we = core_we;
-          ram_b_addr = { core_addr[BRAM_WIDTH-2:0], 1'b1 }; //1'b1: 64bit LSB
-          ram_b_wdata = core_block_wr[63:0];
         end
     endcase
   end
@@ -1009,6 +1056,14 @@ module nts_verify_secure #(
           ramtx_addr_we = 1;
           ramtx_addr_new = MEM8_ADDR_NONCE;
         end
+        else if (i_op_store_tx_cookiebuf) begin
+          tx_addr_next_we = 1;
+          tx_addr_next_new = i_copy_tx_addr;
+          tx_ctr_we = 1;
+          tx_ctr_new = 0;
+          ramtx_addr_we = 1;
+          ramtx_addr_new = MEM8_ADDR_COOKIES;
+        end
       STATE_COPY_TX_INIT_AD:
         begin
           ramtx_addr_we = 1;
@@ -1033,37 +1088,41 @@ module nts_verify_secure #(
         end
       STATE_STORE_TX_AUTH_INIT:
         begin
-          ramtx_en = 1;
+          ramtx_en = 1; //Load MEM8_ADDR_NONCE
           ramtx_we = 0;
           ramtx_addr_we = 1;
-          ramtx_addr_new = ramtx_addr_reg + 1;
+          ramtx_addr_new = ramtx_addr_reg + 1; //Next address: MEM8_ADDR_NONCE + 1
+          tx_ctr_we = 1;
+          tx_ctr_new = 0;
         end
       STATE_STORE_TX_AUTH:
         begin
           ramtx_addr_we = 1;
-          ramtx_addr_new = ramtx_addr_reg + 1; //TODO a dedicated counter would make more sense than this abuse...
+          ramtx_addr_new = ramtx_addr_reg + 1;
+          tx_ctr_we = 1;
+          tx_ctr_new = tx_ctr_reg + 1;
           tx_addr = tx_addr_next_reg;
           tx_addr_next_we = 1;
           tx_addr_next_new = tx_addr_next_reg + 8;
           case (ramtx_addr_reg)
-            MEM8_ADDR_NONCE + 1:
+            1:
               begin
-                ramtx_en = 1;
+                ramtx_en = 1; //Load MEM8_ADDR_NONCE + 1
                 ramtx_we = 0;
                 tx_wr_en = 1;
                 tx_wr_data = ram_a_rdata; //Nonce MSB from previous cycle
               end
-            MEM8_ADDR_NONCE + 2:
+            2:
               begin
                 tx_wr_en = 1;
                 tx_wr_data = ram_a_rdata; //Nonce LSB from previous cycle
               end
-            MEM8_ADDR_NONCE + 3:
+            3:
               begin
                 tx_wr_en = 1;
                 tx_wr_data = core_tag_out[127:64];
               end
-            MEM8_ADDR_NONCE + 4:
+            4:
               begin
                 tx_wr_en = 1;
                 tx_wr_data = core_tag_out[63:0];
@@ -1107,6 +1166,26 @@ module nts_verify_secure #(
             default: ;
           endcase;
         end
+      STATE_STORE_TX_CB_INIT:
+        begin
+          ramtx_en = 1;
+          ramtx_we = 0;
+          ramtx_addr_we = 1;
+          ramtx_addr_new = ramtx_addr_reg + 1;
+          tx_ctr_we = 1;
+          tx_ctr_new = tx_ctr_reg + 1; //TODO workaround to fix off by one issue in TX emit
+        end
+      STATE_STORE_TX_CB:
+        begin
+          ramtx_addr_we = 1;
+          ramtx_addr_new = ramtx_addr_reg + 1;
+          tx_addr = tx_addr_next_reg;
+          tx_addr_next_we = 1;
+          tx_addr_next_new = tx_addr_next_reg + 8;
+          tx_ctr_we = 1;
+          tx_ctr_new = tx_ctr_reg + 1;
+          tx_load_ram_and_emit(1, ram_a_rdata);
+        end
       default: ;
     endcase
   end
@@ -1118,8 +1197,8 @@ module nts_verify_secure #(
 
   always @*
   begin : aes_siv_core_ctrl
-    core_pc_length_mux_we = 0;
-    core_pc_length_mux_new = 0;
+    core_pc_mux_we = 0;
+    core_pc_mux_new = MUX_CIPHERTEXT_NONE;
     core_ad_length_we = 0;
     core_ad_length_new = 0;
     core_config_we = 0;
@@ -1144,8 +1223,8 @@ module nts_verify_secure #(
           if (i_op_verify_c2s) begin
             core_config_we = 1;
             core_config_encdec_new = MODE_DECRYPT;
-            core_pc_length_mux_we = 1;
-            core_pc_length_mux_new = 0;
+            core_pc_mux_we = 1;
+            core_pc_mux_new = MUX_CIPHERTEXT_NONE;
             core_start_new = 1;
             key_current_we = 1;
             key_current_new = key_c2s_reg;
@@ -1153,8 +1232,8 @@ module nts_verify_secure #(
           if (i_op_generate_tag) begin
             core_config_we = 1;
             core_config_encdec_new = MODE_ENCRYPT;
-            core_pc_length_mux_we = 1;
-            core_pc_length_mux_new = 0;
+            core_pc_mux_we = 1;
+            core_pc_mux_new = MUX_CIPHERTEXT_PC_COOKIEBUF;
             core_start_new = 0; //Occurs later, in STATE_AUTH_MEMSTORE_NONCE
             key_current_we = 1;
             key_current_new = key_s2c_reg;
@@ -1164,8 +1243,8 @@ module nts_verify_secure #(
             core_ad_length_new = 0; // Chrony format, No AD
             core_config_we = 1;
             core_config_encdec_new = MODE_DECRYPT;
-            core_pc_length_mux_we = 1;
-            core_pc_length_mux_new = 1;
+            core_pc_mux_we = 1;
+            core_pc_mux_new = MUX_CIPHERTEXT_PC512;
             core_start_new = 1;
             key_current_we = 1;
             key_current_new = key_master_reg;
@@ -1175,8 +1254,8 @@ module nts_verify_secure #(
             core_ad_length_new = 0; // Chrony format, No AD
             core_config_we = 1;
             core_config_encdec_new = MODE_ENCRYPT;
-            core_pc_length_mux_we = 1;
-            core_pc_length_mux_new = 1;
+            core_pc_mux_we = 1;
+            core_pc_mux_new = MUX_CIPHERTEXT_PC512;
             core_start_new = 0; //Occurs later, in STATE_AUTH_MEMSTORE_NONCE
             key_current_we = 1;
             key_current_new = key_master_reg;
@@ -1241,7 +1320,23 @@ module nts_verify_secure #(
   end
 
   //----------------------------------------------------------------
-  // CookieBuff Handler Helper tasks
+  // Cookie buffer length helper;
+  //----------------------------------------------------------------
+
+  always @*
+  begin
+    cookiebuffer_length_we = 0;
+    cookiebuffer_length_new = 0;
+
+    if (ramcookie_addr_write_we) begin
+      cookiebuffer_length_we = 1;
+      if (ramcookie_addr_write_new > MEM8_ADDR_COOKIES)
+        cookiebuffer_length_new = ramcookie_addr_write_new - MEM8_ADDR_COOKIES;
+    end
+  end
+
+  //----------------------------------------------------------------
+  // Cookie Buffer Handler Helper tasks
   //----------------------------------------------------------------
 
   task cookie_load_ram_and_store (
@@ -1389,6 +1484,9 @@ module nts_verify_secure #(
         end else if (i_op_store_tx_cookie) begin
           state_we = 1;
           state_new = STATE_STORE_TX_COOKIE_INIT;
+        end else if (i_op_store_tx_cookiebuf) begin
+          state_we = 1;
+          state_new = STATE_STORE_TX_CB_INIT;
         end else if (i_op_cookiebuf_appendcookie) begin
           state_we = 1;
           state_new = STATE_STORE_COOKIEBUF;
@@ -1464,7 +1562,7 @@ module nts_verify_secure #(
           state_new = STATE_STORE_TX_AUTH;
         end
       STATE_STORE_TX_AUTH:
-        if (tx_addr >= tx_addr_last_reg) begin
+        if (tx_ctr_reg >= 4) begin
           state_we = 1;
           state_new = STATE_IDLE;
         end
@@ -1475,6 +1573,19 @@ module nts_verify_secure #(
         end
       STATE_STORE_TX_COOKIE:
         if (tx_ctr_reg >= 12) begin //TODO replace with a named constant (128+128+256+256) / 64  ...
+          state_we = 1;
+          state_new = STATE_IDLE;
+        end
+      STATE_STORE_TX_CB_INIT:
+        if (cookiebuffer_length_reg == 0) begin
+          state_we = 1;
+          state_new = STATE_IDLE;
+        end else if (i_tx_busy == 'b0) begin
+          state_we = 1;
+          state_new = STATE_STORE_TX_CB;
+        end
+      STATE_STORE_TX_CB:
+        if (tx_ctr_reg >= cookiebuffer_length_reg) begin
           state_we = 1;
           state_new = STATE_IDLE;
         end

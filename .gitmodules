@@ -1,24 +1,24 @@
 [submodule "sub/keymem"]
 	path = sub/keymem
-	url = https://gitlab.netnod.se/tid-och-takt/keymem.git
+	url = ../keymem.git
         ignore = dirty
 [submodule "sub/aes-siv"]
 	path = sub/aes-siv
-	url = https://gitlab.netnod.se/tid-och-takt/aes-siv.git
+	url = ../aes-siv.git
         ignore = dirty
 [submodule "sub/cmac"]
 	path = sub/cmac
-	url = https://gitlab.netnod.se/tid-och-takt/cmac.git
+	url = ../cmac.git
         ignore = dirty
 [submodule "sub/aes"]
 	path = sub/aes
-	url = https://gitlab.netnod.se/tid-och-takt/aes.git
+	url = ../aes.git
         ignore = dirty
 [submodule "sub/nts_noncegen"]
 	path = sub/nts_noncegen
-	url = https://gitlab.netnod.se/tid-och-takt/nts_noncegen.git
+	url = ../nts_noncegen.git
         ignore = dirty
 [submodule "sub/siphash"]
 	path = sub/siphash
-	url = https://gitlab.netnod.se/tid-och-takt/siphash.git
+	url = ../siphash.git
         ignore = dirty

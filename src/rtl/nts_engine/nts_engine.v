@@ -245,11 +245,9 @@ module nts_engine #(
 
   wire                    crypto_txbuf_read_en;
   wire             [63:0] txbuf_crypto_read_data;
-  /* verilator lint_off UNUSED */
-  wire                    crypto_txbuf_write_en;   //TODO implement
-  wire             [63:0] crypto_txbuf_write_data; //TODO implement
-  wire [ADDR_WIDTH+3-1:0] crypto_txbuf_address;    //TODO implement
-  /* verilator lint_on UNUSED */
+  wire                    crypto_txbuf_write_en;
+  wire             [63:0] crypto_txbuf_write_data;
+  wire [ADDR_WIDTH+3-1:0] crypto_txbuf_address;
 
   wire                    crypto_noncegen_get;
   wire             [63:0] noncegen_crypto_nonce;
@@ -262,8 +260,6 @@ module nts_engine #(
   //----------------------------------------------------------------
 
   assign api_read_data_cookie = 0; //TODO implement
-
-  assign parser_crypto_store_tx_cookiebuf = 0; //TODO implement
 
   assign o_busy                          = parser_busy;
 
@@ -816,6 +812,7 @@ module nts_engine #(
    .o_crypto_tx_op_copy_ad(parser_crypto_tx_op_copy_ad),
    .o_crypto_tx_op_store_nonce_tag(parser_crypto_tx_op_store_nonce_tag),
    .o_crypto_tx_op_store_cookie(parser_crypto_tx_op_store_cookie),
+   .o_crypto_tx_op_store_cookiebuf(parser_crypto_store_tx_cookiebuf),
    .o_crypto_tx_addr(parser_crypto_tx_addr),
    .o_crypto_tx_bytes(parser_crypto_tx_bytes),
    .o_crypto_op_cookie_verify(parser_crypto_op_cookie_verify),

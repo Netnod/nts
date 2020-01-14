@@ -689,6 +689,10 @@ module nts_top_tb;
         $display("%s:%0d dut.engine.parser.nts_valid_placeholders_reg: %h", `__FILE__, `__LINE__, dut.engine.parser.nts_valid_placeholders_reg);
       always @*
         $display("%s:%0d dut.engine.crypto.state_reg: %h", `__FILE__, `__LINE__, dut.engine.crypto.state_reg);
+      always @*
+        $display("%s:%0d dut.engine.parser.tx_udp_length_reg: %h", `__FILE__, `__LINE__, dut.engine.parser.tx_udp_length_reg);
+      always @*
+        $display("%s:%0d dut.engine.parser.tx_ipv4_totlen_reg: %h", `__FILE__, `__LINE__, dut.engine.parser.tx_ipv4_totlen_reg);
   end
 
   //----------------------------------------------------------------

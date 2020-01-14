@@ -103,6 +103,7 @@ module nts_parser_ctrl #(
   output wire                         o_crypto_tx_op_copy_ad,
   output wire                         o_crypto_tx_op_store_nonce_tag,
   output wire                         o_crypto_tx_op_store_cookie,
+  output wire                         o_crypto_tx_op_store_cookiebuf,
   output wire      [ADDR_WIDTH+3-1:0] o_crypto_tx_addr,
   output wire      [ADDR_WIDTH+3-1:0] o_crypto_tx_bytes,
   output wire                         o_crypto_op_cookie_verify,
@@ -227,6 +228,7 @@ module nts_parser_ctrl #(
   localparam CRYPTO_FSM_COPY_TX_TO_AD        = 'h12; // issue copy
   localparam CRYPTO_FSM_TX_AUTH_PACKET       = 'h13; // issue authenticate & encrypt encrypted payload
   localparam CRYPTO_FSM_STORE_TAG_NONCE      = 'h14;
+  localparam CRYPTO_FSM_STORE_COOKIEBUF      = 'h15;
   localparam CRYPTO_FSM_DONE_FAILURE         = 'h1e;
   localparam CRYPTO_FSM_DONE_SUCCESS         = 'h1f;
 
@@ -271,6 +273,10 @@ module nts_parser_ctrl #(
 
   localparam ADDR_IPV4_START_NTP = 5 * 8 + 2;
   localparam ADDR_IPV6_START_NTP = 7 * 8 + 6;
+
+  localparam HEADER_LENGTH_ETHERNET = 6+6+2;
+  localparam HEADER_LENGTH_IPV4     = 5*4; //IHL=5, word size 4 bytes.
+  localparam HEADER_LENGTH_IPV6     = 40;
 
   //----------------------------------------------------------------
   // Registers including update variables and write enable.
@@ -321,9 +327,9 @@ module nts_parser_ctrl #(
   reg                  [15:0] copy_bytes_new;
   reg                  [15:0] copy_bytes_reg;
 
-  reg                         copy_rx_addr_we;
-  reg      [ADDR_WIDTH+3-1:0] copy_rx_addr_new;
-  reg      [ADDR_WIDTH+3-1:0] copy_rx_addr_reg;
+//reg                         copy_rx_addr_we;
+//reg      [ADDR_WIDTH+3-1:0] copy_rx_addr_new;
+//reg      [ADDR_WIDTH+3-1:0] copy_rx_addr_reg;
 
   reg                         copy_tx_addr_we;
   reg      [ADDR_WIDTH+3-1:0] copy_tx_addr_new;
@@ -475,7 +481,14 @@ module nts_parser_ctrl #(
   reg [15:0] tx_ipv4_csum_new;
   reg [15:0] tx_ipv4_csum_reg;
 
-  reg [15:0] tx_udp_length_reg; //TODO implement
+  reg        tx_ipv4_totlen_we;
+  reg [15:0] tx_ipv4_totlen_new;
+  reg [15:0] tx_ipv4_totlen_reg;
+
+  reg        tx_udp_length_we;
+  reg [15:0] tx_udp_length_new;
+  reg [15:0] tx_udp_length_reg;
+
   reg [15:0] tx_udp_checksum_reg;
 
   //----------------------------------------------------------------
@@ -520,6 +533,7 @@ module nts_parser_ctrl #(
   reg [ADDR_WIDTH+3-1:0] crypto_tx_bytes;
   reg                    crypto_tx_op_copy_ad;
   reg                    crypto_tx_op_store_cookie;
+  reg                    crypto_tx_op_store_cookiebuf;
   reg                    crypto_tx_op_store_nonce_tag;
 
   wire detect_ipv4;
@@ -599,6 +613,7 @@ module nts_parser_ctrl #(
 
   assign o_crypto_tx_op_copy_ad         = crypto_tx_op_copy_ad;
   assign o_crypto_tx_op_store_cookie    = crypto_tx_op_store_cookie;
+  assign o_crypto_tx_op_store_cookiebuf = crypto_tx_op_store_cookiebuf;
   assign o_crypto_tx_op_store_nonce_tag = crypto_tx_op_store_nonce_tag;
 
   assign o_crypto_cookieprefix = crypto_cookieprefix;
@@ -636,7 +651,7 @@ module nts_parser_ctrl #(
                               };
 
   assign tx_header_ipv4_nocsum0 = {
-           IP_V4, 4'h5, IPV4_TOS, 16'h0000,            //|Version|  IHL  |Type of Service|          Total Length         |
+           IP_V4, 4'h5, IPV4_TOS, tx_ipv4_totlen_reg,  //|Version|  IHL  |Type of Service|          Total Length         |
            16'h0000, IPV4_FLAGS, IPV4_FRAGMENT_OFFSET, //|         Identification        |Flags|      Fragment Offset    |
            IPV4_TTL, IP_UDP_PROTO };                   //|  Time to Live |    Protocol   |         Header Checksum       |
   assign tx_header_ipv4_nocsum1 = {
@@ -833,7 +848,7 @@ module nts_parser_ctrl #(
       cookies_count_reg          <= 0;
 
       copy_bytes_reg             <= 'b0;
-      copy_rx_addr_reg           <= 'b0;
+    //copy_rx_addr_reg           <= 'b0;
       copy_tx_addr_reg           <= 0;
 
       crypto_fsm_reg             <= CRYPTO_FSM_IDLE;
@@ -891,6 +906,7 @@ module nts_parser_ctrl #(
       tx_ciphertext_length_reg <= 0;
       tx_header_index_reg <= 0;
       tx_ipv4_csum_reg <= 0;
+      tx_ipv4_totlen_reg <= 0;
       tx_udp_checksum_reg <= 0; //TODO implement
       tx_udp_length_reg <= 0;
 
@@ -931,8 +947,8 @@ module nts_parser_ctrl #(
       if (copy_bytes_we)
         copy_bytes_reg <= copy_bytes_new;
 
-      if (copy_rx_addr_we)
-        copy_rx_addr_reg <= copy_rx_addr_new;
+    //if (copy_rx_addr_we)
+    //  copy_rx_addr_reg <= copy_rx_addr_new;
 
       if (copy_tx_addr_we)
         copy_tx_addr_reg <= copy_tx_addr_new;
@@ -1057,6 +1073,12 @@ module nts_parser_ctrl #(
         tx_header_index_reg <= tx_header_index_new;
 
       tx_ipv4_csum_reg <= tx_ipv4_csum_new;
+
+      if (tx_ipv4_totlen_we)
+        tx_ipv4_totlen_reg <= tx_ipv4_totlen_new;
+
+      if (tx_udp_length_we)
+        tx_udp_length_reg <= tx_udp_length_new;
 
       if (word_counter_we)
         word_counter_reg <= word_counter_new;
@@ -1395,8 +1417,8 @@ module nts_parser_ctrl #(
     copy_bytes_we = 0;
     copy_bytes_new = 0;
 
-    copy_rx_addr_we = 0;
-    copy_rx_addr_new = 0;
+  //copy_rx_addr_we = 0;
+  //copy_rx_addr_new = 0;
 
     copy_tx_addr_we = 0;
     copy_tx_addr_new = 0;
@@ -1408,8 +1430,8 @@ module nts_parser_ctrl #(
         begin
           copy_bytes_we     = 1;
           copy_bytes_new    = nts_unique_identifier_length_reg;
-          copy_rx_addr_we   = 1;
-          copy_rx_addr_new  = nts_unique_identifier_addr_reg;
+        //copy_rx_addr_we   = 1;
+        //copy_rx_addr_new  = nts_unique_identifier_addr_reg;
           copy_tx_addr_we   = 1;
           copy_tx_addr_new  = ipdecode_offset_ntp_ext;
         end
@@ -1420,15 +1442,15 @@ module nts_parser_ctrl #(
               copy_bytes_we    = 1;
               copy_bytes_new   = 0;
               copy_done        = 1;
-              copy_rx_addr_we  = 1;
-              copy_rx_addr_new = copy_rx_addr_new + tmp_bytes;
+            //copy_rx_addr_we  = 1;
+            //copy_rx_addr_new = copy_rx_addr_new + tmp_bytes;
               copy_tx_addr_we  = 1;
               copy_tx_addr_new = copy_tx_addr_reg + tmp_bytes;
             end else begin
               copy_bytes_we    = 1;
               copy_bytes_new   = copy_bytes_reg - 8;
-              copy_rx_addr_we  = 1;
-              copy_rx_addr_new = copy_rx_addr_reg + 8;
+            //copy_rx_addr_we  = 1;
+            //copy_rx_addr_new = copy_rx_addr_reg + 8;
               copy_tx_addr_we  = 1;
               copy_tx_addr_new = copy_tx_addr_reg + 8;
             end
@@ -1750,6 +1772,7 @@ module nts_parser_ctrl #(
     crypto_tx_bytes = 0;
     crypto_tx_op_copy_ad = 0;
     crypto_tx_op_store_cookie = 0;
+    crypto_tx_op_store_cookiebuf = 0;
     crypto_tx_op_store_nonce_tag = 0;
 
     if (crypto_fsm_reg == CRYPTO_FSM_IDLE)
@@ -1968,11 +1991,19 @@ module nts_parser_ctrl #(
       CRYPTO_FSM_STORE_TAG_NONCE:
         begin
           crypto_fsm_we  = 1;
-          crypto_fsm_new = CRYPTO_FSM_WAIT_THEN_SUCCESS;
+          crypto_fsm_new = CRYPTO_FSM_STORE_COOKIEBUF;
           crypto_tx_op_store_nonce_tag = 1;
           crypto_tx_addr = copy_tx_addr_reg;
           crypto_tx_bytes = BYTES_AUTH_NONCE + tx_ciphertext_length_reg[ADDR_WIDTH+3-1:0];
           //$display("%s:%0d **** TX addr: %h tx_bytes: %h", `__FILE__, `__LINE__, crypto_tx_addr, crypto_tx_bytes);
+        end
+      CRYPTO_FSM_STORE_COOKIEBUF:
+        if (i_crypto_busy == 1'b0) begin
+          crypto_fsm_we  = 1;
+          crypto_fsm_new = CRYPTO_FSM_WAIT_THEN_SUCCESS;
+          crypto_tx_op_store_cookiebuf = 1;
+          crypto_tx_addr = copy_tx_addr_reg;
+          crypto_tx_bytes = tx_ciphertext_length_reg[ADDR_WIDTH+3-1:0]; //unsused by crypto for now, but clearer if stated
         end
       CRYPTO_FSM_DONE_SUCCESS:
         begin
@@ -2249,7 +2280,7 @@ module nts_parser_ctrl #(
       STATE_TX_EMIT_NONCE_CIPHERTEXT:
         if (crypto_fsm_reg == CRYPTO_FSM_DONE_SUCCESS) begin
           state_we  = 'b1;
-          state_new = STATE_TX_UPDATE_LENGTH; //TODO <-- update
+          state_new = STATE_TX_UPDATE_LENGTH;
         end
       STATE_TX_UPDATE_LENGTH:
         begin
@@ -2412,6 +2443,41 @@ module nts_parser_ctrl #(
         end
       end
     end
+  end
+
+  //----------------------------------------------------------------
+  // TX IP, UDP control
+  //----------------------------------------------------------------
+
+  always @*
+  begin
+    tx_ipv4_totlen_we = 0;
+    tx_ipv4_totlen_new = 0;
+    tx_udp_length_we = 0;
+    tx_udp_length_new = 0;
+    case (state_reg)
+      STATE_IDLE:
+        begin
+          tx_ipv4_totlen_we = 1; //zeroize
+          tx_udp_length_we  = 1; //zeroize
+        end
+      STATE_TX_UPDATE_LENGTH:
+        begin
+          tx_udp_length_we = 1;
+          tx_udp_length_new [15:ADDR_WIDTH+3] = 0;
+          tx_udp_length_new[ADDR_WIDTH+3-1:0] = copy_tx_addr_reg;
+          if (detect_ipv4) begin
+            tx_ipv4_totlen_we = 1;
+            tx_ipv4_totlen_new [15:ADDR_WIDTH+3] = 0;
+            tx_ipv4_totlen_new[ADDR_WIDTH+3-1:0] = copy_tx_addr_reg;
+            tx_ipv4_totlen_new = tx_ipv4_totlen_new - HEADER_LENGTH_ETHERNET;
+            tx_udp_length_new  = tx_udp_length_new - HEADER_LENGTH_ETHERNET - HEADER_LENGTH_IPV4;
+          end else if (detect_ipv6) begin
+            tx_udp_length_new = tx_udp_length_new - HEADER_LENGTH_ETHERNET - HEADER_LENGTH_IPV6;
+          end
+        end
+      default: ;
+    endcase
   end
 
   //----------------------------------------------------------------

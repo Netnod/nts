@@ -34,7 +34,7 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
   // Test bench constants
   //----------------------------------------------------------------
 
-  localparam ADDR_WIDTH = 7;
+  localparam ADDR_WIDTH = 12;
 
   localparam integer ETHIPV4_NTS_TESTPACKETS_BITS=5488;
   localparam integer ETHIPV6_NTS_TESTPACKETS_BITS=5648;
@@ -47,6 +47,7 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
 
   localparam [ETHIPV6_NTS_TESTPACKETS_BITS-1:0] nts_packet_ipv6_request2 = { 64'h0000000000000000, 64'h0000000086dd6000, 64'h0000028c11400000, 64'h0000000000000000, 64'h0000000000010000, 64'h0000000000000000, 64'h000000000001a481, 64'h101e028c029f2300, 64'h0020000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000009006, 64'h7ae76b0e7c8f0104, 64'h002442c6f064b709, 64'h5020fe86a9a3ee40, 64'h24873e09427a8bda, 64'h42913ac7a4210292, 64'h5605020400682b30, 64'hd49a5da26e878c97, 64'h95a0e8d0be12c940, 64'h8d3335fe04d25f97, 64'h615b4b9955786ce6, 64'h8c20a76268775cc5, 64'h64444dfa8b32b61b, 64'h6902f7bc1345b6e1, 64'h55d30a580e7db691, 64'he627d22e0b0a768b, 64'h3ae3c420e8fe60bb, 64'hcd44679ddb4c66ca, 64'h192adbb6440f0f28, 64'h6ebd030400680000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000030400680000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000030400680000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000030400680000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000, 64'h0000040400280010, 64'h001077615f9af204, 64'h4b9b0bdc77ea2105, 64'h1d0b8d0db8249882, 64'h3565bbd1515ff270, 16'h1883 };
 
+  localparam [2159:0] NTS_TEST_REQUEST_WITH_KEY_IPV4_2=2160'h001c7300_00995254_00cdcd23_08004500_01000001_00004011_bc174d48_e37ec23a_cad31267_101b00ec_8c5b2300_00200000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_000071cc_4c8cdb00_980b0104_002492ae_9b06e29f_638497f0_18b58124_85cbef5f_811f516a_620ed802_4546bb3e_db590204_006813fe_78e93426_b1f08926_0a257d85_5c533225_c7540952_f35b63d9_f6f6fb4c_69dbc025_3c869740_6b59c01c_d297755c_960a2532_7d40ad6f_41a636d1_4f8a584e_6414f559_3a0912fd_8a7e4b69_88be44ea_97f6f60f_b3d799f9_293e5852_d40fa062_4038e0fc_a5d90404_00280010_00107812_c6677d04_a1c0ac02_0219687c_17d5ca94_9acd04b0_ac8d8d82_d6c71f3f_8518;
 
   //----------------------------------------------------------------
   // Test bench variables, wires
@@ -54,6 +55,9 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
 
   reg         i_areset; // async reset
   reg         i_clk;
+
+  wire        o_error;
+  wire        o_busy;
 
   wire        o_dispatch_tx_packet_available;
   reg         i_dispatch_tx_packet_read;
@@ -63,12 +67,25 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
   wire  [3:0] o_dispatch_tx_bytes_last_word;
 
   reg         i_parser_clear;
+  reg         i_parser_update_length; //TODO tests on this?
+
+  reg         i_read_en; //TODO read tests?
+  wire [63:0] o_read_data;
+
+  reg                     i_sum_reset;
+  reg              [15:0] i_sum_reset_value;
+  reg                     i_sum_en;
+  reg  [ADDR_WIDTH+3-1:0] i_sum_bytes;
+  wire             [15:0] o_sum;
+  wire                    o_sum_done;
+
   reg         i_write_en;
   reg [63:0]  i_write_data;
 
   reg                  i_address_internal;
   reg [ADDR_WIDTH-1:0] i_address_hi;
   reg            [2:0] i_address_lo;
+
 
   reg         i_parser_ipv4_done;
   reg         i_parser_ipv6_done;
@@ -80,7 +97,7 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
   reg     [1:0] rx_state;
   reg    [12:0] rx_count;
   reg  [6299:0] rx_buf;
-  reg    [63:0] tx_buf [0:99];
+ //reg    [63:0] tx_buf [0:99];
 
   //----------------------------------------------------------------
   // Test bench macros
@@ -92,6 +109,10 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
   // Test bench tasks
   //----------------------------------------------------------------
 
+  task wait_busy;
+  while(o_busy) #10;
+  endtask
+
   task write_packet (
     input [65535:0] source,
     input    [31:0] length
@@ -101,14 +122,15 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
     integer source_ptr;
     reg [63:0] packet [0:99];
     begin
+      wait_busy();
       if (verbose_output > 0) $display("%s:%0d Send packet!", `__FILE__, `__LINE__);
       `assert( (0==(length%8)) ); // byte aligned required
       for (i=0; i<100; i=i+1) begin
         packet[i] = 64'habad_1dea_f00d_cafe;
       end
-      for (i=0; i<100; i=i+1) begin
-        tx_buf[i] = 64'hXXXX_XXXX_XXXX_XXXX;
-      end
+      //for (i=0; i<100; i=i+1) begin
+      //  tx_buf[i] = 64'hXXXX_XXXX_XXXX_XXXX;
+      //end
       packet_ptr = 1;
       source_ptr = (length % 64);
       case (source_ptr)
@@ -172,7 +194,7 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
         if (verbose_output >= 3) $display("%s:%0d packet_ptr[%0d]=%h", `__FILE__, `__LINE__, packet_ptr, packet[packet_ptr]);
         i_write_en         = 1;
         i_write_data[63:0] = packet[packet_ptr];
-        tx_buf[source_ptr] = packet[packet_ptr];
+        //tx_buf[source_ptr] = packet[packet_ptr];
         source_ptr = source_ptr + 1;
         #10 ;
         //i_process_initial = 'b1; //1 cycle delayed
@@ -185,6 +207,7 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
 
   task transmit_packet( input ipv6 );
     begin
+      wait_busy();
       if (ipv6) begin
         i_parser_ipv6_done = 1;
         #10 ;
@@ -205,6 +228,7 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
     input           ipv6
   );
     begin
+      wait_busy();
       write_packet ( source, length );
       transmit_packet ( ipv6 );
     end
@@ -239,6 +263,96 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
   end
   endtask
 
+  task write( input [ADDR_WIDTH+3-1:0] addr, input [63:0] data );
+  begin
+    $display("%s:%0d write(%h, %h)", `__FILE__, `__LINE__, addr, data);
+    i_address_internal = 0;
+    { i_address_hi, i_address_lo } = addr;
+    i_write_en = 1;
+    i_write_data = data;
+    #10;
+    i_address_hi = 0;
+    i_address_lo = 0;
+    i_write_en   = 0;
+    i_write_data = 0;
+    wait_busy();
+  end
+  endtask
+
+  task init_tx( input [ADDR_WIDTH+3-1:0] addr, input [63:0] pattern, input integer blocks);
+  integer i;
+  reg [ADDR_WIDTH+3-1:0] a;
+  begin
+    a = addr;
+    for (i = 0; i < blocks; i = i + 1) begin
+      write(a, pattern);
+      a = a + 8;
+    end
+  end
+  endtask
+
+
+  task read( input [ADDR_WIDTH+3-1:0] addr, output [63:0] data );
+  begin
+    i_address_internal = 0;
+    { i_address_hi, i_address_lo } = addr;
+    i_read_en = 1;
+    #10;
+    i_address_hi = 0;
+    i_address_lo = 0;
+    i_read_en   = 0;
+    data = o_read_data;
+  end
+  endtask
+
+  task read_and_hexdump( input [ADDR_WIDTH+3-1:0] addr, input integer blocks );
+  integer i;
+  reg [ADDR_WIDTH+3-1:0] a;
+  reg [63:0] data;
+  begin
+    a = addr;
+    for (i = 0; i < blocks; i = i + 1) begin
+      read(a, data);
+      $display("%s:%0d hexdump[%h]: %h", `__FILE__, `__LINE__, a, data);
+      a = a + 8;
+    end
+  end
+  endtask
+
+  task checksum( input [ADDR_WIDTH+3-1:0] addr, input [ADDR_WIDTH+3-1:0] bytes );
+  begin
+    checksum_reset(0);
+    checksum_without_reset(addr, bytes);
+  end
+  endtask
+
+  task checksum_reset(input [15:0] reset_value);
+  begin
+    i_sum_reset = 1;
+    i_sum_reset_value = reset_value;
+    #10;
+    i_sum_reset = 0;
+    i_sum_reset_value = 0;
+  end
+  endtask
+
+  task checksum_without_reset( input [ADDR_WIDTH+3-1:0] addr, input [ADDR_WIDTH+3-1:0] bytes );
+  begin
+    $display("%s:%0d checksum_without_reset(%h,%h)", `__FILE__, `__LINE__, addr, bytes);
+    i_address_internal = 0;
+    { i_address_hi, i_address_lo } = addr;
+    i_sum_en = 1;
+    i_sum_bytes = bytes;
+    #20;
+    i_address_hi = 0;
+    i_address_lo = 0;
+    i_sum_en     = 0;
+    i_sum_bytes  = 0;
+    while (o_sum_done === 1'b0) #10;
+    `assert(o_sum_done === 1'b1);
+  end
+  endtask
+
   //----------------------------------------------------------------
   // Test bench Design Under Test (DUT) instantiation
   //----------------------------------------------------------------
@@ -246,6 +360,9 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
   nts_tx_buffer #(.ADDR_WIDTH(ADDR_WIDTH)) dut (
     .i_areset(i_areset), // async reset
     .i_clk(i_clk),
+
+    .o_busy(o_busy),
+    .o_error(o_error),
 
     .o_dispatch_tx_packet_available(o_dispatch_tx_packet_available),
     .i_dispatch_tx_packet_read(i_dispatch_tx_packet_read),
@@ -255,7 +372,15 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
     .o_dispatch_tx_bytes_last_word(o_dispatch_tx_bytes_last_word),
 
     .i_parser_clear(i_parser_clear),
-
+    .i_parser_update_length(i_parser_update_length),
+    .i_read_en(i_read_en),
+    .o_read_data(o_read_data),
+    .i_sum_reset(i_sum_reset),
+    .i_sum_reset_value(i_sum_reset_value),
+    .i_sum_en(i_sum_en),
+    .i_sum_bytes(i_sum_bytes),
+    .o_sum(o_sum),
+    .o_sum_done(o_sum_done),
     .i_write_en(i_write_en),
     .i_write_data(i_write_data),
 
@@ -274,6 +399,284 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
   // Test bench code
   //----------------------------------------------------------------
 
+  //Validates IPv4 checksum calculation for with different offsets to check stability of implementations.
+  task ipv4_header_checksum_different_offsets;
+  begin
+    init_tx(0, 64'hF0F0_F0F0_F0F0_F0F0, 6);
+    read_and_hexdump(0, 5);
+    //Example IP header (with 0 checksum)
+    write(7+0*8, 64'h4500_0073_0000_4000);
+    write(7+1*8, 64'h4011_0000_c0a8_0001);
+    write(7+2*8, 64'hc0a8_00c7_0035_e97c);
+    write(7+3*8, 64'h005f_279f_1e4b_8180);
+    read_and_hexdump(7, 4);
+    checksum(7, 20);
+    `assert(o_sum == 'h479E);
+
+    init_tx(0, 64'hE0E0_E0E0_E0E0_E0E0, 6);
+    read_and_hexdump(0, 5);
+    write(2+0*8, 64'h4500_0073_0000_4000);
+    write(2+1*8, 64'h4011_0000_c0a8_0001);
+    write(2+2*8, 64'hc0a8_00c7_0035_e97c);
+    write(2+3*8, 64'h005f_279f_1e4b_8180);
+    read_and_hexdump(2, 4);
+    checksum(2, 20);
+    `assert(o_sum == 'h479E);
+
+    init_tx(0, 64'hD0D0_D0D0_D0D0_D0D0, 6);
+    read_and_hexdump(0, 5);
+    write(1+0*8, 64'h4500_0073_0000_4000);
+    write(1+1*8, 64'h4011_0000_c0a8_0001);
+    write(1+2*8, 64'hc0a8_00c7_0035_e97c);
+    write(1+3*8, 64'h005f_279f_1e4b_8180);
+    read_and_hexdump(1, 4);
+    checksum(1, 20);
+    `assert(o_sum == 'h479E);
+
+    init_tx(0, 64'hC0C0_C0C0_C0C0_C0C0, 6);
+    read_and_hexdump(0, 5);
+    write(0+0*8, 64'h4500_0073_0000_4000);
+    write(0+1*8, 64'h4011_0000_c0a8_0001);
+    write(0+2*8, 64'hc0a8_00c7_0035_e97c);
+    write(0+3*8, 64'h005f_279f_1e4b_8180);
+    read_and_hexdump(0, 4);
+    checksum(0, 20);
+    `assert(o_sum == 'h479E);
+  end
+  endtask
+
+  //Validates a IPv4 header with valid checksum. Also tries different lengths to check that code is stable.
+  task ipv4_header_checksum_ffff;
+  begin
+    //Example IP header (with valid checksum)
+    init_tx(0, 64'hC0C0_C0C0_C0C0_C0C0, 6);
+    read_and_hexdump(0, 5);
+    write(3+0*8, 64'h4500_0073_0000_4000);
+    write(3+1*8, 64'h4011_b861_c0a8_0001);
+    write(3+2*8, 64'hc0a8_00c7_0035_e97c);
+    write(3+3*8, 64'h005f_279f_1e4b_8180);
+
+    //Validate with correct length should yield ffff (0) because checksum OK.
+    checksum(3, 20);
+    `assert(o_sum === 'hffff); //FFFF = checksum OK (inverts to zero);
+
+    checksum(3, 0); //sanity check: do not hang on empty checksum operations.
+    `assert(o_sum === 'h0000); //sanity check: empty checks should return zero
+
+    checksum(3, 1);
+    `assert(o_sum == 'h4500);
+
+    checksum(3, 2);
+    `assert(o_sum == 'h4500);
+
+    checksum(3, 3);
+    `assert(o_sum == 'h4500);
+
+    checksum(3, 4);
+    `assert(o_sum == 'h4573);
+
+    checksum(3, 5);
+    `assert(o_sum == 'h4573);
+
+    checksum(3, 6);
+    `assert(o_sum == 'h4573);
+
+    checksum(3, 7);
+    `assert(o_sum == 'h8573);
+
+    checksum(3, 8);
+    `assert(o_sum == 'h8573);
+
+    checksum(3, 9);
+    `assert(o_sum == 'hc573);
+
+    checksum(3, 10);
+    `assert(o_sum == 'hc584);
+
+    checksum(3, 11);
+    `assert(o_sum == 'h7d85);
+
+    checksum(3, 12);
+    `assert(o_sum == 'h7de6);
+
+    checksum(3, 13);
+    `assert(o_sum == 'h3de7);
+
+    checksum(3, 14);
+    `assert(o_sum == 'h3e8f);
+
+    checksum(3, 15);
+    `assert(o_sum == 'h3e8f);
+
+    checksum(3, 16);
+    `assert(o_sum == 'h3e90);
+
+    checksum(3, 17);
+    `assert(o_sum == 'hfe90);
+
+    checksum(3, 18);
+    `assert(o_sum == 'hff38);
+
+    checksum(3, 19);
+    `assert(o_sum == 'hff38);
+
+    checksum(3, 20);
+    `assert(o_sum == 'hffff);
+
+    checksum(3, 21);
+    `assert(o_sum == 'hffff);
+
+    checksum(3, 22);
+    `assert(o_sum == 'h0035);
+
+    checksum(3, 23);
+    `assert(o_sum == 'he935);
+
+    checksum(3, 24);
+    `assert(o_sum == 'he9b1);
+
+    checksum(3, 25);
+    `assert(o_sum == 'he9b1);
+
+    checksum(3, 26);
+    `assert(o_sum == 'hea10);
+
+    checksum(3, 27);
+    `assert(o_sum == 'h1111);
+
+    checksum(3, 28);
+    `assert(o_sum == 'h11b0);
+
+    checksum(3, 29);
+    `assert(o_sum == 'h2fb0);
+
+    checksum(3, 30);
+    `assert(o_sum == 'h2ffb);
+
+    checksum(3, 31);
+    `assert(o_sum == 'hb0fb);
+
+    checksum(3, 32);
+    `assert(o_sum == 'hb17b);
+  end
+  endtask
+
+  task test_udp_checksum;
+  begin
+    write(14+0*8, 64'h4500_004a_6581_4000);
+    write(14+1*8, 64'h4011_6eca_c0a8_0065);
+    write(14+2*8, 64'h44a8_60a2_8206_0035);
+    write(14+3*8, 64'h0036_0000_79d0_0100);
+    write(14+4*8, 64'h0001_0000_0000_0000);
+    write(14+5*8, 64'h0331_3135_0331_3031);
+    write(14+6*8, 64'h0331_3938_0331_3332);
+    write(14+7*8, 64'h0769_6e2d_6164_6472);
+    write(14+8*8, 64'h0461_7270_6100_000C);
+    write(14+9*8, 64'h0001_F0F0_F0F0_F0F0); // 0001 followed by garbage
+    checksum_reset('h11);
+    checksum_without_reset(14+12, 4+4); //14 = eth overhead, 12 = ipv4 ports offset. 4+4 = ipv4 addresses
+    checksum_without_reset(14+20+2+2, 2); //14 = eth overhead, 20 = ipv4 overhead
+    checksum_without_reset(14+20, 'h0036); //34: udp data offset
+    `assert(o_sum == 'h51C3);
+    write(14+0*8, 64'h4500_004a_6581_4000);
+    write(14+1*8, 64'h4011_6eca_c0a8_0065);
+    write(14+2*8, 64'h44a8_60a2_8206_0035);
+    write(14+3*8, 64'h0036_AE3C_79d0_0100); //AE3C = NOT 51C3
+    write(14+4*8, 64'h0001_0000_0000_0000);
+    write(14+5*8, 64'h0331_3135_0331_3031);
+    write(14+6*8, 64'h0331_3938_0331_3332);
+    write(14+7*8, 64'h0769_6e2d_6164_6472);
+    write(14+8*8, 64'h0461_7270_6100_000C);
+    write(14+9*8, 64'h0001_F0F0_F0F0_F0F0); // 0001 followed by garbage
+    checksum_reset('h11);
+    checksum_without_reset(14+12, 4+4); //14 = eth overhead, 12 = ipv4 ports offset. 4+4 = ipv4 addresses
+    checksum_without_reset(14+20+2+2, 2); //14 = eth overhead, 20 = ipv4 overhead
+    checksum_without_reset(14+20, 'h0036); //34: udp data offset
+    `assert(o_sum == 'hffff);
+  end
+  endtask
+
+  task write128( input [ADDR_WIDTH+3-1:0] addr, input [127:0] data);
+  begin
+    write(addr, data[127:64]);
+    write(addr+8, data[63:0]);
+  end
+  endtask
+
+  task test_udp_checksum_nts;
+  begin
+    // a real NTS packet, from a tcpdump hexdump.
+    write128(  'h0000, 128'hd8cb8a36ac3c000000000bb208004500); // ...6.<........E.
+    write128(  'h0010, 128'h03d884df40003c11c469c23acad350d8); // ....@.<..i.:..P.
+    write128(  'h0020, 128'h13e6101bc3bb03c4bab8240200e70000); // ..........$.....
+    write128(  'h0030, 128'h000100000003c23aca14e1d017b0fc6c); // .......:.......l
+    write128(  'h0040, 128'h62eed534eec50f124076e1d017b2c4f0); // b..4....@v......
+    write128(  'h0050, 128'h1176e1d017b2c4ff4296010400244c0a); // .v......B....$L.
+    write128(  'h0060, 128'h480f8eb6b35c0ab34d80079eacd63b0a); // H....\..M.....;.
+    write128(  'h0070, 128'h5d5eedad8f7f80ade885725e47490404); // ]^........r^GI..
+    write128(  'h0080, 128'h036800100350fbf5474b92f40c831c2b); // .h...P..GK.....+
+    write128(  'h0090, 128'hb74475a5c559f9e2fa626df5d35e055d); // .Du..Y...bm..^.]
+    write128(  'h00a0, 128'h389447e61aa6a59a595f1d242d2b3346); // 8.G.....Y_.$-+3F
+    write128(  'h00b0, 128'h6cb38a14195c242ade1e140b04a09ec5); // l....\$*........
+    write128(  'h00c0, 128'hd41a1380c2ca2a8be6a8905e271e5796); // ......*....^'.W.
+    write128(  'h00d0, 128'hdc40bdc735b3c839ec787c95b69b9311); // .@..5..9.x|.....
+    write128(  'h00e0, 128'ha9c04c59d701504cc3834c7fe18acc60); // ..LY..PL..L....`
+    write128(  'h00f0, 128'hd2ec2c6d5a6d4baa861c087e47db49b7); // ..,mZmK....~G.I.
+    write128(  'h0100, 128'hf23f77e67be538a6851452be8cf646b8); // .?w.{.8...R...F.
+    write128(  'h0110, 128'hd1f10c4c9329c11b9f1cd48eec0f8f39); // ...L.).........9
+    write128(  'h0120, 128'hc2aca7c2ab53b431cfb06fb43943b7a7); // .....S.1..o.9C..
+    write128(  'h0130, 128'hda448427c20b8fdbde0dc783895156dc); // .D.'.........QV.
+    write128(  'h0140, 128'h5bd056cfd41ed1b748eba5b563ff4a2c); // [.V.....H...c.J,
+    write128(  'h0150, 128'h0542e9e2ae802688f452f2f3420358df); // .B....&..R..B.X.
+    write128(  'h0160, 128'hb6b5eae1d69b74a1997ff2cc4247ff1b); // ......t.....BG..
+    write128(  'h0170, 128'h898912d5e8b6e26ad56e90d62dc871fa); // .......j.n..-.q.
+    write128(  'h0180, 128'hc24ae1839ca04a5bbb767c8144aac49a); // .J....J[.v|.D...
+    write128(  'h0190, 128'h717328465ee64e65566fe4dc54917898); // qs(F^.NeVo..T.x.
+    write128(  'h01a0, 128'hbea220307cdaee3eafdab922ca424990); // ...0|..>...".BI.
+    write128(  'h01b0, 128'h772edb678827ee89098b34678e563b0a); // w..g.'....4g.V;.
+    write128(  'h01c0, 128'had5e174fc7316de681f52e009515f376); // .^.O.1m........v
+    write128(  'h01d0, 128'h611dd99b49bc687424a8ea2d5f2bd06b); // a...I.ht$..-_+.k
+    write128(  'h01e0, 128'h557d7bed55354799c767278cc1c65767); // U}{.U5G..g'...Wg
+    write128(  'h01f0, 128'h30f6868f841539ff2cea3c16bf781c73); // 0.....9.,.<..x.s
+    write128(  'h0200, 128'he224497a6bc67f9782a6369137ed378c); // .$Izk.....6.7.7.
+    write128(  'h0210, 128'h9fd15354a55499d39e346d8e911220d0); // ..ST.T...4m.....
+    write128(  'h0220, 128'h76f21cd70e662dd8502e5efc70a797b5); // v....f-.P.^.p...
+    write128(  'h0230, 128'ha4f5e209a377863470b518e46ad9fcb4); // .....w.4p...j...
+    write128(  'h0240, 128'hc521ea5ac401ccbbfc8dcbbcf242b0d4); // .!.Z.........B..
+    write128(  'h0250, 128'hd68e1a946622f748cd17e1ac1ba46306); // ....f".H......c.
+    write128(  'h0260, 128'hadf7c078b854899092bf13953f9a22c9); // ...x.T......?.".
+    write128(  'h0270, 128'h4001bfd63f984690978e1be982232f4c); // @...?.F......#/L
+    write128(  'h0280, 128'h176cd524974068984a755881206bca1a); // .l.$.@h.JuX..k..
+    write128(  'h0290, 128'hba59c20b87ea197058e399892217450f); // .Y.....pX...".E.
+    write128(  'h02a0, 128'hb84d8af8299e6ebeb9756d7fe680643d); // .M..).n..um...d=
+    write128(  'h02b0, 128'ha8ffce59b0b35449680730c8af567dc9); // ...Y..TIh.0..V}.
+    write128(  'h02c0, 128'h2edec8c1c83a44adc752a2e976f5abc5); // .....:D..R..v...
+    write128(  'h02d0, 128'h2229a05bc2d6de494e236aabf4f17796); // ").[...IN#j...w.
+    write128(  'h02e0, 128'h97b1404c99ec52cb4e9d44af7f6a7131); // ..@L..R.N.D..jq1
+    write128(  'h02f0, 128'haab16b01509a4fa73981c2f19a8dba75); // ..k.P.O.9......u
+    write128(  'h0300, 128'h2da5f099872a3a5ae26d2c344f86e81c); // -....*:Z.m,4O...
+    write128(  'h0310, 128'hf02a6e79447814f1cbbc9fabcedfd986); // .*nyDx..........
+    write128(  'h0320, 128'h657cde04f1596e5d170dda86e9329890); // e|...Yn].....2..
+    write128(  'h0330, 128'h99cf45cb1dd063248ab1301615720730); // ..E...c$..0..r.0
+    write128(  'h0340, 128'h197760de4646fee98f41d55cf3d5f422); // .w`.FF...A.\..."
+    write128(  'h0350, 128'h3d50721655c9b3cbdc01f34b789d9d7e); // =Pr.U......Kx..~
+    write128(  'h0360, 128'hfb85f21bcee97818624d4553c04527e2); // ......x.bMES.E'.
+    write128(  'h0370, 128'h37d4695d8057aa3d6143932b0ba69934); // 7.i].W.=aC.+...4
+    write128(  'h0380, 128'h9a70c427b5ca9632e437dbfee490e174); // .p.'...2.7.....t
+    write128(  'h0390, 128'h563898ccf1c8c4b2158964c335adea16); // V8........d.5...
+    write128(  'h03a0, 128'hbb8fa6522d69e62b95c4f53be9036364); // ...R-i.+...;..cd
+    write128(  'h03b0, 128'hbf6f7ed1c680493f64301ff4a74237ef); // .o~...I?d0...B7.
+    write128(  'h03c0, 128'h6f58321f6f8c839e8c087e1d9a956ae0); // oX2.o.....~...j.
+    write128(  'h03d0, 128'hd4641be799959ecf3b4b3382e90e97bd); // .d......;K3.....
+    write128(  'h03e0, 128'h6d2b4e3bd23c00000000000000000000); //  m+N;.<
+    checksum_reset('h11);
+    checksum_without_reset(14+12, 4+4); //14 = eth overhead, 12 = ipv4 ports offset. 4+4 = ipv4 addresses
+    checksum_without_reset(14+20+2+2, 2); //14 = eth overhead, 20 = ipv4 overhead
+    checksum_without_reset(14+20, 'h03c4); //34: udp data offset
+    `assert(o_sum == 'hffff);
+  end
+  endtask
+
   initial begin
     $display("Test start: %s:%0d", `__FILE__, `__LINE__);
 
@@ -285,6 +688,11 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
     //i_dispatch_tx_fifo_rd_en  = 0;
 
     i_parser_clear  = 0;
+    i_parser_update_length = 0;
+    i_read_en    = 0;
+    i_sum_reset  = 0;
+    i_sum_en     = 0;
+    i_sum_bytes  = 0;
     i_write_en   = 0;
     i_write_data = 0;
     i_address_internal = 1;
@@ -346,13 +754,20 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
     #10;
     receive_packet();
 
+    i_write_en = 0;
+
+    ipv4_header_checksum_different_offsets();
+    ipv4_header_checksum_ffff();
+    test_udp_checksum();
+    test_udp_checksum_nts();
+
+    #2000;
     $display("Test stop: %s:%0d", `__FILE__, `__LINE__);
     $finish;
   end
 
   always @(posedge i_clk, posedge i_areset)
   begin : simple_rx
-    integer i;
     if (i_areset) begin
       i_dispatch_tx_packet_read = 0;
       i_dispatch_tx_fifo_rd_en = 0;
@@ -405,4 +820,27 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
     #5 i_clk = ~i_clk;
   end
 
+  always @*
+    $display("%s:%0d Warning: o_error: %h", `__FILE__, `__LINE__, o_error);
+  always @*
+    $display("%s:%0d o_parser_current_memory_full: %h", `__FILE__, `__LINE__, o_parser_current_memory_full);
+  always @*
+    $display("%s:%0d o_dispatch_tx_bytes_last_word: %h", `__FILE__, `__LINE__, o_dispatch_tx_bytes_last_word);
+  //always @*
+  //  $display("%s:%0d o_read_data: %h", `__FILE__, `__LINE__, o_read_data);
+  always @*
+    $display("%s:%0d o_sum: %h", `__FILE__, `__LINE__, o_sum);
+  always @*
+    $display("%s:%0d ram_addr_hi_reg[0] %h", `__FILE__, `__LINE__, dut.ram_addr_hi_reg[ 0 ] );
+  always @*
+    $display("%s:%0d ram_addr_hi_reg[1] %h", `__FILE__, `__LINE__, dut.ram_addr_hi_reg[ 1 ] );
+  always @(posedge i_clk)
+    if (dut.sum_cycle_reg)
+      $display("%s:%0d data: %h", `__FILE__, `__LINE__, dut.ram_rd_data[ dut.parser ] );
+//always @*
+//  $display("%s:%0d sum_addr_we: %h sum_addr_new: %h", `__FILE__, `__LINE__, dut.sum_addr_we, dut.sum_addr_new);
+//always @*
+//  $display("%s:%0d sum_counter_we: %h sum_counter_new: %h", `__FILE__, `__LINE__, dut.sum_counter_we, dut.sum_counter_new);
+//always @*
+//  $display("%s:%0d sum_counter_reg: %h", `__FILE__, `__LINE__, dut.sum_counter_reg);
 endmodule

@@ -246,7 +246,7 @@ $(OUTPUT)/nts_tx_buffer_tb.vvp: \
  ../src/rtl/memory/memory_ctrl.v \
  ../src/rtl/memory/bram_dpge.v
 ifeq (,$(NO_VLINT))
-	-$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY $^
+	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY $^
 endif
 	iverilog -o $@ $^
 

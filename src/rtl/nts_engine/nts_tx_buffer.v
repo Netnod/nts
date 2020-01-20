@@ -52,6 +52,12 @@ module nts_tx_buffer #(
   input  wire        i_read_en,
   output wire [63:0] o_read_data,
 
+  input  wire                    i_sum_reset,
+  input  wire             [15:0] i_sum_reset_value,
+  input  wire                    i_sum_en,
+  input  wire [ADDR_WIDTH+3-1:0] i_sum_bytes,
+  output wire             [15:0] o_sum,
+  output wire                    o_sum_done,
 
   input  wire                  i_address_internal,
   input  wire [ADDR_WIDTH-1:0] i_address_hi,
@@ -71,8 +77,9 @@ module nts_tx_buffer #(
   //----------------------------------------------------------------
 
   localparam STATE_EMPTY                = 0;
-  localparam STATE_HAS_DATA             = 1;
-  localparam STATE_FIFO_OUT             = 2;
+  localparam STATE_CHECKSUM             = 1;
+  localparam STATE_HAS_DATA             = 2;
+  localparam STATE_FIFO_OUT             = 3;
   localparam STATE_ERROR_GENERAL        = 4;
   localparam STATE_ERROR_BUFFER_OVERRUN = 5;
 
@@ -89,6 +96,9 @@ module nts_tx_buffer #(
   //----------------------------------------------------------------
   // Registers including update variables and write enable.
   //----------------------------------------------------------------
+
+  wire                 bad_input_new;
+  reg                  bad_input_reg;
 
   reg                  bytes_last_word_we  [0:1];
   reg            [3:0] bytes_last_word_new [0:1];
@@ -117,6 +127,24 @@ module nts_tx_buffer #(
   reg                  read_cycle_new;
   reg                  read_cycle_reg;
   reg           [63:0] read_data;
+
+  reg                    sum_addr_we;
+  reg [ADDR_WIDTH+3-1:0] sum_addr_new;
+  reg [ADDR_WIDTH+3-1:0] sum_addr_reg;
+
+  reg        sum_we;
+  reg [15:0] sum_new;
+  reg [15:0] sum_reg;
+
+  reg                    sum_counter_we;
+  reg [ADDR_WIDTH+3-1:0] sum_counter_new;
+  reg [ADDR_WIDTH+3-1:0] sum_counter_reg;
+
+  reg sum_cycle_new;
+  reg sum_cycle_reg;
+
+  reg sum_done_new;
+  reg sum_done_reg;
 
   reg                  sync_reset_metastable;
   reg                  sync_reset;
@@ -151,8 +179,11 @@ module nts_tx_buffer #(
                    (mem_state_reg[1] == STATE_ERROR_GENERAL) ||
                    ram_error[0] ||
                    ram_error[1] ||
-                   (mem_state_reg[parser] == STATE_EMPTY && i_read_en);
-                   //TODO raise error if multiple command signals risen
+                   bad_input_reg;
+
+  assign bad_input_new = (mem_state_reg[parser] == STATE_EMPTY) && //TODO raise error if multiple command signals risen
+                         (i_read_en || i_sum_en || i_parser_update_length || i_parser_ipv4_done || i_parser_ipv6_done);
+
 
   assign o_dispatch_tx_packet_available  = mem_state_reg[ fifo ] == STATE_FIFO_OUT;
   assign o_dispatch_tx_fifo_empty        = ram_addr_hi_reg[ fifo ] == fifo_word_count_p1;
@@ -163,6 +194,8 @@ module nts_tx_buffer #(
                                            (mem_state_reg[ parser ] == STATE_HAS_DATA && ram_addr_hi_reg[ parser ] == ADDRESS_ALMOST_FULL && i_write_en) ||
                                            (mem_state_reg[ parser ] > STATE_HAS_DATA); //TODO verify
   assign o_read_data = read_data;
+  assign o_sum = sum_reg;
+  assign o_sum_done = sum_done_reg;
 
   //----------------------------------------------------------------
   // Memory holding the Tx buffer
@@ -240,17 +273,32 @@ module nts_tx_buffer #(
   begin : reg_update
     integer i;
     if (i_areset == 1'b1) begin
+      bad_input_reg <= 0;
       current_mem_reg <= 0;
       read_cycle_reg  <= 0;
+      sum_reg         <= 0;
+      sum_addr_reg    <= 0;
+      sum_done_reg    <= 0;
+      sum_counter_reg <= 0;
+      sum_cycle_reg   <= 0;
       for (i = 0; i < 2; i = i + 1) begin
         bytes_last_word_reg[i] <= 0;
         mem_state_reg[i] <= STATE_EMPTY;
         word_count_reg[i] <= 'b0;
       end
     end else begin
+      bad_input_reg <= bad_input_new;
       if (current_mem_we)
         current_mem_reg <= current_mem_new;
       read_cycle_reg <= read_cycle_new;
+      if (sum_we)
+        sum_reg <= sum_new;
+      if (sum_addr_we)
+        sum_addr_reg <= sum_addr_new;
+      if (sum_counter_we)
+        sum_counter_reg <= sum_counter_new;
+      sum_cycle_reg <= sum_cycle_new;
+      sum_done_reg <= sum_done_new;
       for (i = 0; i < 2; i = i + 1) begin
         if (bytes_last_word_we[i])
           bytes_last_word_reg[i] <= bytes_last_word_new[i];
@@ -265,6 +313,7 @@ module nts_tx_buffer #(
   //----------------------------------------------------------------
   // Parser/Crypto read port.
   //----------------------------------------------------------------
+
   always @*
   begin
     read_data = 64'hdeadbeefbaadf00d;
@@ -272,10 +321,140 @@ module nts_tx_buffer #(
       read_data = ram_rd_data[parser];
   end
 
+  //----------------------------------------------------------------
+  // Internet checksum code
+  //----------------------------------------------------------------
+
+  task internet_sum(
+  //input   [7:0] sum_ctrl,
+    input  [15:0] s_in,
+    input  [15:0] data0,
+    input  [15:0] data1,
+    input  [15:0] data2,
+    input  [15:0] data3,
+    output [15:0] s_out
+  );
+  begin : internet_sum_locals
+    reg [15:0] sum_b [0:1];
+    reg [15:0] sum_c;
+    reg [15:0] sum_d;
+    reg [3:0] carry;
+    reg [2:0] msb;
+    { carry[0], sum_b[0] } = { 1'b0, data0 } + { 1'b0, data1 };
+    { carry[1], sum_b[1] } = { 1'b0, data2 } + { 1'b0, data3 };
+    { carry[2], sum_c } = { 1'b0, sum_b[0] } + { 1'b0, sum_b[1] };
+    { carry[3], sum_d } = { 1'b0, sum_c } + { 1'b0, s_in }; //add data sums to original sum
+
+    msb = { 2'b00, carry[0] } +
+          { 2'b00, carry[1] } +
+          { 2'b00, carry[2] } +
+          { 2'b00, carry[3] };
+
+    s_out = sum_d + { 13'h0, msb }; //cannot overflow, largest number is 5 * 0xffff = 0x4FFFB = 0xFFFB + 4 = 0xffff
+  //$display("%s:%0d sum_counter_reg %0d", `__FILE__, `__LINE__, sum_counter_reg);
+  //$display("%s:%0d %h + %h + %h + %h + %h = %h", `__FILE__, `__LINE__,
+  //        s_in,
+  //        data0, data1, data2, data3,
+  //        s_out);
+  end
+  endtask
+
+  always @*
+  begin : sum_process
+    reg  [7:0] sum_ctrl;
+    sum_we = 0;
+    sum_new = 0;
+    sum_addr_we = 0;
+    sum_addr_new = 0;
+    sum_counter_we = 0;
+    sum_counter_new = 0;
+    sum_ctrl = 0;
+    sum_cycle_new = 0;
+    sum_done_new = 0;
+
+    if (i_sum_reset) begin
+      sum_we = 1;
+      sum_new = i_sum_reset_value;
+    end
+    else if (sum_cycle_reg) begin : sum_ctrl_locals
+      reg [63:0] data;
+      reg [15:0] d0;
+      reg [15:0] d1;
+      reg [15:0] d2;
+      reg [15:0] d3;
+      sum_we = 1;
+
+      case (sum_counter_reg)
+        0: sum_ctrl = 8'b0000_0000;
+        1: sum_ctrl = 8'b1000_0000;
+        2: sum_ctrl = 8'b1100_0000;
+        3: sum_ctrl = 8'b1110_0000;
+        4: sum_ctrl = 8'b1111_0000;
+        5: sum_ctrl = 8'b1111_1000;
+        6: sum_ctrl = 8'b1111_1100;
+        7: sum_ctrl = 8'b1111_1110;
+        default: sum_ctrl = 8'b1111_1111;
+      endcase
+
+      if (sum_counter_reg <= 8) sum_done_new = 1;
+
+      data = ram_rd_data[parser];
+      d0 = { sum_ctrl[7] ? data[63-:8] : 8'h00, sum_ctrl[6] ? data[55-:8] : 8'h00 };
+      d1 = { sum_ctrl[5] ? data[47-:8] : 8'h00, sum_ctrl[4] ? data[39-:8] : 8'h00 };
+      d2 = { sum_ctrl[3] ? data[31-:8] : 8'h00, sum_ctrl[2] ? data[23-:8] : 8'h00 };
+      d3 = { sum_ctrl[1] ? data[15-:8] : 8'h00, sum_ctrl[0] ? data[7-:8] : 8'h00 };
+      //$display("%s:%0d %h - %h %h - %h %h %h %h", `__FILE__, `__LINE__, sum_counter_reg, sum_ctrl, data, d0, d1, d2, d3 );
+      internet_sum(sum_reg, d0, d1, d2, d3, sum_new);
+    end
+
+    case ( mem_state_reg[parser] )
+      STATE_HAS_DATA:
+        begin
+          if (i_sum_en) begin
+            sum_addr_we = 1;
+            sum_addr_new = { i_address_hi, i_address_lo };
+            sum_counter_we = 1;
+            sum_counter_new = i_sum_bytes;
+            if (i_sum_bytes == 0)
+              sum_done_new = 1;
+          end
+        end
+      STATE_CHECKSUM:
+        begin
+          sum_addr_we = 1;
+          sum_addr_new = sum_addr_reg + 8;
+          sum_cycle_new = 1;
+          if (sum_cycle_reg) begin
+            if (sum_counter_reg > 8) begin
+              sum_counter_we = 1;
+              sum_counter_new = sum_counter_reg - 8;
+            end else begin
+              sum_counter_we = 1;
+              sum_counter_new = 0;
+            end
+          end
+        end
+      default: ;
+    endcase
+  end
+
+
+//always @*
+//begin
+//  $display("%s:%0d %h + %h + %h + %h", `__FILE__, `__LINE__, sum_data_reg[0], sum_data_reg[1], sum_data_reg[2], sum_data_reg[3]);
+//  display("%s:%0d ADDRESS_FULL: ", `__FILE__, `__LINE__, ADDRESS_FULL);
+//end
+
+
+  //----------------------------------------------------------------
+  // Parser/FIFO main proc
+  //----------------------------------------------------------------
+
   always @*
   begin
     current_mem_we = 0;
     current_mem_new = 0;
+    read_cycle_new = 0;
 
     begin : defaults
       integer i;
@@ -302,7 +481,6 @@ module nts_tx_buffer #(
         word_count_new[i] = 0;
       end
     end
-    read_cycle_new = 0;
 
     if (i_parser_clear) begin
       mem_state_we  [parser] = 1;
@@ -342,6 +520,10 @@ module nts_tx_buffer #(
           end
         STATE_HAS_DATA:
           begin
+            if (i_sum_en && i_sum_bytes != 0) begin
+              mem_state_we[parser]  = 1;
+              mem_state_new[parser] = STATE_CHECKSUM;
+            end
             if (i_read_en) begin
               ram_addr_lo[parser] = i_address_lo;
               ram_addr_hi[parser] = i_address_hi;
@@ -391,6 +573,15 @@ module nts_tx_buffer #(
             if (i_parser_ipv4_done || i_parser_ipv6_done) begin
               mem_state_we[parser] = 1;
               mem_state_new[parser] = STATE_FIFO_OUT;
+            end
+          end
+        STATE_CHECKSUM:
+          begin
+            { ram_addr_hi[parser], ram_addr_lo[parser] } = sum_addr_reg;
+            ram_rd[parser] = 1;
+            if (sum_counter_reg <= 8) begin
+              mem_state_we[parser] = 1;
+              mem_state_new[parser] = STATE_HAS_DATA;
             end
           end
         STATE_FIFO_OUT:

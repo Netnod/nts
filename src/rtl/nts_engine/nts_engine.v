@@ -183,6 +183,10 @@ module nts_engine #(
   wire      [ADDR_WIDTH+3-1:0] parser_txbuf_address;
   wire                         parser_txbuf_write_en;
   wire                  [63:0] parser_txbuf_write_data;
+  wire                         parser_txbuf_sum_reset;
+  wire                  [15:0] parser_txbuf_sum_reset_value;
+  wire                         parser_txbuf_sum_en;
+  wire      [ADDR_WIDTH+3-1:0] parser_txbuf_sum_bytes;
   wire                         parser_txbuf_update_length;
   wire                         parser_txbuf_ipv4_done;
   wire                         parser_txbuf_ipv6_done;
@@ -191,6 +195,8 @@ module nts_engine #(
   wire                         txbuf_busy;
   wire                         txbuf_parser_full;
   wire                         txbuf_parser_empty;
+  wire                  [15:0] txbuf_parser_sum;
+  wire                         txbuf_parser_sum_done;
 
   wire                         parser_timestamp_record_rectime;
   wire                         parser_timestamp_transmit;
@@ -728,6 +734,13 @@ module nts_engine #(
     .i_read_en(crypto_txbuf_read_en),
     .o_read_data(txbuf_crypto_read_data),
 
+    .i_sum_reset(parser_txbuf_sum_reset),
+    .i_sum_reset_value(parser_txbuf_sum_reset_value),
+    .i_sum_en(parser_txbuf_sum_en),
+    .i_sum_bytes(parser_txbuf_sum_bytes),
+    .o_sum(txbuf_parser_sum),
+    .o_sum_done(txbuf_parser_sum_done),
+
     .i_address_internal(mux_tx_address_internal),
     .i_address_hi(mux_tx_address_hi),
     .i_address_lo(mux_tx_address_lo),
@@ -765,6 +778,7 @@ module nts_engine #(
    .i_last_word_data_valid(i_dispatch_rx_data_last_valid),
    .i_data(i_dispatch_rx_fifo_rd_data),
 
+   .i_tx_busy(txbuf_busy),
    .i_tx_empty(txbuf_parser_empty),
    .i_tx_full(txbuf_parser_full),
    .o_tx_clear(parser_txbuf_clear),
@@ -772,6 +786,12 @@ module nts_engine #(
    .o_tx_addr(parser_txbuf_address),
    .o_tx_w_en(parser_txbuf_write_en),
    .o_tx_w_data(parser_txbuf_write_data),
+   .i_tx_sum(txbuf_parser_sum),
+   .i_tx_sum_done(txbuf_parser_sum_done),
+   .o_tx_sum_reset(parser_txbuf_sum_reset),
+   .o_tx_sum_reset_value(parser_txbuf_sum_reset_value),
+   .o_tx_sum_en(parser_txbuf_sum_en),
+   .o_tx_sum_bytes(parser_txbuf_sum_bytes),
    .o_tx_update_length(parser_txbuf_update_length),
    .o_tx_ipv4_done(parser_txbuf_ipv4_done),
    .o_tx_ipv6_done(parser_txbuf_ipv6_done),

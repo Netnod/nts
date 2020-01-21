@@ -56,6 +56,7 @@ module nts_parser_ctrl #(
   input  wire                   [7:0] i_last_word_data_valid,
   input  wire                  [63:0] i_data,
 
+  input  wire                         i_tx_busy,
   input  wire                         i_tx_empty,
   input  wire                         i_tx_full,
   output wire                         o_tx_clear,
@@ -63,6 +64,12 @@ module nts_parser_ctrl #(
   output wire      [ADDR_WIDTH+3-1:0] o_tx_addr,
   output wire                         o_tx_w_en,
   output wire                  [63:0] o_tx_w_data,
+  input  wire                  [15:0] i_tx_sum,
+  input  wire                         i_tx_sum_done,
+  output wire                         o_tx_sum_reset,
+  output wire                  [15:0] o_tx_sum_reset_value,
+  output wire                         o_tx_sum_en,
+  output wire      [ADDR_WIDTH+3-1:0] o_tx_sum_bytes,
   output wire                         o_tx_update_length,
   output wire                         o_tx_ipv4_done,
   output wire                         o_tx_ipv6_done,
@@ -203,6 +210,17 @@ module nts_parser_ctrl #(
   localparam [BITS_STATE-1:0] STATE_TX_EMIT_TL_NL_CL         = 6'h1b;
   localparam [BITS_STATE-1:0] STATE_TX_EMIT_NONCE_CIPHERTEXT = 6'h1c;
   localparam [BITS_STATE-1:0] STATE_TX_UPDATE_LENGTH         = 6'h1d;
+  localparam [BITS_STATE-1:0] STATE_TX_WRITE_UDP_LENGTH      = 6'h1e;
+  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_RESET       = 6'h1f;
+  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_PS_SRCADDR  = 6'h20;
+  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_PS_UDPLLEN  = 6'h21;
+  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_DATAGRAM    = 6'h22;
+  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_WAIT        = 6'h23;
+  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_UDP_CSUM       = 6'h24;
+  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_UDP_CSUM_DELAY = 6'h25;
+  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_IP_HEADER_0    = 6'h26;
+  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_IP_HEADER_1    = 6'h27;
+  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_IP_HEADR_DELAY = 6'h28;
 
   localparam [BITS_STATE-1:0] STATE_ERROR_UNIMPLEMENTED      = 6'h2e;
   localparam [BITS_STATE-1:0] STATE_ERROR_GENERAL            = 6'h2f;
@@ -277,6 +295,13 @@ module nts_parser_ctrl #(
   localparam HEADER_LENGTH_ETHERNET = 6+6+2;
   localparam HEADER_LENGTH_IPV4     = 5*4; //IHL=5, word size 4 bytes.
   localparam HEADER_LENGTH_IPV6     = 40;
+
+  localparam OFFSET_ETH_IPV4_SRCADDR    = HEADER_LENGTH_ETHERNET + 12;
+  localparam OFFSET_ETH_IPV6_SRCADDR    = HEADER_LENGTH_ETHERNET + 8;
+  localparam OFFSET_ETH_IPV4_UDP        = HEADER_LENGTH_ETHERNET + HEADER_LENGTH_IPV4;
+  localparam OFFSET_ETH_IPV6_UDP        = HEADER_LENGTH_ETHERNET + HEADER_LENGTH_IPV6;
+  localparam OFFSET_ETH_IPV4_UDP_LENGTH = OFFSET_ETH_IPV4_UDP + 4;
+  localparam OFFSET_ETH_IPV6_UDP_LENGTH = OFFSET_ETH_IPV6_UDP + 4;
 
   //----------------------------------------------------------------
   // Registers including update variables and write enable.
@@ -489,6 +514,8 @@ module nts_parser_ctrl #(
   reg [15:0] tx_udp_length_new;
   reg [15:0] tx_udp_length_reg;
 
+  reg        tx_udp_checksum_we;
+  reg [15:0] tx_udp_checksum_new;
   reg [15:0] tx_udp_checksum_reg;
 
   //----------------------------------------------------------------
@@ -558,6 +585,10 @@ module nts_parser_ctrl #(
   reg                    tx_update_length;
   reg                    tx_write_en;
   reg             [63:0] tx_write_data;
+  reg                    tx_sum_reset;
+  reg             [15:0] tx_sum_reset_value;
+  reg                    tx_sum_en;
+  reg [ADDR_WIDTH+3-1:0] tx_sum_bytes;
 
   //----------------------------------------------------------------
   // Connectivity for ports etc.
@@ -593,6 +624,11 @@ module nts_parser_ctrl #(
   assign o_tx_update_length = tx_update_length;
   assign o_tx_w_en          = tx_write_en;
   assign o_tx_w_data        = tx_write_data;
+
+  assign o_tx_sum_reset       = tx_sum_reset;
+  assign o_tx_sum_reset_value = tx_sum_reset_value;
+  assign o_tx_sum_en          = tx_sum_en;
+  assign o_tx_sum_bytes       = tx_sum_bytes;
 
   assign o_timestamp_record_receive_timestamp = timestamp_record_receive_timestamp_reg;
   assign o_timestamp_transmit                 = (state_reg == STATE_TIMESTAMP);
@@ -1076,6 +1112,9 @@ module nts_parser_ctrl #(
 
       if (tx_ipv4_totlen_we)
         tx_ipv4_totlen_reg <= tx_ipv4_totlen_new;
+
+      if (tx_udp_checksum_we)
+        tx_udp_checksum_reg <= tx_udp_checksum_new;
 
       if (tx_udp_length_we)
         tx_udp_length_reg <= tx_udp_length_new;
@@ -1656,6 +1695,18 @@ module nts_parser_ctrl #(
   // TX write control
   //----------------------------------------------------------------
 
+  task tx_control_update_udp_header;
+  begin
+    if (detect_ipv4) begin
+      tx_address    = OFFSET_ETH_IPV4_UDP;
+    end else if (detect_ipv6) begin
+      tx_address    = OFFSET_ETH_IPV6_UDP;
+    end
+    tx_write_en   = 1;
+    tx_write_data = tx_header_udp;
+  end
+  endtask
+
   always @*
   begin : tx_control
 
@@ -1668,6 +1719,10 @@ module nts_parser_ctrl #(
     tx_ciphertext_length_new = BYTES_AUTH_TAG + LEN_NTS_COOKIE * nts_valid_placeholders_reg;
     tx_header_index_we = 0;
     tx_header_index_new = 0;
+    tx_sum_reset = 0;
+    tx_sum_reset_value = 0;
+    tx_sum_en = 0;
+    tx_sum_bytes = 0;
     tx_update_length = 0;
     tx_write_en = 0;
     tx_write_data = 0;
@@ -1711,6 +1766,68 @@ module nts_parser_ctrl #(
         begin
           tx_address       = copy_tx_addr_reg;
           tx_update_length = 1;
+        end
+      STATE_TX_WRITE_UDP_LENGTH: tx_control_update_udp_header();
+      STATE_UDP_CHECKSUM_RESET:
+        begin
+          tx_sum_reset = 1;
+          tx_sum_reset_value = 16'h0011; //Static pseudo header. 00: Zero pre-padding. 0x11/17: UDP protocol.
+        end
+      STATE_UDP_CHECKSUM_PS_SRCADDR:
+        begin
+          tx_sum_en = 1;
+          if (detect_ipv4) begin
+            tx_address = OFFSET_ETH_IPV4_SRCADDR;
+            tx_sum_bytes = 8; //4 byte src + 4 bytes dst
+          end else if (detect_ipv6) begin
+            tx_address = OFFSET_ETH_IPV6_SRCADDR;
+            tx_sum_bytes = 32; //16 byte src + 16 bytes dst
+          end
+        end
+      STATE_UDP_CHECKSUM_PS_UDPLLEN:
+        if (i_tx_sum_done) begin
+          tx_sum_en = 1;
+          if (detect_ipv4) begin
+            tx_address = OFFSET_ETH_IPV4_UDP_LENGTH;
+            tx_sum_bytes = 2;
+          end else if (detect_ipv6) begin
+            tx_address = OFFSET_ETH_IPV6_UDP_LENGTH;
+            tx_sum_bytes = 2;
+          end
+        end
+      STATE_UDP_CHECKSUM_DATAGRAM:
+        if (i_tx_sum_done) begin
+          tx_sum_en = 1;
+          tx_sum_bytes = tx_udp_length_reg[ADDR_WIDTH+3-1:0]; //TODO: breaks if address space > 16 bits
+          if (detect_ipv4) begin
+            tx_address = OFFSET_ETH_IPV4_UDP;
+          end else if (detect_ipv6) begin
+            tx_address = OFFSET_ETH_IPV6_UDP;
+          end
+        end
+      STATE_WRITE_NEW_UDP_CSUM:
+        begin
+          tx_control_update_udp_header();
+          //tx_write_data = 64'hF0F0_F0F0_F0F0;
+          //$display("%s:%0d UDP_CSUM: TX[%h (%0d)] = [%h]", `__FILE__, `__LINE__, tx_address, tx_address, tx_write_data);
+        end
+      STATE_WRITE_NEW_IP_HEADER_0:
+        if (detect_ipv4) begin
+          tx_address = HEADER_LENGTH_ETHERNET;
+          tx_write_en = 1;
+          tx_write_data = tx_header_ipv4[159-:64];
+          //tx_write_data = 64'hdead_f00d_dead_f00d;
+          //$display("%s:%0d IP_HEADER_0: TX[%h (%0d)] = [%h]", `__FILE__, `__LINE__, tx_address,tx_address, tx_write_data);
+        end else if (detect_ipv6) begin
+          //TODO implement
+        end
+      STATE_WRITE_NEW_IP_HEADER_1:
+        if (detect_ipv4) begin
+          tx_address = HEADER_LENGTH_ETHERNET + 8;
+          tx_write_en = 1;
+          tx_write_data = tx_header_ipv4[95-:64];
+          //tx_write_data = 64'h1337_1337_1337_1337;
+          //$display("%s:%0d IP_HEADER_0: TX[%h (%0d)] = [%h]", `__FILE__, `__LINE__, tx_address, tx_address, tx_write_data);
         end
       default: ;
     endcase
@@ -2285,6 +2402,65 @@ module nts_parser_ctrl #(
       STATE_TX_UPDATE_LENGTH:
         begin
           state_we  = 'b1;
+          state_new = STATE_TX_WRITE_UDP_LENGTH;
+        end
+      STATE_TX_WRITE_UDP_LENGTH:
+        begin
+          state_we  = 'b1;
+          state_new = STATE_UDP_CHECKSUM_RESET;
+        end
+      STATE_UDP_CHECKSUM_RESET:
+        begin
+          state_we  = 'b1;
+          state_new = STATE_UDP_CHECKSUM_PS_SRCADDR;
+        end
+      STATE_UDP_CHECKSUM_PS_SRCADDR:
+        begin
+          state_we  = 'b1;
+          state_new = STATE_UDP_CHECKSUM_PS_UDPLLEN;
+        end
+      STATE_UDP_CHECKSUM_PS_UDPLLEN:
+        if (i_tx_sum_done) begin
+          state_we  = 'b1;
+          state_new = STATE_UDP_CHECKSUM_DATAGRAM;
+        end
+      STATE_UDP_CHECKSUM_DATAGRAM:
+        if (i_tx_sum_done) begin
+          state_we  = 'b1;
+          state_new = STATE_UDP_CHECKSUM_WAIT;
+        end
+      STATE_UDP_CHECKSUM_WAIT:
+        if (i_tx_sum_done) begin
+          state_we  = 'b1;
+          state_new = STATE_WRITE_NEW_UDP_CSUM;
+        end
+      STATE_WRITE_NEW_UDP_CSUM:
+        begin
+          state_we  = 'b1;
+          state_new = STATE_WRITE_NEW_UDP_CSUM_DELAY;
+        end
+      STATE_WRITE_NEW_UDP_CSUM_DELAY:
+        //TXBUF memory controller require wait cycles delay
+        // between different unaligned burst writes.
+        if (i_tx_busy == 'b0) begin
+          state_we  = 'b1;
+          state_new = STATE_WRITE_NEW_IP_HEADER_0;
+        end
+      STATE_WRITE_NEW_IP_HEADER_0:
+        begin
+          state_we  = 'b1;
+          state_new = STATE_WRITE_NEW_IP_HEADER_1;
+        end
+      STATE_WRITE_NEW_IP_HEADER_1:
+        begin
+          state_we  = 'b1;
+          state_new = STATE_WRITE_NEW_IP_HEADR_DELAY;
+        end
+      STATE_WRITE_NEW_IP_HEADR_DELAY:
+        //TXBUF memory controller require wait cycles delay
+        //between different unaligned burst writes.
+        if (i_tx_busy == 'b0) begin
+          state_we  = 'b1;
           state_new = STATE_ERROR_UNIMPLEMENTED;
         end
       STATE_ERROR_GENERAL:
@@ -2455,11 +2631,14 @@ module nts_parser_ctrl #(
     tx_ipv4_totlen_new = 0;
     tx_udp_length_we = 0;
     tx_udp_length_new = 0;
+    tx_udp_checksum_we = 0;
+    tx_udp_checksum_new = 0;
     case (state_reg)
       STATE_IDLE:
         begin
-          tx_ipv4_totlen_we = 1; //zeroize
-          tx_udp_length_we  = 1; //zeroize
+          tx_ipv4_totlen_we = 1;  //zeroize
+          tx_udp_length_we  = 1;  //zeroize
+          tx_udp_checksum_we = 1; //zeroise
         end
       STATE_TX_UPDATE_LENGTH:
         begin
@@ -2475,6 +2654,11 @@ module nts_parser_ctrl #(
           end else if (detect_ipv6) begin
             tx_udp_length_new = tx_udp_length_new - HEADER_LENGTH_ETHERNET - HEADER_LENGTH_IPV6;
           end
+        end
+      STATE_UDP_CHECKSUM_WAIT:
+        if (i_tx_sum_done) begin
+          tx_udp_checksum_we = 1;
+          tx_udp_checksum_new = i_tx_sum;
         end
       default: ;
     endcase

@@ -693,6 +693,13 @@ module nts_top_tb;
         $display("%s:%0d dut.engine.parser.tx_udp_length_reg: %h", `__FILE__, `__LINE__, dut.engine.parser.tx_udp_length_reg);
       always @*
         $display("%s:%0d dut.engine.parser.tx_ipv4_totlen_reg: %h", `__FILE__, `__LINE__, dut.engine.parser.tx_ipv4_totlen_reg);
+      always @(posedge i_clk)
+        begin
+          if (dut.engine.parser_txbuf_sum_en)
+            $display("%s:%0d dut.engine.sum_en, bytes: %h (%0d)", `__FILE__, `__LINE__, dut.engine.parser_txbuf_sum_bytes, dut.engine.txbuf_parser_sum_done);
+          if (dut.engine.txbuf_parser_sum_done)
+            $display("%s:%0d dut.engine.sum_done, sum: %h", `__FILE__, `__LINE__, dut.engine.txbuf_parser_sum);
+      end
   end
 
   //----------------------------------------------------------------

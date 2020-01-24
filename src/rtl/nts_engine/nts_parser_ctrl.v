@@ -2119,7 +2119,7 @@ module nts_parser_ctrl #(
           crypto_fsm_we  = 1;
           crypto_fsm_new = CRYPTO_FSM_WAIT_THEN_SUCCESS;
           crypto_tx_op_store_cookiebuf = 1;
-          crypto_tx_addr = copy_tx_addr_reg;
+          crypto_tx_addr = copy_tx_addr_reg + BYTES_AUTH_NONCE + BYTES_AUTH_TAG;;
           crypto_tx_bytes = tx_ciphertext_length_reg[ADDR_WIDTH+3-1:0]; //unsused by crypto for now, but clearer if stated
         end
       CRYPTO_FSM_DONE_SUCCESS:

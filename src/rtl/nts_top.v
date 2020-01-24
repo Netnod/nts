@@ -15,7 +15,7 @@ module nts_top #(
 
   input  wire               [63:0] i_ntp_time,
 
-  //Dispatcher API interface. TODO: replace with SPI interface.
+  //Dispatcher API interface.
   input  wire                        i_api_dispatcher_cs,
   input  wire                        i_api_dispatcher_we,
   input  wire [API_ADDR_WIDTH - 1:0] i_api_dispatcher_address,
@@ -50,12 +50,13 @@ module nts_top #(
   wire                         [ENGINES - 1 : 0] dispatch_engine_rx_fifo_rd_valid;
   wire        [MAC_DATA_WIDTH * ENGINES - 1 : 0] dispatch_engine_rx_fifo_rd_data;
 
-  wire                          o_dispatch_tx_packet_available_DUMMY;
-  reg                           i_dispatch_tx_packet_read_DUMMY;
-  wire                          o_dispatch_tx_fifo_empty_DUMMY;
-  reg                           i_dispatch_tx_fifo_rd_en_DUMMY;
-  wire [MAC_DATA_WIDTH - 1 : 0] o_dispatch_tx_fifo_rd_data_DUMMY;
-  wire                    [3:0] o_dispatch_tx_bytes_last_word_DUMMY;
+  wire                          engine_extractor_packet_available;
+  wire                          engine_extractor_fifo_empty;
+  wire [MAC_DATA_WIDTH - 1 : 0] engine_extractor_fifo_rd_data;
+  wire                    [3:0] engine_extractor_bytes_last_word;
+
+  wire                          extractor_engine_packet_read;
+  wire                          extractor_engine_fifo_rd_en;
 
   wire                          engine_noncegen_get_DUMMY;
   reg                           noncegen_engine_ready_DUMMY;
@@ -117,6 +118,21 @@ module nts_top #(
   );
 
   //----------------------------------------------------------------
+  // Extractor
+  //----------------------------------------------------------------
+
+  nts_extractor extractor (
+    .i_areset(i_areset),
+    .i_clk(i_clk),
+    .i_engine_packet_available(engine_extractor_packet_available),
+    .o_engine_packet_read(extractor_engine_packet_read),
+    .i_engine_fifo_empty(engine_extractor_fifo_empty),
+    .o_engine_fifo_rd_en(extractor_engine_fifo_rd_en),
+    .i_engine_fifo_rd_data(engine_extractor_fifo_rd_data),
+    .i_engine_bytes_last_word(engine_extractor_bytes_last_word)
+  );
+
+  //----------------------------------------------------------------
   // NTS Engine(s)
   //----------------------------------------------------------------
 
@@ -143,12 +159,12 @@ module nts_top #(
         .i_dispatch_rx_fifo_rd_valid(dispatch_engine_rx_fifo_rd_valid[engine_index]),
         .i_dispatch_rx_fifo_rd_data(dispatch_engine_rx_fifo_rd_data[MAC_DATA_WIDTH*engine_index+:MAC_DATA_WIDTH]),
 
-        .o_dispatch_tx_packet_available(o_dispatch_tx_packet_available_DUMMY),
-        .i_dispatch_tx_packet_read(i_dispatch_tx_packet_read_DUMMY),
-        .o_dispatch_tx_fifo_empty(o_dispatch_tx_fifo_empty_DUMMY),
-        .i_dispatch_tx_fifo_rd_en(i_dispatch_tx_fifo_rd_en_DUMMY),
-        .o_dispatch_tx_fifo_rd_data(o_dispatch_tx_fifo_rd_data_DUMMY),
-        .o_dispatch_tx_bytes_last_word(o_dispatch_tx_bytes_last_word_DUMMY),
+        .o_dispatch_tx_packet_available(engine_extractor_packet_available),
+        .i_dispatch_tx_packet_read(extractor_engine_packet_read),
+        .o_dispatch_tx_fifo_empty(engine_extractor_fifo_empty),
+        .i_dispatch_tx_fifo_rd_en(extractor_engine_fifo_rd_en),
+        .o_dispatch_tx_fifo_rd_data(engine_extractor_fifo_rd_data),
+        .o_dispatch_tx_bytes_last_word(engine_extractor_bytes_last_word),
 
         .i_api_cs(api_cs[engine_index]),
         .i_api_we(api_we),
@@ -168,42 +184,6 @@ module nts_top #(
 /*
   endgenerate
 */
-  //----------------------------------------------------------------
-  // Dummy: TX
-  //----------------------------------------------------------------
-
-  reg              tx_receiving;
-  reg [64*100-1:0] tx_d;
-  integer          tx_i;
-
-  always @(posedge i_clk or posedge i_areset)
-  begin
-    if (i_areset) begin
-      i_dispatch_tx_packet_read_DUMMY <= 'b0;
-      i_dispatch_tx_fifo_rd_en_DUMMY  <= 'b0;
-
-      tx_receiving  <= 'b0;
-      tx_d          <= 0;
-      tx_i          <= 0;
-
-    end else begin
-      i_dispatch_tx_packet_read_DUMMY <= 'b0;
-      i_dispatch_tx_fifo_rd_en_DUMMY  <= 'b0;
-      if (tx_receiving) begin
-        if (o_dispatch_tx_fifo_empty_DUMMY) begin
-          i_dispatch_tx_packet_read_DUMMY <= 'b1;
-          tx_receiving <= 'b0;
-          if (tx_i < 100) tx_d[tx_i*64+:64] <= o_dispatch_tx_fifo_rd_data_DUMMY;
-        end else begin
-          i_dispatch_tx_fifo_rd_en_DUMMY  <= 'b1;
-        end
-      end else if (o_dispatch_tx_packet_available_DUMMY) begin
-        tx_receiving <= 'b1;
-        tx_d         <= 0;
-        tx_i         <= 0;
-      end
-    end
-  end
 
   //----------------------------------------------------------------
   // Dummy: Nonce Generator

@@ -281,6 +281,7 @@ $(OUTPUT)/nts_top_tb.vvp: \
  ../src/tb/nts_top_tb.v \
  ../src/rtl/nts_top.v \
  ../src/rtl/nts_dispatcher.v \
+ ../src/rtl/nts_extractor.v \
  ../src/rtl/memory/bram.v \
  $(ENGINE_SRC)
 ifeq (,$(NO_VLINT))

@@ -84,7 +84,7 @@ module nts_engine #(
 
   localparam CORE_NAME0   = 32'h4e_54_53_5f; // "NTS_"
   localparam CORE_NAME1   = 32'h45_4e_47_4e; // "ENGN"
-  localparam CORE_VERSION = 32'h30_2e_30_31; // "0.02". 0.02: Basic TX development. 0.01: Basic RX development
+  localparam CORE_VERSION = 32'h30_2e_30_33; // "0.03"
 
   localparam ADDR_NAME0         = 'h00;
   localparam ADDR_NAME1         = 'h01;
@@ -231,7 +231,7 @@ module nts_engine #(
   wire                    parser_crypto_tx_op_copy_ad;
   wire                    parser_crypto_tx_op_store_nonce_tag;
   wire                    parser_crypto_tx_op_store_cookie;
-  wire                    parser_crypto_store_tx_cookiebuf; //TODO implement
+  wire                    parser_crypto_store_tx_cookiebuf;
   wire [ADDR_WIDTH+3-1:0] parser_crypto_tx_addr;
   wire [ADDR_WIDTH+3-1:0] parser_crypto_tx_bytes;
   wire             [63:0] parser_crypto_cookieprefix;

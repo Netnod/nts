@@ -186,7 +186,7 @@ module nts_tx_buffer #(
 
 
   assign o_dispatch_tx_packet_available  = mem_state_reg[ fifo ] == STATE_FIFO_OUT;
-  assign o_dispatch_tx_fifo_empty        = ram_addr_hi_reg[ fifo ] == fifo_word_count_p1;
+  assign o_dispatch_tx_fifo_empty        = (mem_state_reg[ fifo ] == STATE_FIFO_OUT) && (ram_addr_hi_reg[ fifo ] == fifo_word_count_p1);
   assign o_dispatch_tx_fifo_rd_data      = ram_rd_data[ fifo ];
   assign o_dispatch_tx_bytes_last_word   = bytes_last_word_reg[ fifo ];
   assign o_parser_current_empty          = mem_state_reg[ parser ] == STATE_EMPTY;
@@ -601,15 +601,15 @@ module nts_tx_buffer #(
       STATE_EMPTY: ;
       STATE_FIFO_OUT:
         begin
-          //TODO handle overflow
-          //if (ram_addr_reg[fifo] == word_count_reg[fifo]) begin
-          //  ;
-          //end else
           ram_rd[fifo] = 1;
           if (i_dispatch_tx_fifo_rd_en) begin
-            ram_addr_hi     [fifo] = ram_addr_hi_reg[fifo];
-            ram_addr_hi_we  [fifo] = 1;
-            ram_addr_hi_new [fifo] = ram_addr_hi_reg[fifo] + 1;
+            if (ram_addr_hi_reg[fifo] >= fifo_word_count_p1) begin
+              ram_addr_hi     [fifo] = ram_addr_hi_reg[fifo];
+            end else begin
+              ram_addr_hi     [fifo] = ram_addr_hi_reg[fifo] + 1;
+              ram_addr_hi_we  [fifo] = 1;
+              ram_addr_hi_new [fifo] = ram_addr_hi_reg[fifo] + 1;
+            end
           end
           if (i_dispatch_tx_packet_read) begin
             mem_state_we [fifo] = 1;

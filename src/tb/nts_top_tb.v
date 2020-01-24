@@ -640,7 +640,7 @@ module nts_top_tb;
           addr = { dut.engine.mux_tx_address_hi, dut.engine.mux_tx_address_lo };
           if (i_areset == 0)
             if (dut.engine.mux_tx_write_en)
-              $display("%s:%0d dut.engine.mux_tx %h %h = %h",  `__FILE__, `__LINE__, dut.engine.mux_tx_address_internal, addr, dut.engine.mux_tx_write_data);
+              $display("%s:%0d dut.engine.mux_tx %h %h (%h %h) = %h",  `__FILE__, `__LINE__, dut.engine.mux_tx_address_internal, addr, dut.engine.mux_tx_address_hi, dut.engine.mux_tx_address_lo, dut.engine.mux_tx_write_data);
         end
       always @*
         $display("%s:%0d dut.engine.i_dispatch_rx_fifo_rd_data: %h", `__FILE__, `__LINE__, dut.engine.i_dispatch_rx_fifo_rd_data);
@@ -652,12 +652,14 @@ module nts_top_tb;
         $display("%s:%0d dut.dispatcher.mem_state[1]: %h", `__FILE__, `__LINE__, dut.dispatcher.mem_state_reg[1]);
       always @*
         $display("%s:%0d dut.dispatcher.current_mem: %h", `__FILE__, `__LINE__, dut.dispatcher.current_mem_reg);
+/*
       always @*
         $display("%s:%0d dut.o_dispatch_tx_bytes_last_word_DUMMY=%b (ignored)",  `__FILE__, `__LINE__, dut.o_dispatch_tx_bytes_last_word_DUMMY);
       always @*
         $display("%s:%0d dut.o_dispatch_tx_fifo_rd_data_DUMMY=%h (ignored)",  `__FILE__, `__LINE__, dut.o_dispatch_tx_fifo_rd_data_DUMMY);
       always @*
         $display("%s:%0d dut.tx_d=%h (ignored)",  `__FILE__, `__LINE__, dut.tx_d); //TODO doesn't work well now. Fix later.
+*/
       always @*
         $display("%s:%0d dut.dispatcher.mac_rx_corrected=%h",  `__FILE__, `__LINE__, dut.dispatcher.mac_rx_corrected);
       always @(posedge i_clk or posedge i_areset)
@@ -699,6 +701,24 @@ module nts_top_tb;
             $display("%s:%0d dut.engine.sum_en, bytes: %h (%0d)", `__FILE__, `__LINE__, dut.engine.parser_txbuf_sum_bytes, dut.engine.txbuf_parser_sum_done);
           if (dut.engine.txbuf_parser_sum_done)
             $display("%s:%0d dut.engine.sum_done, sum: %h", `__FILE__, `__LINE__, dut.engine.txbuf_parser_sum);
+      end
+    always @*
+      $display("%s:%0d dut.engine_extractor_packet_available: %h", `__FILE__, `__LINE__, dut.engine_extractor_packet_available);
+    always @*
+      $display("%s:%0d dut.engine_extractor_fifo_empty: %h", `__FILE__, `__LINE__, dut.engine_extractor_fifo_empty);
+    always @(posedge i_clk)
+      begin
+        if (dut.extractor.ram_engine_write)
+           $display("%s:%0d extractor.RAM[%h]=%h", `__FILE__, `__LINE__, dut.extractor.ram_engine_addr, dut.extractor.ram_engine_wdata);
+        if (dut.extractor.buffer_engine_selected_we)
+            $display("%s:%0d extractor, next write buffer: %h", `__FILE__, `__LINE__, dut.extractor.buffer_engine_selected_new);
+      end
+    always @(posedge i_clk)
+      begin
+        if (dut.engine.tx_buffer.current_mem_we)
+          $display("%s:%0d txbuf word count: %h", `__FILE__, `__LINE__, dut.engine.tx_buffer.word_count_reg[dut.engine.tx_buffer.current_mem_reg]);
+        if (dut.engine.tx_buffer.i_parser_update_length)
+          $display("%s:%0d txbuf update word count: %h %h", `__FILE__, `__LINE__, dut.engine.tx_buffer.i_address_hi, dut.engine.tx_buffer.i_address_lo);
       end
   end
 

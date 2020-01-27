@@ -106,6 +106,11 @@ module nts_top_tb;
   reg                      i_mac_rx_bad_frame;
   reg                      i_mac_rx_good_frame;
 
+  wire                      o_mac_tx_start;
+  reg                       i_mac_tx_ack;
+  wire                [7:0] o_mac_tx_data_valid;
+  wire [MAC_DATA_WIDTH-1:0] o_mac_tx_data;
+
   reg         i_api_dispatcher_cs;
   reg         i_api_dispatcher_we;
   reg  [11:0] i_api_dispatcher_address;
@@ -381,6 +386,12 @@ module nts_top_tb;
     .i_mac_rx_bad_frame(i_mac_rx_bad_frame),
     .i_mac_rx_good_frame(i_mac_rx_good_frame),
 
+    .o_mac_tx_start(o_mac_tx_start),
+    .i_mac_tx_ack(i_mac_tx_ack),
+    .o_mac_tx_data(o_mac_tx_data),
+    .o_mac_tx_data_valid(o_mac_tx_data_valid),
+
+
     .i_ntp_time(i_ntp_time),
 
     .i_api_dispatcher_cs(i_api_dispatcher_cs),
@@ -566,6 +577,77 @@ module nts_top_tb;
   end
 
   //----------------------------------------------------------------
+  // Testbench model: MAC TX
+  //----------------------------------------------------------------
+
+  localparam TX_IDLE       = 0;
+  localparam TX_IPG        = 1;
+  localparam TX_AWAIT_DATA = 2;
+  localparam TX_RECEIVING  = 3;
+  integer tx_state;
+  reg [9:0] tx_ipg;
+  reg [9:0] tx_seed;
+
+  function [9:0] tx_generate_ipg (input [9:0] seed);
+  begin
+    case (seed % 5)
+      default: tx_generate_ipg = 0;
+      1: tx_generate_ipg = seed % 7;
+      2: tx_generate_ipg = seed % 11;
+      3: tx_generate_ipg = seed % 13;
+      4: tx_generate_ipg = seed % 17;
+    endcase
+  end
+  endfunction
+
+  always @(posedge i_clk or posedge i_areset)
+  begin : tx_model
+    reg [9:0] tmp_ipg;
+    if (i_areset) begin
+      i_mac_tx_ack <= 0;
+      tx_ipg <= 0;
+      tx_seed <= 0;
+      tx_state <= TX_IDLE;
+    end else begin
+      i_mac_tx_ack <= 0;
+      case (tx_state)
+        TX_IDLE:
+          begin
+            if (o_mac_tx_data_valid != 8'h00) $display("%s:%0d TX TX_IDLE illegal data: %h - %h", `__FILE__, `__LINE__, o_mac_tx_data_valid, o_mac_tx_data);
+            if (o_mac_tx_start) begin
+              tmp_ipg = tx_generate_ipg(tx_seed);
+              $display("%s:%0d TX MAC will wait %0d cycles before issing ACK. Seed was: %0d", `__FILE__, `__LINE__, tmp_ipg, tx_seed);
+              tx_ipg <= tmp_ipg;
+              tx_seed <= tx_seed + 1;
+              tx_state <= TX_IPG;
+            end
+          end
+        TX_IPG:
+          begin
+            if (o_mac_tx_data_valid != 8'h00) $display("%s:%0d TX TX_IPG illegal data: %h - %h", `__FILE__, `__LINE__, o_mac_tx_data_valid, o_mac_tx_data);
+            if (tx_ipg == 0) begin
+              $display("%s:%0d TX MAC issues transmit send ack", `__FILE__, `__LINE__);
+              i_mac_tx_ack <= 1;
+              tx_state <= TX_AWAIT_DATA;
+            end else begin
+              tx_ipg <= tx_ipg - 1;
+            end
+          end
+        TX_AWAIT_DATA:
+          case (o_mac_tx_data_valid)
+            8'h00: ;
+            8'hff: tx_state <= TX_RECEIVING;
+            default: $display("%s:%0d TX TX_AWAIT_DATA illegal data: %h - %h", `__FILE__, `__LINE__, o_mac_tx_data_valid, o_mac_tx_data);
+          endcase
+        TX_RECEIVING: if (o_mac_tx_data_valid != 8'hff) tx_state <= TX_IDLE;
+      endcase
+      if (o_mac_tx_data_valid != 8'h00)
+        $display("%s:%0d TX Transmit to MAC, DV: %h Data: %h", `__FILE__, `__LINE__, o_mac_tx_data_valid, o_mac_tx_data);
+
+    end
+ end
+
+  //----------------------------------------------------------------
   // Testbench model: NTP clock
   //----------------------------------------------------------------
 
@@ -719,6 +801,11 @@ module nts_top_tb;
           $display("%s:%0d txbuf word count: %h", `__FILE__, `__LINE__, dut.engine.tx_buffer.word_count_reg[dut.engine.tx_buffer.current_mem_reg]);
         if (dut.engine.tx_buffer.i_parser_update_length)
           $display("%s:%0d txbuf update word count: %h %h", `__FILE__, `__LINE__, dut.engine.tx_buffer.i_address_hi, dut.engine.tx_buffer.i_address_lo);
+      end
+    always @(posedge i_clk)
+      begin
+        if (dut.extractor.buffer_mac_selected_we)
+          $display("%s:%0d extactor mac select buffer: %h", `__FILE__, `__LINE__, dut.extractor.buffer_mac_selected_reg);
       end
   end
 

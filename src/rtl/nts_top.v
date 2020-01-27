@@ -13,6 +13,11 @@ module nts_top #(
   input  wire                      i_mac_rx_bad_frame,
   input  wire                      i_mac_rx_good_frame,
 
+  output wire                      o_mac_tx_start,
+  input  wire                      i_mac_tx_ack,
+  output wire                [7:0] o_mac_tx_data_valid,
+  output wire [MAC_DATA_WIDTH-1:0] o_mac_tx_data,
+
   input  wire               [63:0] i_ntp_time,
 
   //Dispatcher API interface.
@@ -124,6 +129,10 @@ module nts_top #(
   nts_extractor extractor (
     .i_areset(i_areset),
     .i_clk(i_clk),
+    .o_mac_tx_start(o_mac_tx_start),
+    .i_mac_tx_ack(i_mac_tx_ack),
+    .o_mac_tx_data_valid(o_mac_tx_data_valid),
+    .o_mac_tx_data(o_mac_tx_data),
     .i_engine_packet_available(engine_extractor_packet_available),
     .o_engine_packet_read(extractor_engine_packet_read),
     .i_engine_fifo_empty(engine_extractor_fifo_empty),

@@ -136,6 +136,12 @@ module nts_tx_buffer #(
   reg [15:0] sum_new;
   reg [15:0] sum_reg;
 
+  //Pipeline delayed carry adders
+  reg [15:0] sum_delayed_new;
+  reg [15:0] sum_delayed_reg;
+  reg  [2:0] carry_delayed_new;
+  reg  [2:0] carry_delayed_reg;
+
   reg                    sum_counter_we;
   reg [ADDR_WIDTH+3-1:0] sum_counter_new;
   reg [ADDR_WIDTH+3-1:0] sum_counter_reg;
@@ -143,6 +149,8 @@ module nts_tx_buffer #(
   reg sum_cycle_new;
   reg sum_cycle_reg;
 
+  reg sum_done_delayed_new;
+  reg sum_done_delayed_reg;
   reg sum_done_new;
   reg sum_done_reg;
 
@@ -273,7 +281,8 @@ module nts_tx_buffer #(
   begin : reg_update
     integer i;
     if (i_areset == 1'b1) begin
-      bad_input_reg <= 0;
+      //Pipeline stage 0
+      bad_input_reg   <= 0;
       current_mem_reg <= 0;
       read_cycle_reg  <= 0;
       sum_reg         <= 0;
@@ -281,12 +290,20 @@ module nts_tx_buffer #(
       sum_done_reg    <= 0;
       sum_counter_reg <= 0;
       sum_cycle_reg   <= 0;
+
       for (i = 0; i < 2; i = i + 1) begin
         bytes_last_word_reg[i] <= 0;
         mem_state_reg[i] <= STATE_EMPTY;
         word_count_reg[i] <= 'b0;
       end
+
+      //Pipleline stage 1
+      carry_delayed_reg    <= 0;
+      sum_delayed_reg      <= 0;
+      sum_done_delayed_reg <= 0;
+
     end else begin
+      //Pipeline stage 0
       bad_input_reg <= bad_input_new;
       if (current_mem_we)
         current_mem_reg <= current_mem_new;
@@ -299,6 +316,7 @@ module nts_tx_buffer #(
         sum_counter_reg <= sum_counter_new;
       sum_cycle_reg <= sum_cycle_new;
       sum_done_reg <= sum_done_new;
+
       for (i = 0; i < 2; i = i + 1) begin
         if (bytes_last_word_we[i])
           bytes_last_word_reg[i] <= bytes_last_word_new[i];
@@ -307,6 +325,11 @@ module nts_tx_buffer #(
         if (word_count_we[i])
           word_count_reg[i] <= word_count_new[i];
       end
+
+      //Pipleline stage 1
+      carry_delayed_reg <= carry_delayed_new;
+      sum_delayed_reg <= sum_delayed_new;
+      sum_done_delayed_reg <= sum_done_delayed_new;
     end
   end
 
@@ -325,25 +348,41 @@ module nts_tx_buffer #(
   // Internet checksum code
   //----------------------------------------------------------------
 
-  task internet_sum(
-  //input   [7:0] sum_ctrl,
-    input  [15:0] s_in,
+  task internet_sum_pipelinestage0(
     input  [15:0] data0,
     input  [15:0] data1,
     input  [15:0] data2,
     input  [15:0] data3,
-    output [15:0] s_out
+    output [15:0] s_out,
+    output  [2:0] c_out
   );
-  begin : internet_sum_locals
+  begin : internet_sum_locals0
     reg [15:0] sum_b [0:1];
     reg [15:0] sum_c;
-    reg [15:0] sum_d;
-    reg [3:0] carry;
-    reg [2:0] msb;
+    reg [2:0] carry;
     { carry[0], sum_b[0] } = { 1'b0, data0 } + { 1'b0, data1 };
     { carry[1], sum_b[1] } = { 1'b0, data2 } + { 1'b0, data3 };
     { carry[2], sum_c } = { 1'b0, sum_b[0] } + { 1'b0, sum_b[1] };
-    { carry[3], sum_d } = { 1'b0, sum_c } + { 1'b0, s_in }; //add data sums to original sum
+
+    s_out = sum_c;
+    c_out = carry;
+  end
+  endtask
+
+  task internet_sum_pipelinestage1(
+     input  [15:0] s_in0,
+     input  [15:0] s_in1,
+     input   [2:0] c_in,
+     output [15:0] s_out
+  );
+  begin : internet_sum_locals1
+    reg  [3:0] carry;
+    reg  [2:0] msb;
+    reg [15:0] sum_d;
+
+    carry[2:0] = c_in;
+
+    { carry[3], sum_d } = { 1'b0, s_in0 } + { 1'b0, s_in1 }; //add data sums to original sum
 
     msb = { 2'b00, carry[0] } +
           { 2'b00, carry[1] } +
@@ -351,11 +390,22 @@ module nts_tx_buffer #(
           { 2'b00, carry[3] };
 
     s_out = sum_d + { 13'h0, msb }; //cannot overflow, largest number is 5 * 0xffff = 0x4FFFB = 0xFFFB + 4 = 0xffff
-  //$display("%s:%0d sum_counter_reg %0d", `__FILE__, `__LINE__, sum_counter_reg);
-  //$display("%s:%0d %h + %h + %h + %h + %h = %h", `__FILE__, `__LINE__,
-  //        s_in,
-  //        data0, data1, data2, data3,
-  //        s_out);
+  end
+  endtask
+
+  task internet_sum(
+    input  [15:0] s_in,
+    input  [15:0] data0,
+    input  [15:0] data1,
+    input  [15:0] data2,
+    input  [15:0] data3,
+    output [15:0] s_out
+  );
+  begin : internet_sum_combined
+    reg [15:0] s_tmp;
+    reg  [2:0] c_tmp;
+    internet_sum_pipelinestage0( data0, data1, data2, data3, s_tmp, c_tmp );
+    internet_sum_pipelinestage1( s_in, s_tmp, c_tmp, s_out );
   end
   endtask
 
@@ -364,13 +414,19 @@ module nts_tx_buffer #(
     reg  [7:0] sum_ctrl;
     sum_we = 0;
     sum_new = 0;
+    sum_delayed_new = 0;
+    carry_delayed_new = 0;
     sum_addr_we = 0;
     sum_addr_new = 0;
     sum_counter_we = 0;
     sum_counter_new = 0;
     sum_ctrl = 0;
     sum_cycle_new = 0;
-    sum_done_new = 0;
+    sum_done_delayed_new = 0;
+    sum_done_new = sum_done_delayed_reg;
+
+    sum_we = 1;
+    internet_sum_pipelinestage1( sum_reg, sum_delayed_reg, carry_delayed_reg, sum_new );
 
     if (i_sum_reset) begin
       sum_we = 1;
@@ -396,7 +452,7 @@ module nts_tx_buffer #(
         default: sum_ctrl = 8'b1111_1111;
       endcase
 
-      if (sum_counter_reg <= 8) sum_done_new = 1;
+      if (sum_counter_reg <= 8) sum_done_delayed_new = 1;
 
       data = ram_rd_data[parser];
       d0 = { sum_ctrl[7] ? data[63-:8] : 8'h00, sum_ctrl[6] ? data[55-:8] : 8'h00 };
@@ -404,7 +460,8 @@ module nts_tx_buffer #(
       d2 = { sum_ctrl[3] ? data[31-:8] : 8'h00, sum_ctrl[2] ? data[23-:8] : 8'h00 };
       d3 = { sum_ctrl[1] ? data[15-:8] : 8'h00, sum_ctrl[0] ? data[7-:8] : 8'h00 };
       //$display("%s:%0d %h - %h %h - %h %h %h %h", `__FILE__, `__LINE__, sum_counter_reg, sum_ctrl, data, d0, d1, d2, d3 );
-      internet_sum(sum_reg, d0, d1, d2, d3, sum_new);
+      //internet_sum(sum_reg, d0, d1, d2, d3, sum_new);
+      internet_sum_pipelinestage0( d0, d1, d2, d3, sum_delayed_new, carry_delayed_new );
     end
 
     case ( mem_state_reg[parser] )

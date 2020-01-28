@@ -56,6 +56,11 @@ module nts_top_tb;
   localparam [11:0] API_DISPATCHER_ADDR_BUS_STATUS         = 81;
   localparam [11:0] API_DISPATCHER_ADDR_BUS_DATA           = 82;
 
+  localparam [11:0] API_EXTRACTOR_ADDR_NAME    = 'h400;
+  localparam [11:0] API_EXTRACTOR_ADDR_VERSION = 'h402;
+  localparam [11:0] API_EXTRACTOR_ADDR_BYTES   = 'h40A;
+  localparam [11:0] API_EXTRACTOR_ADDR_PACKETS = 'h40C;
+
   localparam [7:0] BUS_READ  = 8'h55;
   localparam [7:0] BUS_WRITE = 8'hAA;
 
@@ -478,6 +483,10 @@ module nts_top_tb;
       reg [63:0] dispatcher_counter_bad;
       reg [63:0] dispatcher_counter_dispatched;
       reg [63:0] dispatcher_counter_error;
+      reg [63:0] extractor_name;
+      reg [31:0] extractor_version;
+      reg [63:0] extractor_bytes;
+      reg [63:0] extractor_packets;
       reg [11:0] addr;
       reg [31:0] value;
 
@@ -514,7 +523,12 @@ module nts_top_tb;
       dispatcher_read64(dispatcher_counter_bad, API_DISPATCHER_ADDR_COUNTER_BAD);
       dispatcher_read64(dispatcher_counter_dispatched, API_DISPATCHER_ADDR_COUNTER_DISPATCHED);
       dispatcher_read64(dispatcher_counter_error, API_DISPATCHER_ADDR_COUNTER_ERROR);
+      dispatcher_read64(extractor_name, API_EXTRACTOR_ADDR_NAME);
+      dispatcher_read32(extractor_version, API_EXTRACTOR_ADDR_VERSION);
+      dispatcher_read64(extractor_bytes, API_EXTRACTOR_ADDR_BYTES);
+      dispatcher_read64(extractor_packets, API_EXTRACTOR_ADDR_PACKETS);
       $display("%s:%0d: *** CORE: %s %s", `__FILE__, `__LINE__, dispatcher_name, dispatcher_version);
+      $display("%s:%0d: *** CORE: %s %s", `__FILE__, `__LINE__, extractor_name, extractor_version);
       $display("%s:%0d: *** CORE: %s %s", `__FILE__, `__LINE__, engine_name, engine_version);
       $display("%s:%0d: *** CORE: %s", `__FILE__, `__LINE__, clock_name);
       $display("%s:%0d: *** CORE: %s", `__FILE__, `__LINE__, debug_name);
@@ -534,6 +548,8 @@ module nts_top_tb;
       $display("%s:%0d: *** Dispatcher, bad frame counter:   %0d", `__FILE__, `__LINE__, dispatcher_counter_bad);
       $display("%s:%0d: *** Dispatcher, dispatched counter:  %0d", `__FILE__, `__LINE__, dispatcher_counter_dispatched);
       $display("%s:%0d: *** Dispatcher, error counter:       %0d", `__FILE__, `__LINE__, dispatcher_counter_error);
+      $display("%s:%0d: *** Extractor, bytes transmitted:    %0d", `__FILE__, `__LINE__, extractor_bytes);
+      $display("%s:%0d: *** Extractor, packets transmitted:  %0d", `__FILE__, `__LINE__, extractor_packets);
     end
 
     $display("Test stop: %s:%0d", `__FILE__, `__LINE__);

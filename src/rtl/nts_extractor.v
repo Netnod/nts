@@ -28,9 +28,20 @@
 // Author: Peter Magnusson, Assured AB
 //
 
-module nts_extractor (
+module nts_extractor #(
+  parameter API_ADDR_WIDTH = 12,
+  parameter API_ADDR_BASE  = 'h400
+) (
   input  wire        i_areset, // async reset
   input  wire        i_clk,
+
+  input  wire                        i_api_cs,
+  input  wire                        i_api_we,
+  input  wire [API_ADDR_WIDTH - 1:0] i_api_address,
+  /* verilator lint_off UNUSED */
+  input  wire                 [31:0] i_api_write_data,
+  /* verilator lint_on UNUSED */
+  output wire                 [31:0] o_api_read_data,
 
   input  wire        i_engine_packet_available,
   output wire        o_engine_packet_read,
@@ -69,9 +80,30 @@ module nts_extractor (
   localparam TX_WRITE      = 3'd2;
   localparam TX_WRITE_LAST = 3'd3;
 
+  localparam ADDR_NAME0             = API_ADDR_BASE + 0;
+  localparam ADDR_NAME1             = API_ADDR_BASE + 1;
+  localparam ADDR_VERSION           = API_ADDR_BASE + 2;
+  localparam ADDR_BYTES             = API_ADDR_BASE + 10;
+  localparam ADDR_PACKETS           = API_ADDR_BASE + 12;
+
+  localparam CORE_NAME    = 64'h4e_54_53_2d_45_58_54_52; //NTS-EXTR
+  localparam CORE_VERSION = 32'h30_2e_30_31; //0.01
+
   //----------------------------------------------------------------
   // Asynchrononous registers
   //----------------------------------------------------------------
+
+  reg        counter_bytes_we;
+  reg [63:0] counter_bytes_new;
+  reg [63:0] counter_bytes_reg;
+  reg        counter_bytes_lsb_we;
+  reg [31:0] counter_bytes_lsb_reg;
+
+  reg        counter_packets_we;
+  reg [63:0] counter_packets_new;
+  reg [63:0] counter_packets_reg;
+  reg        counter_packets_lsb_we;
+  reg [31:0] counter_packets_lsb_reg;
 
   reg [ADDR_WIDTH-1:0] buffer_addr_reg  [0:BUFFERS-1];
   reg            [3:0] buffer_lwdv_reg  [0:BUFFERS-1];
@@ -146,6 +178,8 @@ module nts_extractor (
   // Wires
   //----------------------------------------------------------------
 
+  reg            [31:0] api_read_data;
+
   wire [ADDR_WIDTH-1:0] buffer_engine_addr;
   wire            [1:0] buffer_engine_state;
   wire            [1:0] buffer_mac_state;
@@ -173,12 +207,76 @@ module nts_extractor (
   assign buffer_mac_addr = buffer_addr_reg[buffer_mac_selected_reg];
   assign buffer_mac_state = buffer_state_reg[buffer_mac_selected_reg];
 
+  assign o_api_read_data = api_read_data;
+
   assign o_mac_tx_data = mac_data_reg;
   assign o_mac_tx_data_valid = mac_data_valid_reg;
   assign o_mac_tx_start = mac_start_reg;
 
   assign o_engine_packet_read = engine_packet_read_reg;
   assign o_engine_fifo_rd_en  = engine_fifo_rd_en_reg;
+
+  //----------------------------------------------------------------
+  // API
+  //----------------------------------------------------------------
+
+  always @*
+  begin : api
+    api_read_data = 0;
+    counter_bytes_lsb_we = 0;
+
+    if (i_api_cs) begin
+      if (i_api_we) begin
+        ;
+      end else begin
+        case (i_api_address)
+          ADDR_NAME0: api_read_data = CORE_NAME[63:32];
+          ADDR_NAME1: api_read_data = CORE_NAME[31:0];
+          ADDR_VERSION: api_read_data = CORE_VERSION;
+          ADDR_BYTES:
+            begin
+              counter_bytes_lsb_we = 1;
+              api_read_data = counter_bytes_reg[63:32];
+            end
+          ADDR_BYTES + 1: api_read_data = counter_bytes_lsb_reg;
+          ADDR_PACKETS:
+            begin
+              counter_packets_lsb_we = 1;
+              api_read_data = counter_packets_reg[63:32];
+            end
+          ADDR_PACKETS + 1: api_read_data = counter_packets_lsb_reg;
+          default: ;
+        endcase
+      end
+    end
+  end
+
+  //----------------------------------------------------------------
+  // API counters
+  //----------------------------------------------------------------
+
+  always @*
+  begin : api_counters
+    counter_bytes_we = 1;
+    counter_bytes_new = 0;
+    counter_packets_we = 0;
+    counter_packets_new = 0;
+    case (o_mac_tx_data_valid)
+      default: counter_bytes_we = 0;
+      8'b0000_0001: counter_bytes_new = counter_bytes_reg + 1;
+      8'b0000_0011: counter_bytes_new = counter_bytes_reg + 2;
+      8'b0000_0111: counter_bytes_new = counter_bytes_reg + 3;
+      8'b0000_1111: counter_bytes_new = counter_bytes_reg + 4;
+      8'b0001_1111: counter_bytes_new = counter_bytes_reg + 5;
+      8'b0011_1111: counter_bytes_new = counter_bytes_reg + 6;
+      8'b0111_1111: counter_bytes_new = counter_bytes_reg + 7;
+      8'b1111_1111: counter_bytes_new = counter_bytes_reg + 8;
+    endcase
+    if (mac_start_reg) begin
+      counter_packets_we = 1;
+      counter_packets_new = counter_packets_reg + 1;
+    end
+  end
 
   //----------------------------------------------------------------
   // Buffer RAM
@@ -436,18 +534,34 @@ module nts_extractor (
   always @(posedge i_clk or posedge i_areset)
   begin : reg_update
     if (i_areset) begin
-      mac_start_reg <= 0;
-      mac_data_reg <= 0;
-      mac_data_valid_reg <= 0;
       buffer_engine_selected_reg <= 0;
       buffer_mac_selected_reg <= 0;
       buffer_reset_reg <= 0;
+      counter_bytes_reg <= 0;
+      counter_bytes_lsb_reg <= 0;
+      counter_packets_reg <= 0;
+      counter_packets_lsb_reg <= 0;
       engine_fifo_rd_en_reg <= 0;
       engine_packet_read_reg <= 0;
+      mac_start_reg <= 0;
+      mac_data_reg <= 0;
+      mac_data_valid_reg <= 0;
       read_addr_reg <= 0;
       state_reg <= STATE_RESET;
       tx_state_reg <= TX_IDLE;
     end else begin
+      if (counter_bytes_we)
+        counter_bytes_reg <= counter_bytes_new;
+
+      if (counter_bytes_lsb_we)
+        counter_bytes_lsb_reg <= counter_bytes_reg[31:0];
+
+      if (counter_packets_we)
+        counter_packets_reg <= counter_packets_new;
+
+      if (counter_packets_lsb_we)
+        counter_packets_lsb_reg <= counter_packets_reg[31:0];
+
       if (buffer_engine_addr_we)
         buffer_addr_reg[buffer_engine_selected_reg] <= buffer_engine_addr_new;
 

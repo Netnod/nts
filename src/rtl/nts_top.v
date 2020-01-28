@@ -67,6 +67,11 @@ module nts_top #(
   reg                           noncegen_engine_ready_DUMMY;
   reg                    [63:0] noncegen_engine_data_DUMMY;
 
+
+  wire   [API_RW_WIDTH - 1:0] api_extractor_read_data;
+  wire   [API_RW_WIDTH - 1:0] api_dispatcher_read_data;
+  assign o_api_dispatcher_read_data = api_dispatcher_read_data | api_extractor_read_data;
+
   //----------------------------------------------------------------
   // Buffer inputs
   //----------------------------------------------------------------
@@ -113,7 +118,7 @@ module nts_top #(
     .i_api_we(i_api_dispatcher_we),
     .i_api_address(i_api_dispatcher_address),
     .i_api_write_data(i_api_dispatcher_write_data),
-    .o_api_read_data(o_api_dispatcher_read_data),
+    .o_api_read_data(api_dispatcher_read_data),
 
     .o_engine_cs(api_cs),
     .o_engine_we(api_we),
@@ -129,6 +134,11 @@ module nts_top #(
   nts_extractor extractor (
     .i_areset(i_areset),
     .i_clk(i_clk),
+    .i_api_cs(i_api_dispatcher_cs),
+    .i_api_we(i_api_dispatcher_we),
+    .i_api_address(i_api_dispatcher_address),
+    .i_api_write_data(i_api_dispatcher_write_data),
+    .o_api_read_data(api_extractor_read_data),
     .o_mac_tx_start(o_mac_tx_start),
     .i_mac_tx_ack(i_mac_tx_ack),
     .o_mac_tx_data_valid(o_mac_tx_data_valid),

@@ -363,6 +363,25 @@ module nts_extractor #(
   // MAC Media Access Controller
   //----------------------------------------------------------------
 
+  function [63:0] mac_byte_txreverse( input [63:0] txd, input [7:0] txv );
+  begin : txreverse
+    reg [63:0] out;
+    out[0+:8]  = txv[0] ? txd[56+:8] : 8'h00;
+    out[8+:8]  = txv[1] ? txd[48+:8] : 8'h00;
+    out[16+:8] = txv[2] ? txd[40+:8] : 8'h00;
+    out[24+:8] = txv[3] ? txd[32+:8] : 8'h00;
+    out[32+:8] = txv[4] ? txd[24+:8] : 8'h00;
+    out[40+:8] = txv[5] ? txd[16+:8] : 8'h00;
+    out[48+:8] = txv[6] ? txd[8+:8]  : 8'h00;
+    out[56+:8] = txv[7] ? txd[0+:8]  : 8'h00;
+    mac_byte_txreverse = out;
+  end
+  endfunction
+
+  //----------------------------------------------------------------
+  // MAC Media Access Controller
+  //----------------------------------------------------------------
+
   always @*
   begin
     ram_mac_addr       = 0;
@@ -401,8 +420,8 @@ module nts_extractor #(
           end
         TX_WRITE:
           begin
-            mac_data_new = ram_mac_rdata;
             mac_data_valid_new = 8'hff;
+            mac_data_new = mac_byte_txreverse(ram_mac_rdata, mac_data_valid_new);
             read_addr_we = 1;
             read_addr_new = read_addr_reg + 1;
             if (read_addr_new >= buffer_mac_addr) begin
@@ -413,19 +432,18 @@ module nts_extractor #(
           end
         TX_WRITE_LAST:
           begin : tx_write_last
-            reg [71:0] tmp;
             case (buffer_lwdv_reg[buffer_mac_selected_reg])
-              default: tmp = { 8'b0000_0000, 64'h0 };
-              1: tmp = { 8'b0000_0001, 56'h0, ram_mac_rdata[63-:8] };
-              2: tmp = { 8'b0000_0011, 48'h0, ram_mac_rdata[63-:16] };
-              3: tmp = { 8'b0000_0111, 40'h0, ram_mac_rdata[63-:24] };
-              4: tmp = { 8'b0000_1111, 32'h0, ram_mac_rdata[63-:32] };
-              5: tmp = { 8'b0001_1111, 24'h0, ram_mac_rdata[63-:40] };
-              6: tmp = { 8'b0011_1111, 16'h0, ram_mac_rdata[63-:48] };
-              7: tmp = { 8'b0111_1111,  8'h0, ram_mac_rdata[63-:56] };
-              8: tmp = { 8'b1111_1111,        ram_mac_rdata[63-:64] };
+              default: mac_data_valid_new = 8'b0000_0000;
+              1: mac_data_valid_new = 8'b0000_0001;
+              2: mac_data_valid_new = 8'b0000_0011;
+              3: mac_data_valid_new = 8'b0000_0111;
+              4: mac_data_valid_new = 8'b0000_1111;
+              5: mac_data_valid_new = 8'b0001_1111;
+              6: mac_data_valid_new = 8'b0011_1111;
+              7: mac_data_valid_new = 8'b0111_1111;
+              8: mac_data_valid_new = 8'b1111_1111;
             endcase
-            { mac_data_valid_new, mac_data_new } = tmp;
+            mac_data_new = mac_byte_txreverse(ram_mac_rdata, mac_data_valid_new);
             tx_state_we = 1;
             tx_state_new = TX_IDLE;
             tx_stop = 1;

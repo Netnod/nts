@@ -44,6 +44,10 @@ module nts_extractor (
   output wire  [7:0] o_mac_tx_data_valid,
   output wire [63:0] o_mac_tx_data
 );
+  //----------------------------------------------------------------
+  // Local parameters, constants, definitions etc
+  //----------------------------------------------------------------
+
   localparam BRAM_WIDTH = 16;
   localparam ADDR_WIDTH = 8;
 
@@ -65,13 +69,16 @@ module nts_extractor (
   localparam TX_WRITE      = 3'd2;
   localparam TX_WRITE_LAST = 3'd3;
 
+  //----------------------------------------------------------------
+  // Asynchrononous registers
+  //----------------------------------------------------------------
+
   reg [ADDR_WIDTH-1:0] buffer_addr_reg  [0:BUFFERS-1];
   reg            [3:0] buffer_lwdv_reg  [0:BUFFERS-1];
   reg            [1:0] buffer_state_reg [0:BUFFERS-1];
 
   reg                   buffer_engine_addr_we;
   reg  [ADDR_WIDTH-1:0] buffer_engine_addr_new;
-  wire [ADDR_WIDTH-1:0] buffer_engine_addr;
 
   reg       buffer_engine_lwdv_we;
   reg [3:0] buffer_engine_lwdv_new;
@@ -86,8 +93,6 @@ module nts_extractor (
 
   reg        buffer_engine_state_we;
   reg  [1:0] buffer_engine_state_new;
-  wire [1:0] buffer_engine_state;
-
   reg                                   buffer_mac_selected_we;
   reg [BUFFER_SELECT_ADDRESS_WIDTH-1:0] buffer_mac_selected_new;
   reg [BUFFER_SELECT_ADDRESS_WIDTH-1:0] buffer_mac_selected_reg;
@@ -96,12 +101,54 @@ module nts_extractor (
 
   reg        buffer_mac_state_we;
   reg  [1:0] buffer_mac_state_new;
-  wire [1:0] buffer_mac_state;
 
   reg engine_packet_read_new;
   reg engine_packet_read_reg;
   reg engine_fifo_rd_en_new;
   reg engine_fifo_rd_en_reg;
+
+  reg  [7:0] mac_data_valid_new;
+  reg  [7:0] mac_data_valid_reg;
+  reg [63:0] mac_data_new;
+  reg [63:0] mac_data_reg;
+  reg        mac_start_new;
+  reg        mac_start_reg;
+
+  reg                  read_addr_we;
+  reg [ADDR_WIDTH-1:0] read_addr_new;
+  reg [ADDR_WIDTH-1:0] read_addr_reg;
+
+  reg       state_we;
+  reg [0:0] state_new;
+  reg [0:0] state_reg;
+
+  reg       tx_state_we;
+  reg [2:0] tx_state_new;
+  reg [2:0] tx_state_reg;
+
+  //----------------------------------------------------------------
+  // Synchrononous registers
+  //----------------------------------------------------------------
+
+  //Reset wires
+  reg sync_reset_metastable;
+  reg sync_reset;
+
+  // Registers between engine input read and ram writes to relax timing requirements
+  reg [BRAM_WIDTH-1:0] write_addr_new;
+  reg [BRAM_WIDTH-1:0] write_addr_reg;
+  reg                  write_wren_new;
+  reg                  write_wren_reg;
+  reg           [63:0] write_wdata_new;
+  reg           [63:0] write_wdata_reg;
+
+  //----------------------------------------------------------------
+  // Wires
+  //----------------------------------------------------------------
+
+  wire [ADDR_WIDTH-1:0] buffer_engine_addr;
+  wire            [1:0] buffer_engine_state;
+  wire            [1:0] buffer_mac_state;
 
   reg [BRAM_WIDTH-1:0] ram_engine_addr;
   /* verilator lint_off UNUSED */
@@ -113,25 +160,12 @@ module nts_extractor (
   reg                  ram_mac_read;
   wire          [63:0] ram_mac_rdata;
 
-  reg                  read_addr_we;
-  reg [ADDR_WIDTH-1:0] read_addr_new;
-  reg [ADDR_WIDTH-1:0] read_addr_reg;
-
-
-  reg  [7:0] mac_data_valid;
-  reg [63:0] mac_data;
-  reg        mac_start;
-
-  reg       state_we;
-  reg [0:0] state_new;
-  reg [0:0] state_reg;
-
   reg tx_start;
   reg tx_stop;
 
-  reg       tx_state_we;
-  reg [2:0] tx_state_new;
-  reg [2:0] tx_state_reg;
+  //----------------------------------------------------------------
+  // Wire assignments
+  //----------------------------------------------------------------
 
   assign buffer_engine_addr = buffer_addr_reg[buffer_engine_selected_reg];
   assign buffer_engine_state = buffer_state_reg[buffer_engine_selected_reg];
@@ -139,9 +173,9 @@ module nts_extractor (
   assign buffer_mac_addr = buffer_addr_reg[buffer_mac_selected_reg];
   assign buffer_mac_state = buffer_state_reg[buffer_mac_selected_reg];
 
-  assign o_mac_tx_data = mac_data;
-  assign o_mac_tx_data_valid = mac_data_valid;
-  assign o_mac_tx_start = mac_start;
+  assign o_mac_tx_data = mac_data_reg;
+  assign o_mac_tx_data_valid = mac_data_valid_reg;
+  assign o_mac_tx_start = mac_start_reg;
 
   assign o_engine_packet_read = engine_packet_read_reg;
   assign o_engine_fifo_rd_en  = engine_fifo_rd_en_reg;
@@ -181,9 +215,9 @@ module nts_extractor (
     buffer_engine_state_new = 0;
     engine_packet_read_new = 0;
     engine_fifo_rd_en_new = 0;
-    ram_engine_write = 0;
-    ram_engine_addr = 0;
-    ram_engine_wdata = 0;
+    write_wdata_new = 0;
+    write_wren_new = 0;
+    write_addr_new = 0;
     if (state_reg == STATE_NORMAL) begin
       case (buffer_engine_state)
         BUFFER_STATE_UNUSED:
@@ -204,10 +238,10 @@ module nts_extractor (
           end else begin
             buffer_engine_addr_we = 1;
             buffer_engine_addr_new = buffer_engine_addr + 1;
-            ram_engine_addr[BRAM_WIDTH-1:ADDR_WIDTH] = buffer_engine_selected_reg;
-            ram_engine_addr[ADDR_WIDTH-1:0] = buffer_engine_addr;
-            ram_engine_wdata = i_engine_fifo_rd_data;
-            ram_engine_write = 1;
+            write_addr_new[BRAM_WIDTH-1:ADDR_WIDTH] = buffer_engine_selected_reg;
+            write_addr_new[ADDR_WIDTH-1:0] = buffer_engine_addr;
+            write_wdata_new = i_engine_fifo_rd_data;
+            write_wren_new = 1;
             engine_fifo_rd_en_new = 1;
           end
         BUFFER_STATE_LOADED: ;
@@ -217,21 +251,32 @@ module nts_extractor (
   end
 
   //----------------------------------------------------------------
+  // RAM write process
+  //----------------------------------------------------------------
+
+  always @*
+  begin : ram_write
+    ram_engine_write = write_wren_reg;
+    ram_engine_addr = write_addr_reg;
+    ram_engine_wdata = write_wdata_reg;
+  end
+
+  //----------------------------------------------------------------
   // MAC Media Access Controller
   //----------------------------------------------------------------
 
   always @*
   begin
-    ram_mac_addr   = 0;
-    ram_mac_read   = 0;
-    mac_start      = 0;
-    mac_data       = 0;
-    mac_data_valid = 0;
-    read_addr_we   = 0;
-    read_addr_new  = 0;
-    tx_state_we    = 0;
-    tx_state_new   = 0;
-    tx_stop        = 0;
+    ram_mac_addr       = 0;
+    ram_mac_read       = 0;
+    mac_start_new      = 0;
+    mac_data_new       = 0;
+    mac_data_valid_new = 0;
+    read_addr_we       = 0;
+    read_addr_new      = 0;
+    tx_state_we        = 0;
+    tx_state_new       = 0;
+    tx_stop            = 0;
 
     if (state_reg == STATE_NORMAL) begin
       ram_mac_addr[BRAM_WIDTH-1:ADDR_WIDTH] = buffer_mac_selected_reg;
@@ -241,7 +286,7 @@ module nts_extractor (
       case (tx_state_reg)
         TX_IDLE:
           if (tx_start) begin
-            mac_start = 1;
+            mac_start_new = 1;
             read_addr_we = 1;
             read_addr_new = 0;
             tx_state_we = 1;
@@ -258,8 +303,8 @@ module nts_extractor (
           end
         TX_WRITE:
           begin
-            mac_data = ram_mac_rdata;
-            mac_data_valid = 8'hff;
+            mac_data_new = ram_mac_rdata;
+            mac_data_valid_new = 8'hff;
             read_addr_we = 1;
             read_addr_new = read_addr_reg + 1;
             if (read_addr_new >= buffer_mac_addr) begin
@@ -282,7 +327,7 @@ module nts_extractor (
               7: tmp = { 8'b0111_1111,  8'h0, ram_mac_rdata[63-:56] };
               8: tmp = { 8'b1111_1111,        ram_mac_rdata[63-:64] };
             endcase
-            { mac_data_valid, mac_data } = tmp;
+            { mac_data_valid_new, mac_data_new } = tmp;
             tx_state_we = 1;
             tx_state_new = TX_IDLE;
             tx_stop = 1;
@@ -352,9 +397,48 @@ module nts_extractor (
     endcase
   end
 
+  //----------------------------------------------------------------
+  // Synchronous reset conversion
+  //----------------------------------------------------------------
+
+  always @ (posedge i_clk or posedge i_areset)
+  begin
+    if (i_areset) begin
+      sync_reset_metastable <= 1;
+      sync_reset <= 1;
+    end else begin
+      sync_reset_metastable <= 0;
+      sync_reset <= sync_reset_metastable;
+    end
+  end
+
+  //----------------------------------------------------------------
+  // BRAM Register Update (synchronous reset)
+  //----------------------------------------------------------------
+
+  always @(posedge i_clk)
+  begin : bram_reg_update
+    if (sync_reset) begin
+      write_addr_reg  <= 0;
+      write_wdata_reg <= 0;
+      write_wren_reg  <= 0;
+    end else begin
+      write_addr_reg  <= write_addr_new;
+      write_wdata_reg <= write_wdata_new;
+      write_wren_reg  <= write_wren_new;
+    end
+  end
+
+  //----------------------------------------------------------------
+  // Register Update (asynchronous reset)
+  //----------------------------------------------------------------
+
   always @(posedge i_clk or posedge i_areset)
   begin : reg_update
     if (i_areset) begin
+      mac_start_reg <= 0;
+      mac_data_reg <= 0;
+      mac_data_valid_reg <= 0;
       buffer_engine_selected_reg <= 0;
       buffer_mac_selected_reg <= 0;
       buffer_reset_reg <= 0;
@@ -387,6 +471,10 @@ module nts_extractor (
 
       engine_fifo_rd_en_reg <= engine_fifo_rd_en_new;
       engine_packet_read_reg <= engine_packet_read_new;
+
+      mac_start_reg <= mac_start_new;
+      mac_data_reg <= mac_data_new;
+      mac_data_valid_reg <= mac_data_valid_new;
 
       if (read_addr_we)
         read_addr_reg <= read_addr_new;

@@ -76,9 +76,11 @@ module nts_extractor #(
   localparam [1:0] BUFFER_STATE_READING = 2'b11;
 
   localparam TX_IDLE       = 3'd0;
-  localparam TX_AWAIT_ACK  = 3'd1;
-  localparam TX_WRITE      = 3'd2;
-  localparam TX_WRITE_LAST = 3'd3;
+  localparam TX_INIT0      = 3'd1;
+  localparam TX_INIT1      = 3'd2;
+  localparam TX_AWAIT_ACK  = 3'd3;
+  localparam TX_WRITE      = 3'd4;
+  localparam TX_WRITE_LAST = 3'd5;
 
   localparam ADDR_NAME0             = API_ADDR_BASE + 0;
   localparam ADDR_NAME1             = API_ADDR_BASE + 1;
@@ -154,9 +156,14 @@ module nts_extractor #(
   reg [0:0] state_new;
   reg [0:0] state_reg;
 
+  reg        tx_first_word_we;
+  reg [63:0] tx_first_word_new;
+  reg [63:0] tx_first_word_reg;
+
   reg       tx_state_we;
   reg [2:0] tx_state_new;
   reg [2:0] tx_state_reg;
+
 
   //----------------------------------------------------------------
   // Synchrononous registers
@@ -384,13 +391,15 @@ module nts_extractor #(
 
   always @*
   begin
-    ram_mac_addr       = 0;
-    ram_mac_read       = 0;
-    mac_start_new      = 0;
     mac_data_new       = 0;
     mac_data_valid_new = 0;
+    mac_start_new      = 0;
+    ram_mac_addr       = 0;
+    ram_mac_read       = 0;
     read_addr_we       = 0;
     read_addr_new      = 0;
+    tx_first_word_we   = 0;
+    tx_first_word_new  = 0;
     tx_state_we        = 0;
     tx_state_new       = 0;
     tx_stop            = 0;
@@ -403,9 +412,23 @@ module nts_extractor #(
       case (tx_state_reg)
         TX_IDLE:
           if (tx_start) begin
-            mac_start_new = 1;
             read_addr_we = 1;
             read_addr_new = 0;
+            tx_state_we = 1;
+            tx_state_new = TX_INIT0;
+          end
+        TX_INIT0:
+          begin
+            read_addr_we = 1;
+            read_addr_new = 1;
+            tx_state_we = 1;
+            tx_state_new = TX_INIT1;
+          end
+        TX_INIT1:
+          begin
+            mac_start_new = 1;
+            tx_first_word_we = 1;
+            tx_first_word_new = ram_mac_rdata;
             tx_state_we = 1;
             tx_state_new = TX_AWAIT_ACK;
           end
@@ -413,9 +436,11 @@ module nts_extractor #(
           begin
             if (i_mac_tx_ack) begin
               read_addr_we = 1;
-              read_addr_new = 1;
+              read_addr_new = 2;
               tx_state_we = 1;
               tx_state_new = TX_WRITE;
+              mac_data_valid_new = 8'hff;
+              mac_data_new = mac_byte_txreverse(tx_first_word_reg, mac_data_valid_new);
             end
           end
         TX_WRITE:
@@ -566,6 +591,7 @@ module nts_extractor #(
       mac_data_valid_reg <= 0;
       read_addr_reg <= 0;
       state_reg <= STATE_RESET;
+      tx_first_word_reg <= 0;
       tx_state_reg <= TX_IDLE;
     end else begin
       if (counter_bytes_we)
@@ -619,6 +645,9 @@ module nts_extractor #(
         buffer_lwdv_reg[buffer_reset_reg] <= 0;
         buffer_state_reg[buffer_reset_reg] <= BUFFER_STATE_UNUSED;
       end
+
+      if (tx_first_word_we)
+        tx_first_word_reg <= tx_first_word_new;
 
       if (tx_state_we)
         tx_state_reg <= tx_state_new;

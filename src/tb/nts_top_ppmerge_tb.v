@@ -459,7 +459,7 @@ module nts_top_ppmerge_tb;
     i_api_dispatcher_cs = 0;
     i_api_dispatcher_we = 0;
     i_api_dispatcher_address = 0;
-    i_api_dispatcher_write_data = 0;
+
 
     #10;
     i_areset = 0;
@@ -470,7 +470,7 @@ module nts_top_ppmerge_tb;
 
     begin : loop
       integer i;
-      for (i = 0; i < 3; i = i + 1) begin
+      for (i = 0; i < 100; i = i + 1) begin
         while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
         send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_KEYID}, 2160, 0);
         while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
@@ -755,7 +755,7 @@ module nts_top_ppmerge_tb;
                   begin
                     pp_tx_start <= 1'b1;
                     pp_tx_state <= TX_S_WACK;
-                    $display("pp_tx: Starting new transfer.");
+                    $display("%s:%0d pp_tx: Starting new transfer.", `__FILE__, `__LINE__);
                   end
               end
 
@@ -776,12 +776,12 @@ module nts_top_ppmerge_tb;
 
             TX_S_WR :
               begin
-                $display("pp_tx: Transferrring data to mac.");
+                $display("%s:%0d pp_tx: Transferrring data to mac.",  `__FILE__, `__LINE__);
                 pp_tx_data       <= 64'hdeaddead_dead0003;
                 pp_tx_data_valid <= 8'hff;
                 pp_tx_count      <= pp_tx_count + 1;
 
-                if (pp_tx_count == pp_bytes/8 -1)
+                if (pp_tx_count >= pp_bytes/8 -1)
                   begin
                     pp_tx_state <= TX_S_LAST;
                   end
@@ -789,7 +789,7 @@ module nts_top_ppmerge_tb;
 
             TX_S_LAST :
               begin
-                $display("pp_tx: Transferrring final data to mac.");
+                $display("%s:%0d pp_tx: Transferrring final data to mac.", `__FILE__, `__LINE__);
                 pp_tx_data       <= 64'hdeaddead_dead0004;
                 pp_tx_data_valid <= 8'hff >> (8 - (pp_bytes % 8));
                 pp_tx_count      <= 0;
@@ -959,6 +959,15 @@ module nts_top_ppmerge_tb;
         if (dut.extractor.buffer_mac_selected_we)
           $display("%s:%0d extactor mac select buffer: %h", `__FILE__, `__LINE__, dut.extractor.buffer_mac_selected_reg);
       end
+
+    always @*
+      $display("%s:%0d merge.mux_ctrl: %h", `__FILE__, `__LINE__, merge.mux_ctrl);
+    always @*
+      $display("%s:%0d merge.mux_ctrl_reg: %h", `__FILE__, `__LINE__, merge.mux_ctrl_reg);
+    always @*
+      $display("%s:%0d merge.pp_merge_ctrl_reg: %h", `__FILE__, `__LINE__, merge.pp_merge_ctrl_reg);
+    always @*
+      $display("%s:%0d tb_mac_ack: %h nts_ack: %h pp_ack: ", `__FILE__, `__LINE__, tb_mac_ack, i_mac_tx_ack, pp_tx_ack);
   end
 
   //----------------------------------------------------------------

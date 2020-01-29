@@ -95,6 +95,9 @@ sim-rxbuf: $(OUTPUT)/nts_rx_buffer_tb.vvp
 sim-top: $(OUTPUT)/nts_top_tb.vvp
 	vvp $^
 
+sim-top-ppmerge: $(OUTPUT)/nts_top_ppmerge_tb.vvp
+	vvp $^
+
 sim-txbuf: $(OUTPUT)/nts_tx_buffer_tb.vvp
 	vvp $^
 
@@ -288,3 +291,19 @@ ifeq (,$(NO_VLINT))
 	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY -Wno-UNOPTFLAT $^
 endif
 	iverilog -o $@ $^
+
+$(OUTPUT)/nts_top_ppmerge_tb.vvp: \
+ ../src/tb/nts_top_ppmerge_tb.v \
+ ../src/rtl/nts_top.v \
+ ../src/rtl/nts_dispatcher.v \
+ ../src/rtl/nts_extractor.v \
+ ../src/rtl/memory/bram.v \
+../../pp_merge/src/rtl/pp_merge.v \
+ $(ENGINE_SRC)
+ifeq (,$(NO_VLINT))
+	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY -Wno-UNOPTFLAT $^
+endif
+	iverilog -o $@ $^
+
+
+

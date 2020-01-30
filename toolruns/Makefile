@@ -86,6 +86,9 @@ sim-memctrl: $(OUTPUT)/memory_ctrl_tb.vvp
 sim-dispatcher: $(OUTPUT)/nts_dispatcher_tb.vvp
 	vvp $^
 
+sim-extractor: $(OUTPUT)/nts_extractor_tb.vvp
+	vvp $^
+
 sim-parser: $(OUTPUT)/nts_parser_ctrl_tb.vvp
 	vvp $^
 
@@ -277,6 +280,13 @@ $(OUTPUT)/nts_dispatcher_tb.vvp: \
  ../src/rtl/memory/bram.v
 ifeq (,$(NO_VLINT))
 	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY $^
+endif
+	iverilog -o $@ $^
+
+$(OUTPUT)/nts_extractor_tb.vvp: \
+  ../src/tb/nts_extractor_tb.v
+ifeq (,$(NO_VLINT))
+	$(VLINT) $(VLINT_FLAGS) $^
 endif
 	iverilog -o $@ $^
 

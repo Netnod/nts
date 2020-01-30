@@ -650,15 +650,23 @@ module nts_top_tb;
             end
           end
         TX_AWAIT_DATA:
-          case (o_mac_tx_data_valid)
-            8'h00: ;
-            8'hff: tx_state <= TX_RECEIVING;
-            default: $display("%s:%0d TX TX_AWAIT_DATA illegal data: %h - %h", `__FILE__, `__LINE__, o_mac_tx_data_valid, o_mac_tx_data);
-          endcase
-        TX_RECEIVING: if (o_mac_tx_data_valid != 8'hff) tx_state <= TX_IDLE;
+          begin
+            case (o_mac_tx_data_valid)
+              8'h00: ;
+              8'hff: tx_state <= TX_RECEIVING;
+              default: ;
+            endcase
+            if (o_mac_tx_data_valid != 8'h00)
+              $display("%s:%0d TX Transmit to MAC, DV: %h Data: %h", `__FILE__, `__LINE__, o_mac_tx_data_valid, o_mac_tx_data);
+          end
+        TX_RECEIVING:
+          begin
+            if (o_mac_tx_data_valid != 8'hff)
+              tx_state <= TX_IDLE;
+            if (o_mac_tx_data_valid != 8'h00)
+              $display("%s:%0d TX Transmit to MAC, DV: %h Data: %h", `__FILE__, `__LINE__, o_mac_tx_data_valid, o_mac_tx_data);
+          end
       endcase
-      if (o_mac_tx_data_valid != 8'h00)
-        $display("%s:%0d TX Transmit to MAC, DV: %h Data: %h", `__FILE__, `__LINE__, o_mac_tx_data_valid, o_mac_tx_data);
 
     end
  end

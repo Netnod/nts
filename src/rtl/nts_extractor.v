@@ -70,17 +70,21 @@ module nts_extractor #(
   localparam [0:0] STATE_RESET  = 1'b0;
   localparam [0:0] STATE_NORMAL = 1'b1;
 
+  localparam BR_IDLE      = 0;
+  localparam BR_INIT0     = 1;
+  localparam BR_COPY      = 2;
+  localparam BR_COPY_LAST = 3;
+  localparam BR_START_TX  = 4;
+
   localparam [1:0] BUFFER_STATE_UNUSED  = 2'b00;
   localparam [1:0] BUFFER_STATE_WRITING = 2'b01;
   localparam [1:0] BUFFER_STATE_LOADED  = 2'b10;
   localparam [1:0] BUFFER_STATE_READING = 2'b11;
 
-  localparam TX_IDLE       = 3'd0;
-  localparam TX_INIT0      = 3'd1;
-  localparam TX_INIT1      = 3'd2;
-  localparam TX_AWAIT_ACK  = 3'd3;
-  localparam TX_WRITE      = 3'd4;
-  localparam TX_WRITE_LAST = 3'd5;
+  localparam TX_IDLE         = 3'd0;
+  localparam TX_AWAIT_ACK    = 3'd1;
+  localparam TX_WRITE        = 3'd2;
+  localparam TX_SILENT_CYCLE = 3'd3;
 
   localparam ADDR_NAME0             = API_ADDR_BASE + 0;
   localparam ADDR_NAME1             = API_ADDR_BASE + 1;
@@ -95,17 +99,21 @@ module nts_extractor #(
   // Asynchrononous registers
   //----------------------------------------------------------------
 
-  reg        counter_bytes_we;
-  reg [63:0] counter_bytes_new;
-  reg [63:0] counter_bytes_reg;
-  reg        counter_bytes_lsb_we;
-  reg [31:0] counter_bytes_lsb_reg;
+  // Buffer reader regs. (used to copy from buffer mem to txmem)
 
-  reg        counter_packets_we;
-  reg [63:0] counter_packets_new;
-  reg [63:0] counter_packets_reg;
-  reg        counter_packets_lsb_we;
-  reg [31:0] counter_packets_lsb_reg;
+  reg                  br_state_we;
+  reg            [2:0] br_state_new;
+  reg            [2:0] br_state_reg;
+
+  reg                  br_read_addr_we;
+  reg [ADDR_WIDTH-1:0] br_read_addr_new;
+  reg [ADDR_WIDTH-1:0] br_read_addr_reg; //source address inside current buffer
+
+  reg                  br_write_addr_we;
+  reg [ADDR_WIDTH-1:0] br_write_addr_new;
+  reg [ADDR_WIDTH-1:0] br_write_addr_reg;
+
+  // Buffer and buffer access related regs.
 
   reg [ADDR_WIDTH-1:0] buffer_addr_reg  [0:BUFFERS-1];
   reg            [3:0] buffer_lwdv_reg  [0:BUFFERS-1];
@@ -136,34 +144,37 @@ module nts_extractor #(
   reg        buffer_mac_state_we;
   reg  [1:0] buffer_mac_state_new;
 
+  reg        counter_bytes_we;
+  reg [63:0] counter_bytes_new;
+  reg [63:0] counter_bytes_reg;
+  reg        counter_bytes_lsb_we;
+  reg [31:0] counter_bytes_lsb_reg;
+
+  reg        counter_packets_we;
+  reg [63:0] counter_packets_new;
+  reg [63:0] counter_packets_reg;
+  reg        counter_packets_lsb_we;
+  reg [31:0] counter_packets_lsb_reg;
+
   reg engine_packet_read_new;
   reg engine_packet_read_reg;
   reg engine_fifo_rd_en_new;
   reg engine_fifo_rd_en_reg;
 
-  reg  [7:0] mac_data_valid_new;
-  reg  [7:0] mac_data_valid_reg;
-  reg [63:0] mac_data_new;
-  reg [63:0] mac_data_reg;
-  reg        mac_start_new;
-  reg        mac_start_reg;
-
-  reg                  read_addr_we;
-  reg [ADDR_WIDTH-1:0] read_addr_new;
-  reg [ADDR_WIDTH-1:0] read_addr_reg;
-
   reg       state_we;
   reg [0:0] state_new;
   reg [0:0] state_reg;
 
-  reg        tx_first_word_we;
-  reg [63:0] tx_first_word_new;
-  reg [63:0] tx_first_word_reg;
+  reg [ADDR_WIDTH-1:0] tx_count;
+  reg [ADDR_WIDTH-1:0] tx_last;
+  reg            [7:0] tx_lwdv;
 
-  reg       tx_state_we;
-  reg [2:0] tx_state_new;
-  reg [2:0] tx_state_reg;
+  reg           [63:0] txmem [ 0 : (1<<ADDR_WIDTH)-1 ]; //MAC easy access memory
+  reg [ADDR_WIDTH-1:0] txmem_addr;
+  reg           [63:0] txmem_wdata;
+  reg                  txmem_wren;
 
+  reg [2:0] tx_state;
 
   //----------------------------------------------------------------
   // Synchrononous registers
@@ -191,6 +202,13 @@ module nts_extractor #(
   wire            [1:0] buffer_engine_state;
   wire            [1:0] buffer_mac_state;
 
+  reg buffer_read_start;
+  reg buffer_read_stop;
+
+  reg  [7:0] mac_data_valid;
+  reg [63:0] mac_data;
+  reg        mac_start;
+
   reg [BRAM_WIDTH-1:0] ram_engine_addr;
   /* verilator lint_off UNUSED */
   wire          [63:0] ram_engine_rdata;
@@ -201,8 +219,9 @@ module nts_extractor #(
   reg                  ram_mac_read;
   wire          [63:0] ram_mac_rdata;
 
-  reg tx_start;
-  reg tx_stop;
+  reg                  tx_start;
+  reg [ADDR_WIDTH-1:0] tx_start_last;
+  reg            [7:0] tx_start_lwdv;
 
   //----------------------------------------------------------------
   // Wire assignments
@@ -216,9 +235,9 @@ module nts_extractor #(
 
   assign o_api_read_data = api_read_data;
 
-  assign o_mac_tx_data = mac_data_reg;
-  assign o_mac_tx_data_valid = mac_data_valid_reg;
-  assign o_mac_tx_start = mac_start_reg;
+  assign o_mac_tx_data = mac_byte_txreverse( mac_data, mac_data_valid );
+  assign o_mac_tx_data_valid = mac_data_valid;
+  assign o_mac_tx_start = mac_start;
 
   assign o_engine_packet_read = engine_packet_read_reg;
   assign o_engine_fifo_rd_en  = engine_fifo_rd_en_reg;
@@ -279,7 +298,7 @@ module nts_extractor #(
       8'b0111_1111: counter_bytes_new = counter_bytes_reg + 7;
       8'b1111_1111: counter_bytes_new = counter_bytes_reg + 8;
     endcase
-    if (mac_start_reg) begin
+    if (mac_start) begin
       counter_packets_we = 1;
       counter_packets_new = counter_packets_reg + 1;
     end
@@ -389,89 +408,164 @@ module nts_extractor #(
   // MAC Media Access Controller
   //----------------------------------------------------------------
 
+  always @(posedge i_clk, posedge i_areset)
+    if (i_areset == 1'b1) begin
+      mac_data_valid <= 0;
+      mac_data <= 0;
+      mac_start <= 0;
+      tx_count <= 0;
+      tx_last <= 0;
+      tx_lwdv <= 0;
+      tx_state <= 0;
+    end else begin
+      mac_data_valid <= 0;
+      mac_start <= 0;
+      if (state_reg == STATE_NORMAL) begin
+        case (tx_state)
+          TX_IDLE:
+            if (tx_start) begin
+              mac_start <= 1;
+              mac_data <= txmem[0];
+              mac_data_valid <= 8'hff;
+              tx_last <= tx_start_last;
+              tx_lwdv <= tx_start_lwdv;
+              tx_count <= 2;
+              tx_state <= TX_AWAIT_ACK;
+            end
+          TX_AWAIT_ACK:
+            if (i_mac_tx_ack) begin
+              mac_data <= txmem[1];
+              mac_data_valid <= 8'hff;
+              tx_state <= TX_WRITE;
+            end else begin
+              mac_data <= mac_data;
+              mac_data_valid <= mac_data_valid;
+            end
+          TX_WRITE:
+            begin
+              mac_data <= txmem[tx_count];
+              mac_data_valid <= 8'hff;
+              tx_count <= tx_count + 1;
+              if (tx_count >= tx_last) begin
+                mac_data_valid <= tx_lwdv;
+                tx_state <= TX_SILENT_CYCLE;
+              end
+            end
+          TX_SILENT_CYCLE: //just ensure we do feed D: 64'h0, DV: 8'h0 one cycle so MAC gets packet end.
+            begin
+              tx_state <= TX_IDLE;
+            end
+          default:
+            begin
+              mac_data       <= 0;
+              mac_data_valid <= 0;
+              tx_count       <= 0;
+              tx_last        <= 0;
+              tx_lwdv        <= 0;
+              tx_state       <= TX_IDLE;
+           end
+       endcase
+      end // not reset buffer cycles
+    end //not async reset
+
+  //----------------------------------------------------------------
+  // MAC Media Access Controller - txmem writer
+  //----------------------------------------------------------------
+
+  always @(posedge i_clk) // or posedge i_areset)
+/*  if (i_areset == 'b1) begin : txmem_reset
+    reg [ADDR_WIDTH   : 0] i;
+    for (i = 0; i <= (1<<ADDR_WIDTH)-1; i = i + 1) begin
+      txmem[i[ADDR_WIDTH-1:0]] <= 0;
+    end
+  end else*/ if (txmem_wren) begin
+    txmem[txmem_addr] <= txmem_wdata;
+  end
+
+  //----------------------------------------------------------------
+  // Buffer reader
+  // Copies from big buffer to easier accessed txmem.
+  //----------------------------------------------------------------
+
   always @*
   begin
-    mac_data_new       = 0;
-    mac_data_valid_new = 0;
-    mac_start_new      = 0;
     ram_mac_addr       = 0;
     ram_mac_read       = 0;
-    read_addr_we       = 0;
-    read_addr_new      = 0;
-    tx_first_word_we   = 0;
-    tx_first_word_new  = 0;
-    tx_state_we        = 0;
-    tx_state_new       = 0;
-    tx_stop            = 0;
+    br_read_addr_we    = 0;
+    br_read_addr_new   = 0;
+    br_state_we        = 0;
+    br_state_new       = 0;
+    br_write_addr_we   = 0;
+    br_write_addr_new  = 0;
+    txmem_wdata        = 0;
+    txmem_wren         = 0;
+    txmem_addr         = 0;
+    tx_start           = 0;
+    tx_start_lwdv      = 0;
+    buffer_read_stop   = 0;
 
     if (state_reg == STATE_NORMAL) begin
       ram_mac_addr[BRAM_WIDTH-1:ADDR_WIDTH] = buffer_mac_selected_reg;
-      ram_mac_addr[ADDR_WIDTH-1:0] = read_addr_reg;
+      ram_mac_addr[ADDR_WIDTH-1:0] = br_read_addr_reg;
       ram_mac_read = 1;
 
-      case (tx_state_reg)
-        TX_IDLE:
-          if (tx_start) begin
-            read_addr_we = 1;
-            read_addr_new = 0;
-            tx_state_we = 1;
-            tx_state_new = TX_INIT0;
+      case (br_state_reg)
+        BR_IDLE:
+          if (buffer_read_start) begin
+            br_read_addr_we = 1;
+            br_read_addr_new = 0;
+            br_state_we = 1;
+            br_state_new = BR_INIT0;
           end
-        TX_INIT0:
+        BR_INIT0:
           begin
-            read_addr_we = 1;
-            read_addr_new = 1;
-            tx_state_we = 1;
-            tx_state_new = TX_INIT1;
+            br_read_addr_we = 1;
+            br_read_addr_new = 1;
+            br_state_we = 1;
+            br_state_new = BR_COPY;
+            br_write_addr_we = 1;
+            br_write_addr_new = 0;
           end
-        TX_INIT1:
+        BR_COPY:
           begin
-            mac_start_new = 1;
-            tx_first_word_we = 1;
-            tx_first_word_new = ram_mac_rdata;
-            tx_state_we = 1;
-            tx_state_new = TX_AWAIT_ACK;
-          end
-        TX_AWAIT_ACK:
-          begin
-            if (i_mac_tx_ack) begin
-              read_addr_we = 1;
-              read_addr_new = 2;
-              tx_state_we = 1;
-              tx_state_new = TX_WRITE;
-              mac_data_valid_new = 8'hff;
-              mac_data_new = mac_byte_txreverse(tx_first_word_reg, mac_data_valid_new);
+            br_read_addr_we = 1;
+            br_read_addr_new = br_read_addr_reg + 1;
+            br_write_addr_we = 1;
+            br_write_addr_new = br_write_addr_reg + 1;
+            txmem_wdata = ram_mac_rdata;
+            txmem_wren  = 1;
+            txmem_addr  = br_write_addr_reg;
+            if (br_read_addr_new >= buffer_mac_addr) begin
+               br_state_we = 1;
+               br_state_new = BR_COPY_LAST;
             end
           end
-        TX_WRITE:
+        BR_COPY_LAST:
           begin
-            mac_data_valid_new = 8'hff;
-            mac_data_new = mac_byte_txreverse(ram_mac_rdata, mac_data_valid_new);
-            read_addr_we = 1;
-            read_addr_new = read_addr_reg + 1;
-            if (read_addr_new >= buffer_mac_addr) begin
-               //$display("%s:%0d read_addr_reg: %h buffer_mac_addr: %h", `__FILE__, `__LINE__, read_addr_reg, buffer_mac_addr);
-               tx_state_we = 1;
-               tx_state_new = TX_WRITE_LAST;
-            end
+            txmem_wdata = ram_mac_rdata;
+            txmem_wren  = 1;
+            txmem_addr  = br_write_addr_reg;
+            br_state_we = 1;
+            br_state_new = BR_START_TX;
           end
-        TX_WRITE_LAST:
-          begin : tx_write_last
+        BR_START_TX:
+          if (tx_state == TX_IDLE) begin
+            tx_start = 1;
             case (buffer_lwdv_reg[buffer_mac_selected_reg])
-              default: mac_data_valid_new = 8'b0000_0000;
-              1: mac_data_valid_new = 8'b0000_0001;
-              2: mac_data_valid_new = 8'b0000_0011;
-              3: mac_data_valid_new = 8'b0000_0111;
-              4: mac_data_valid_new = 8'b0000_1111;
-              5: mac_data_valid_new = 8'b0001_1111;
-              6: mac_data_valid_new = 8'b0011_1111;
-              7: mac_data_valid_new = 8'b0111_1111;
-              8: mac_data_valid_new = 8'b1111_1111;
+              default: tx_start_lwdv = 8'b0000_0000;
+              1: tx_start_lwdv = 8'b0000_0001;
+              2: tx_start_lwdv = 8'b0000_0011;
+              3: tx_start_lwdv = 8'b0000_0111;
+              4: tx_start_lwdv = 8'b0000_1111;
+              5: tx_start_lwdv = 8'b0001_1111;
+              6: tx_start_lwdv = 8'b0011_1111;
+              7: tx_start_lwdv = 8'b0111_1111;
+              8: tx_start_lwdv = 8'b1111_1111;
             endcase
-            mac_data_new = mac_byte_txreverse(ram_mac_rdata, mac_data_valid_new);
-            tx_state_we = 1;
-            tx_state_new = TX_IDLE;
-            tx_stop = 1;
+            tx_start_last = br_write_addr_reg;
+            br_state_we = 1;
+            br_state_new = BR_IDLE;
+            buffer_read_stop = 1;
           end
         default: ;
       endcase;
@@ -488,19 +582,19 @@ module nts_extractor #(
     buffer_mac_selected_new = 0;
     buffer_mac_state_we = 0;
     buffer_mac_state_new = 0;
-    tx_start = 0;
+    buffer_read_start = 0;
     if (state_reg == STATE_NORMAL) begin
       case (buffer_mac_state)
         BUFFER_STATE_UNUSED: ;
         BUFFER_STATE_WRITING: ;
         BUFFER_STATE_LOADED:
-          if (tx_state_reg == TX_IDLE) begin
+          if (br_state_reg == BR_IDLE) begin
             buffer_mac_state_we = 1;
             buffer_mac_state_new = BUFFER_STATE_READING;
-            tx_start = 1;
+            buffer_read_start = 1;
           end
         BUFFER_STATE_READING:
-          if (tx_stop) begin
+          if (buffer_read_stop) begin
             buffer_mac_selected_we = 1;
             buffer_mac_selected_new = buffer_mac_selected_reg + 1;
             buffer_mac_state_we = 1;
@@ -564,9 +658,36 @@ module nts_extractor #(
       write_wdata_reg <= 0;
       write_wren_reg  <= 0;
     end else begin
+
+
       write_addr_reg  <= write_addr_new;
       write_wdata_reg <= write_wdata_new;
       write_wren_reg  <= write_wren_new;
+    end
+  end
+
+  //----------------------------------------------------------------
+  // Register Update (no reset)
+  //----------------------------------------------------------------
+
+  always @(posedge i_clk)
+  begin
+    if (buffer_engine_addr_we)
+      buffer_addr_reg[buffer_engine_selected_reg] <= buffer_engine_addr_new;
+
+    if (buffer_engine_lwdv_we)
+      buffer_lwdv_reg[buffer_engine_selected_reg] <= buffer_engine_lwdv_new;
+
+    if (buffer_engine_state_we)
+      buffer_state_reg[buffer_engine_selected_reg] <= buffer_engine_state_new;
+
+    if (buffer_mac_state_we)
+      buffer_state_reg[buffer_mac_selected_reg] <= buffer_mac_state_new;
+
+    if (state_reg == STATE_RESET) begin
+      buffer_addr_reg[buffer_reset_reg] <= 0;
+      buffer_lwdv_reg[buffer_reset_reg] <= 0;
+      buffer_state_reg[buffer_reset_reg] <= BUFFER_STATE_UNUSED;
     end
   end
 
@@ -577,6 +698,9 @@ module nts_extractor #(
   always @(posedge i_clk or posedge i_areset)
   begin : reg_update
     if (i_areset) begin
+      br_read_addr_reg <= 0;
+      br_state_reg <= 0;
+      br_write_addr_reg <= 0;
       buffer_engine_selected_reg <= 0;
       buffer_mac_selected_reg <= 0;
       buffer_reset_reg <= 0;
@@ -586,14 +710,21 @@ module nts_extractor #(
       counter_packets_lsb_reg <= 0;
       engine_fifo_rd_en_reg <= 0;
       engine_packet_read_reg <= 0;
-      mac_start_reg <= 0;
-      mac_data_reg <= 0;
-      mac_data_valid_reg <= 0;
-      read_addr_reg <= 0;
+      //note: mac moved to its own clocked process to get timing, behaivor etc very similar to pp_tx
+    //mac_start_reg <= 0;
+    //mac_data_reg <= 0;
+    //mac_data_valid_reg <= 0;
       state_reg <= STATE_RESET;
-      tx_first_word_reg <= 0;
-      tx_state_reg <= TX_IDLE;
     end else begin
+      if (br_read_addr_we)
+        br_read_addr_reg <= br_read_addr_new;
+
+      if (br_state_we)
+        br_state_reg <= br_state_new;
+
+      if (br_write_addr_we)
+        br_write_addr_reg <= br_write_addr_new;
+
       if (counter_bytes_we)
         counter_bytes_reg <= counter_bytes_new;
 
@@ -606,23 +737,11 @@ module nts_extractor #(
       if (counter_packets_lsb_we)
         counter_packets_lsb_reg <= counter_packets_reg[31:0];
 
-      if (buffer_engine_addr_we)
-        buffer_addr_reg[buffer_engine_selected_reg] <= buffer_engine_addr_new;
-
       if (buffer_engine_selected_we)
         buffer_engine_selected_reg <= buffer_engine_selected_new;
 
-      if (buffer_engine_lwdv_we)
-        buffer_lwdv_reg[buffer_engine_selected_reg] <= buffer_engine_lwdv_new;
-
-      if (buffer_engine_state_we)
-        buffer_state_reg[buffer_engine_selected_reg] <= buffer_engine_state_new;
-
       if (buffer_mac_selected_we)
         buffer_mac_selected_reg <= buffer_mac_selected_new;
-
-      if (buffer_mac_state_we)
-        buffer_state_reg[buffer_mac_selected_reg] <= buffer_mac_state_new;
 
       if (buffer_reset_we)
         buffer_reset_reg <= buffer_reset_new;
@@ -630,28 +749,16 @@ module nts_extractor #(
       engine_fifo_rd_en_reg <= engine_fifo_rd_en_new;
       engine_packet_read_reg <= engine_packet_read_new;
 
-      mac_start_reg <= mac_start_new;
-      mac_data_reg <= mac_data_new;
-      mac_data_valid_reg <= mac_data_valid_new;
-
-      if (read_addr_we)
-        read_addr_reg <= read_addr_new;
+      //mac moved to its own clocked process to get timing, behaivor etc very similar to pp_tx
+    //mac_start_reg <= mac_start_new;
+    //mac_data_reg <= mac_data_new;
+    //mac_data_valid_reg <= mac_data_valid_new;
 
       if (state_we)
         state_reg <= state_new;
 
-      if (state_reg == STATE_RESET) begin
-        buffer_addr_reg[buffer_reset_reg] <= 0;
-        buffer_lwdv_reg[buffer_reset_reg] <= 0;
-        buffer_state_reg[buffer_reset_reg] <= BUFFER_STATE_UNUSED;
-      end
-
-      if (tx_first_word_we)
-        tx_first_word_reg <= tx_first_word_new;
-
-      if (tx_state_we)
-        tx_state_reg <= tx_state_new;
     end
   end
+
 
 endmodule

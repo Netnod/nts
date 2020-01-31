@@ -2658,7 +2658,7 @@ module nts_parser_ctrl #(
       STATE_UDP_CHECKSUM_WAIT:
         if (i_tx_sum_done) begin
           tx_udp_checksum_we = 1;
-          tx_udp_checksum_new = i_tx_sum;
+          tx_udp_checksum_new = ~ i_tx_sum;
         end
       default: ;
     endcase

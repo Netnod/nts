@@ -34,7 +34,7 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
   // Test bench constants
   //----------------------------------------------------------------
 
-  localparam ACCESS_PORT_WIDTH = 32;
+  localparam ACCESS_PORT_WIDTH = 64;
   localparam ADDR_WIDTH = 7;
 
   localparam integer ETHIPV4_NTS_TESTPACKETS_BITS=5488;
@@ -76,6 +76,9 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
   reg                          i_process_initial;
   reg                    [7:0] i_last_word_data_valid;
   reg                   [63:0] i_data;
+  /* verilator lint_off UNUSED */
+  wire                  [31:0] o_api_read_data;
+  /* verilator lint_on UNUSED */
 
   reg                          i_tx_empty;
   reg                          i_tx_full;
@@ -85,8 +88,21 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
   wire                         o_tx_ipv4_done;
   wire                         o_tx_ipv6_done;
 
+  /* verilator lint_off UNUSED */
+  wire                   [9:0] o_tx_addr;
+  wire                         o_tx_addr_internal;
+  wire                         o_tx_sum_reset;
+  wire                  [15:0] o_tx_sum_reset_value;
+  wire                         o_tx_sum_en;
+  wire                   [9:0] o_tx_sum_bytes;
+  wire                         o_tx_update_length;
+  /* verilator lint_on UNUSED */
+
   reg                          i_access_port_wait;
   wire      [ADDR_WIDTH+3-1:0] o_access_port_addr;
+  /* verilator lint_off UNUSED */
+  wire                  [15:0] o_access_port_burstsize;
+  /* verilator lint_on UNUSED */
   wire                   [2:0] o_access_port_wordsize;
   wire                         o_access_port_rd_en;
   reg                          i_access_port_rd_dv;
@@ -99,10 +115,12 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
   wire                [ 2 : 0] o_timestamp_version_number;
   wire                [ 7 : 0] o_timestamp_poll;
 
-  wire                  [3:0] o_keymem_key_word;
+  /* verilator lint_off UNUSED */
+  wire                        o_keymem_get_current_key;
+  /* verilator lint_on UNUSED */
+  wire                  [2:0] o_keymem_key_word;
   wire                        o_keymem_get_key_with_id;
   wire                 [31:0] o_keymem_server_id;
-  reg                         i_keymem_key_length;
   reg                         i_keymem_key_valid;
   reg                         i_keymem_ready;
 
@@ -117,6 +135,12 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
   wire                        o_crypto_tx_op_copy_ad;
   wire                        o_crypto_tx_op_store_nonce_tag;
   wire                        o_crypto_tx_op_store_cookie;
+  /* verilator lint_off UNUSED */
+  wire                        o_crypto_tx_op_store_cookiebuf;
+  wire                        o_crypto_op_cookiebuf_append;
+  wire                 [63:0] o_crypto_cookieprefix;
+  wire                        o_crypto_op_cookiebuf_reset;
+  /* verilator lint_on UNUSED */
   wire     [ADDR_WIDTH+3-1:0] o_crypto_tx_addr;
   wire                  [9:0] o_crypto_tx_bytes;
   wire                        o_crypto_op_cookie_verify;
@@ -130,12 +154,19 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
 
   wire                        o_muxctrl_crypto; //Crypto is in charge of RX, TX
 
+  /* verilator lint_off UNUSED */
+  wire                        o_statistics_nts_processed;
+  wire                        o_statistics_nts_bad_cookie;
+  wire                        o_statistics_nts_bad_auth;
+  wire                        o_statistics_nts_bad_keyid;
+  /* verilator lint_on UNUSED */
+
   wire                        o_detect_unique_identifier;
   wire                        o_detect_nts_cookie;
   wire                        o_detect_nts_cookie_placeholder;
   wire                        o_detect_nts_authenticator;
 
-  reg                 [3 : 0] detect_bits;
+//reg                 [3 : 0] detect_bits;
 
   reg                         keymem_state;
 
@@ -250,7 +281,7 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
   // Test bench Design Under Test (DUT) instantiation
   //----------------------------------------------------------------
 
-  nts_parser_ctrl #(.ACCESS_PORT_WIDTH(ACCESS_PORT_WIDTH), .ADDR_WIDTH(ADDR_WIDTH)) dut (
+  nts_parser_ctrl #(.ADDR_WIDTH(ADDR_WIDTH)) dut (
     .i_areset(i_areset), // async reset
     .i_clk(i_clk),
 
@@ -261,6 +292,14 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
     .i_last_word_data_valid(i_last_word_data_valid),
     .i_data(i_data),
 
+    .i_api_address(8'h0),
+    .i_api_cs(1'b0),
+    .i_api_we(1'b0),
+    .i_api_write_data(32'h0),
+    .o_api_read_data(o_api_read_data),
+
+    .i_tx_busy(1'h0),
+    .o_tx_addr_internal(o_tx_addr_internal),
     .i_tx_empty(i_tx_empty),
     .i_tx_full(i_tx_full),
     .o_tx_clear(o_tx_clear),
@@ -268,18 +307,28 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
     .o_tx_w_data(o_tx_w_data),
     .o_tx_ipv4_done(o_tx_ipv4_done),
     .o_tx_ipv6_done(o_tx_ipv6_done),
+    .o_tx_addr(o_tx_addr),
+    .i_tx_sum(16'h0),
+    .i_tx_sum_done(1'h0),
+    .o_tx_sum_reset(o_tx_sum_reset),
+    .o_tx_sum_reset_value(o_tx_sum_reset_value),
+    .o_tx_sum_en(o_tx_sum_en),
+    .o_tx_sum_bytes(o_tx_sum_bytes),
+    .o_tx_update_length(o_tx_update_length),
 
     .i_access_port_wait(i_access_port_wait),
     .o_access_port_addr(o_access_port_addr),
+    .o_access_port_burstsize(o_access_port_burstsize),
     .o_access_port_wordsize(o_access_port_wordsize),
     .o_access_port_rd_en(o_access_port_rd_en),
     .i_access_port_rd_dv(i_access_port_rd_dv),
     .i_access_port_rd_data(i_access_port_rd_data),
 
+    .o_keymem_get_current_key(o_keymem_get_current_key),
+    .i_keymem_key_id(0),
     .o_keymem_key_word(o_keymem_key_word),
     .o_keymem_get_key_with_id(o_keymem_get_key_with_id),
     .o_keymem_server_id(o_keymem_server_id),
-    .i_keymem_key_length(i_keymem_key_length),
     .i_keymem_key_valid(i_keymem_key_valid),
     .i_keymem_ready(i_keymem_ready),
 
@@ -314,6 +363,15 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
 
     .o_muxctrl_crypto(o_muxctrl_crypto),
 
+    .o_crypto_cookieprefix(o_crypto_cookieprefix),
+    .o_crypto_tx_op_store_cookiebuf(o_crypto_tx_op_store_cookiebuf),
+    .o_crypto_op_cookiebuf_append(o_crypto_op_cookiebuf_append),
+    .o_crypto_op_cookiebuf_reset(o_crypto_op_cookiebuf_reset),
+    .o_statistics_nts_processed(o_statistics_nts_processed),
+    .o_statistics_nts_bad_cookie(o_statistics_nts_bad_cookie),
+    .o_statistics_nts_bad_auth(o_statistics_nts_bad_auth),
+    .o_statistics_nts_bad_keyid(o_statistics_nts_bad_keyid),
+
     .o_detect_unique_identifier(o_detect_unique_identifier),
     .o_detect_nts_cookie(o_detect_nts_cookie),
     .o_detect_nts_cookie_placeholder(o_detect_nts_cookie_placeholder),
@@ -323,6 +381,21 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
   //----------------------------------------------------------------
   // Test bench code
   //----------------------------------------------------------------
+
+  task test_ipv4_checksum;
+  begin : test_ipv4_checksum
+    /* verilator lint_off UNUSED */
+    reg      [15:0] actual;
+    reg      [15:0] expected;
+    reg [5*4*8-1:0] header;
+    header = 160'h45_00_03_d8_00_00_40_00_ff_11_00_00_c0_a8_28_15_c0_a8_28_01;
+    actual = dut.ipv4_csum( { header[159-:10*8], header[0+:64] } );
+    expected = 'ha6ad;
+    $display("%s:%0d test_ipv4_checksum expected: %h actual: %h", `__FILE__, `__LINE__, expected, actual);
+    `assert( actual == expected );
+    /* verilator lint_on UNUSED */
+  end
+  endtask
 
   initial begin
     $display("Test start: %s:%0d", `__FILE__, `__LINE__);
@@ -346,6 +419,8 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
     #10
     i_areset = 0;
 
+    $display("%s:%0d Warning: a lot of tests here are commented out due to not being updated/maintained", `__FILE__, `__LINE__);
+/*
     //----------------------------------------------------------------
     // IPv4 Requests
     //----------------------------------------------------------------
@@ -393,7 +468,8 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
     $display("%s:%0d PARSE: NTS_TEST_REQUEST_WITH_KEY_IPV6_2", `__FILE__, `__LINE__);
     send_packet({63216'b0, NTS_TEST_REQUEST_WITH_KEY_IPV6_2}, 2320, detect_bits);
     `assert(detect_bits == 'b1101);
-
+*/
+    test_ipv4_checksum();
     $display("Test stop: %s:%0d", `__FILE__, `__LINE__);
     $finish;
   end
@@ -408,16 +484,13 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
       keymem_state <= 0;
       i_keymem_ready <= 1;
       i_keymem_key_valid <= 0;
-      i_keymem_key_length <= 0;
     end else begin
       i_keymem_key_valid <= 0;
-      i_keymem_key_length <= 0;
       i_keymem_ready <= 1;
       if (keymem_state) begin
         keymem_state <= 0;
         i_keymem_ready <= 1;
         i_keymem_key_valid <= 1;
-        i_keymem_key_length <= 0;
       end else if (o_keymem_get_key_with_id) begin
         keymem_state <= 1;
         i_keymem_ready <= 0;
@@ -444,20 +517,20 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
       addr_lo = o_access_port_addr[2:0];
       tmp = { rx_buf[addr_hi], rx_buf[addr_hi+1][63:40] };
       case (addr_lo)
-        0: i_access_port_rd_data = tmp[87:56];
-        1: i_access_port_rd_data = tmp[79:48];
-        2: i_access_port_rd_data = tmp[71:40];
-        3: i_access_port_rd_data = tmp[63:32];
-        4: i_access_port_rd_data = tmp[55:24];
-        5: i_access_port_rd_data = tmp[47:16];
-        6: i_access_port_rd_data = tmp[39:8];
-        7: i_access_port_rd_data = tmp[31:0];
+        0: i_access_port_rd_data = { 32'h0, tmp[87:56] };
+        1: i_access_port_rd_data = { 32'h0, tmp[79:48] };
+        2: i_access_port_rd_data = { 32'h0, tmp[71:40] };
+        3: i_access_port_rd_data = { 32'h0, tmp[63:32] };
+        4: i_access_port_rd_data = { 32'h0, tmp[55:24] };
+        5: i_access_port_rd_data = { 32'h0, tmp[47:16] };
+        6: i_access_port_rd_data = { 32'h0, tmp[39:8] };
+        7: i_access_port_rd_data = { 32'h0, tmp[31:0] };
         default: begin `assert(0); end
       endcase
       i_access_port_rd_dv = 1;
       if (verbose_output >= 4) $display("%s:%0d i_access_port_rd_data=%h", `__FILE__, `__LINE__, i_access_port_rd_data);
     end else begin
-      i_access_port_rd_data = 32'hXXXX_XXXX;
+      i_access_port_rd_data = 64'hXXX_XXXX_XXXX_XXXX;
       i_access_port_rd_dv = 0;
     end
   end

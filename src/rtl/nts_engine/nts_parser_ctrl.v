@@ -1671,7 +1671,7 @@ module nts_parser_ctrl #(
       { carry[4+i], sum1[i] } = calc_csum16( sum0[2*i], sum0[2*i+1] );
     end
     { carry[6], sum2 } = calc_csum16( sum1[0], sum1[1] );
-    { carry[7], sum3 } = calc_csum16( sum2, header[15:0] );
+    { carry[7], sum3 } = calc_csum16( sum2, header[143-:16] );
 
     msb = 0;
     for (i = 0; i < 8; i = i + 1) begin

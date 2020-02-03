@@ -112,22 +112,26 @@ module nts_verify_secure #(
   localparam [BITS_STATE-1:0] STATE_SIV_VERIFY_WAIT_1    =  8;
   localparam [BITS_STATE-1:0] STATE_COPY_TX_INIT_AD      =  9;
   localparam [BITS_STATE-1:0] STATE_COPY_TX              = 10;
-  localparam [BITS_STATE-1:0] STATE_AUTH_MEMSTORE_NONCE  = 11;
-  localparam [BITS_STATE-1:0] STATE_SIV_AUTH_WAIT_0      = 12;
-  localparam [BITS_STATE-1:0] STATE_SIV_AUTH_WAIT_1      = 13;
-  localparam [BITS_STATE-1:0] STATE_STORE_TX_AUTH_INIT   = 14;
-  localparam [BITS_STATE-1:0] STATE_STORE_TX_AUTH        = 15;
-  localparam [BITS_STATE-1:0] STATE_STORE_TX_COOKIE_INIT = 16;
-  localparam [BITS_STATE-1:0] STATE_STORE_TX_COOKIE      = 17;
-  localparam [BITS_STATE-1:0] STATE_LOAD_KEYS_FROM_MEM   = 18;
-  localparam [BITS_STATE-1:0] STATE_STORE_COOKIEBUF      = 19;
-  localparam [BITS_STATE-1:0] STATE_STORE_TX_CB_INIT     = 20;
-  localparam [BITS_STATE-1:0] STATE_STORE_TX_CB          = 21;
+  localparam [BITS_STATE-1:0] STATE_AUTH_MEMSTORE_CHRONY = 11;
+  localparam [BITS_STATE-1:0] STATE_AUTH_WAIT_NONCE_READY= 12;
+  localparam [BITS_STATE-1:0] STATE_AUTH_MEMSTORE_NONCE  = 13;
+  localparam [BITS_STATE-1:0] STATE_SIV_AUTH_WAIT_0      = 14;
+  localparam [BITS_STATE-1:0] STATE_SIV_AUTH_WAIT_1      = 15;
+  localparam [BITS_STATE-1:0] STATE_STORE_TX_AUTH_INIT   = 16;
+  localparam [BITS_STATE-1:0] STATE_STORE_TX_AUTH        = 17;
+  localparam [BITS_STATE-1:0] STATE_STORE_TX_COOKIE_INIT = 18;
+  localparam [BITS_STATE-1:0] STATE_STORE_TX_COOKIE      = 19;
+  localparam [BITS_STATE-1:0] STATE_LOAD_KEYS_FROM_MEM   = 20;
+  localparam [BITS_STATE-1:0] STATE_STORE_COOKIEBUF      = 21;
+  localparam [BITS_STATE-1:0] STATE_STORE_TX_CB_INIT     = 22;
+  localparam [BITS_STATE-1:0] STATE_STORE_TX_CB          = 23;
   localparam [BITS_STATE-1:0] STATE_ERROR                = 31;
 
   localparam BRAM_WIDTH = 10;
   localparam [15:BRAM_WIDTH-1] CORE_ADDR_MSB_ZERO=0;
   localparam [19:BRAM_WIDTH+3] CORE_LENGTH_MSB_ZERO=0; // {MSB, length64, LSB}, LSB=3'b000
+
+  localparam CRHONY_COOKIE_DIV128 = 4; //4 == 512/128;
 
   /* MEM8 addresses must be lsb=0 */
   localparam [BRAM_WIDTH-1:0] MEM8_ADDR_NONCE   =   0;
@@ -142,12 +146,13 @@ module nts_verify_secure #(
   localparam [1:0] MUX_CIPHERTEXT_PC512        = 2'b01;
   localparam [1:0] MUX_CIPHERTEXT_PC_COOKIEBUF = 2'b10;
 
-  localparam [5:0] MUX_RAM_CORE   = 6'b000001;
-  localparam [5:0] MUX_RAM_RX     = 6'b000010;
-  localparam [5:0] MUX_RAM_TX     = 6'b000100;
-  localparam [5:0] MUX_RAM_NONCE  = 6'b001000;
-  localparam [5:0] MUX_RAM_LOAD   = 6'b010000;
-  localparam [5:0] MUX_RAM_COOKIE = 6'b100000;
+  localparam [6:0] MUX_RAM_CORE   = 7'b0000001;
+  localparam [6:0] MUX_RAM_RX     = 7'b0000010;
+  localparam [6:0] MUX_RAM_TX     = 7'b0000100;
+  localparam [6:0] MUX_RAM_NONCE  = 7'b0001000;
+  localparam [6:0] MUX_RAM_CHRONY = 7'b0010000;
+  localparam [6:0] MUX_RAM_LOAD   = 7'b0100000;
+  localparam [6:0] MUX_RAM_COOKIE = 7'b1000000;
 
   localparam AEAD_AES_SIV_CMAC_256 = 1'h0;
 
@@ -257,6 +262,14 @@ module nts_verify_secure #(
   reg   [BRAM_WIDTH-1:0] ramld_addr_reg; //Memory address in internal mem.
 
   //----------------------------------------------------------------
+  // Registers - Cookie copy from S2C, C2S to MEM_ADDR_PC related
+  //----------------------------------------------------------------
+
+  reg       chrony_count_we;
+  reg [2:0] chrony_count_new;
+  reg [2:0] chrony_count_reg;
+
+  //----------------------------------------------------------------
   // Registers - Cookie buffer related
   //----------------------------------------------------------------
 
@@ -313,6 +326,14 @@ module nts_verify_secure #(
   wire [127 : 0] core_tag_out;
   wire           core_tag_ok;
   wire           core_ready;
+
+  //----------------------------------------------------------------
+  // Wires - Cookie writeback related. Copies s2c, c2s to RAM.
+  //----------------------------------------------------------------
+
+  reg                  ramchrony_enwe;
+  reg [BRAM_WIDTH-1:0] ramchrony_addr;
+  reg          [127:0] ramchrony_wdata;
 
   //----------------------------------------------------------------
   // Wires - Cookie buffer related
@@ -519,6 +540,7 @@ module nts_verify_secure #(
   always @(posedge i_clk or posedge i_areset)
   begin : reg_update
     if (i_areset) begin
+      chrony_count_reg <= 0;
       cookie_ctr_reg <= 0;
       cookie_prefix_reg <= 0;
       cookiebuffer_length_reg <= 0;
@@ -554,6 +576,9 @@ module nts_verify_secure #(
       tx_ctr_reg <= 0;
       verify_tag_ok_reg <= 0;
     end else begin
+      if (chrony_count_we)
+        chrony_count_reg <= chrony_count_new;
+
       if (cookie_ctr_we)
         cookie_ctr_reg <= cookie_ctr_new;
 
@@ -688,7 +713,7 @@ module nts_verify_secure #(
 
   always @*
   begin : ram_mux
-    reg [5:0] mux;
+    reg [6:0] mux;
 
     mux = MUX_RAM_CORE;
 
@@ -703,16 +728,17 @@ module nts_verify_secure #(
     ram_b_wdata = 0;
 
     case (state_reg)
-      STATE_COPY_RX:             mux = MUX_RAM_RX;
-      STATE_AUTH_MEMSTORE_NONCE: mux = MUX_RAM_NONCE;
-      STATE_COPY_TX:             mux = MUX_RAM_TX;
-      STATE_STORE_TX_AUTH_INIT:  mux = MUX_RAM_TX;
-      STATE_STORE_TX_AUTH:       mux = MUX_RAM_TX;
-      STATE_STORE_TX_COOKIE:     mux = MUX_RAM_TX;
-      STATE_STORE_TX_CB_INIT:    mux = MUX_RAM_TX;
-      STATE_STORE_TX_CB:         mux = MUX_RAM_TX;
-      STATE_LOAD_KEYS_FROM_MEM:  mux = MUX_RAM_LOAD;
-      STATE_STORE_COOKIEBUF:     mux = MUX_RAM_COOKIE;
+      STATE_COPY_RX:              mux = MUX_RAM_RX;
+      STATE_AUTH_MEMSTORE_CHRONY: mux = MUX_RAM_CHRONY;
+      STATE_AUTH_MEMSTORE_NONCE:  mux = MUX_RAM_NONCE;
+      STATE_COPY_TX:              mux = MUX_RAM_TX;
+      STATE_STORE_TX_AUTH_INIT:   mux = MUX_RAM_TX;
+      STATE_STORE_TX_AUTH:        mux = MUX_RAM_TX;
+      STATE_STORE_TX_COOKIE:      mux = MUX_RAM_TX;
+      STATE_STORE_TX_CB_INIT:     mux = MUX_RAM_TX;
+      STATE_STORE_TX_CB:          mux = MUX_RAM_TX;
+      STATE_LOAD_KEYS_FROM_MEM:   mux = MUX_RAM_LOAD;
+      STATE_STORE_COOKIEBUF:      mux = MUX_RAM_COOKIE;
       default: ;
     endcase
 
@@ -727,6 +753,17 @@ module nts_verify_secure #(
           ram_b_we = core_we;
           ram_b_addr = { core_addr[BRAM_WIDTH-2:0], 1'b1 }; //1'b1: 64bit LSB
           ram_b_wdata = core_block_wr[63:0];
+        end
+      MUX_RAM_CHRONY:
+        begin
+          ram_a_en = ramchrony_enwe;
+          ram_a_we = ramchrony_enwe;
+          ram_a_addr = ramchrony_addr;
+          ram_a_wdata = ramchrony_wdata[127:64];
+          ram_b_en = ramchrony_enwe;
+          ram_b_we = ramchrony_enwe;
+          ram_b_addr = ramchrony_addr + 1;
+          ram_b_wdata = ramchrony_wdata[63:0];
         end
       MUX_RAM_NONCE:
         begin
@@ -794,6 +831,46 @@ module nts_verify_secure #(
         key_master_addr = i_key_word[2:0];
       end
     end
+  end
+
+
+  //----------------------------------------------------------------
+  // Write C2S, S2C keys to RAM
+  //----------------------------------------------------------------
+
+  always @*
+  begin
+    chrony_count_we = 0;
+    chrony_count_new = 0;
+    ramchrony_enwe = 0;
+    ramchrony_addr = 0;
+    ramchrony_wdata = 0;
+    case (state_reg)
+      STATE_IDLE:
+        if (i_op_cookie_rencrypt) begin
+          chrony_count_we = 1;
+          chrony_count_new = 0;
+        end
+      STATE_AUTH_MEMSTORE_CHRONY:
+        begin
+          chrony_count_we = 1;
+          chrony_count_new = chrony_count_reg + 1;
+          ramchrony_enwe = 1;
+          ramchrony_addr = MEM8_ADDR_PC + 2 * chrony_count_reg;
+          case (chrony_count_reg)
+            0: ramchrony_wdata = key_c2s_reg[255:128];
+            1: ramchrony_wdata = key_c2s_reg[127:0];
+            2: ramchrony_wdata = key_s2c_reg[255:128];
+            3: ramchrony_wdata = key_s2c_reg[127:0];
+            default:
+             begin
+               chrony_count_we = 0;
+               ramchrony_enwe = 0;
+             end
+          endcase
+        end
+      default ;
+    endcase
   end
 
   //----------------------------------------------------------------
@@ -1460,24 +1537,14 @@ module nts_verify_secure #(
           state_we = 1;
           state_new = STATE_LOAD_KEYS_FROM_MEM;
         end else if (i_op_cookie_rencrypt) begin
-          if (nonce_a_valid_reg && nonce_b_valid_reg) begin
-            state_we = 1;
-            state_new = STATE_AUTH_MEMSTORE_NONCE;
-          end else begin
-            state_we = 1;
-            state_new = STATE_ERROR;
-          end
+          state_we = 1;
+          state_new = STATE_AUTH_MEMSTORE_CHRONY;
         end else if (i_op_copy_tx_ad) begin
           state_we = 1;
           state_new = STATE_COPY_TX_INIT_AD;
         end else if (i_op_generate_tag) begin
-          if (nonce_a_valid_reg && nonce_b_valid_reg) begin
-            state_we = 1;
-            state_new = STATE_AUTH_MEMSTORE_NONCE;
-          end else begin
-            state_we = 1;
-            state_new = STATE_ERROR;
-          end
+          state_we = 1;
+          state_new = STATE_AUTH_WAIT_NONCE_READY;
         end else if (i_op_store_tx_nonce_tag) begin
           state_we = 1;
           state_new = STATE_STORE_TX_AUTH_INIT;
@@ -1540,6 +1607,19 @@ module nts_verify_secure #(
         if (tx_addr >= tx_addr_last_reg) begin
           state_we = 1;
           state_new = STATE_IDLE;
+        end
+      STATE_AUTH_MEMSTORE_CHRONY:
+        if (chrony_count_reg >= CRHONY_COOKIE_DIV128) begin
+          state_we = 1;
+          state_new = STATE_AUTH_WAIT_NONCE_READY;
+        end
+      STATE_AUTH_WAIT_NONCE_READY:
+        if (nonce_a_valid_reg && nonce_b_valid_reg) begin
+          state_we = 1;
+          state_new = STATE_AUTH_MEMSTORE_NONCE;
+        end else begin
+          state_we = 1;
+          state_new = STATE_ERROR;
         end
       STATE_AUTH_MEMSTORE_NONCE:
         begin

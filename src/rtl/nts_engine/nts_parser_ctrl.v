@@ -198,9 +198,9 @@ module nts_parser_ctrl #(
   localparam [BITS_STATE-1:0] STATE_UNIQUE_IDENTIFIER_COPY_1 = 6'h0f;
   localparam [BITS_STATE-1:0] STATE_RETRIVE_CURRENT_KEY_0    = 6'h10;
   localparam [BITS_STATE-1:0] STATE_RETRIVE_CURRENT_KEY_1    = 6'h11;
-  localparam [BITS_STATE-1:0] STATE_GENERATE_FIRST_COOKIE    = 6'h12;
-  localparam [BITS_STATE-1:0] STATE_EMIT_FIRST_COOKIE_TL     = 6'h13;
-  localparam [BITS_STATE-1:0] STATE_EMIT_FIRST_COOKIE_V      = 6'h14;
+//localparam [BITS_STATE-1:0] STATE_GENERATE_FIRST_COOKIE    = 6'h12;
+//localparam [BITS_STATE-1:0] STATE_EMIT_FIRST_COOKIE_TL     = 6'h13;
+//localparam [BITS_STATE-1:0] STATE_EMIT_FIRST_COOKIE_V      = 6'h14;
   localparam [BITS_STATE-1:0] STATE_RESET_EXTRA_COOKIES      = 6'h15;
   localparam [BITS_STATE-1:0] STATE_ADDITIONAL_COOKIES_CTRL  = 6'h16;
   localparam [BITS_STATE-1:0] STATE_GENERATE_EXTRA_COOKIE    = 6'h17;
@@ -329,8 +329,9 @@ module nts_parser_ctrl #(
   reg                  [31:0] cookie_server_id_reg;
 
   reg                         cookies_count_we;
-  reg                   [2:0] cookies_count_new;
-  reg                   [2:0] cookies_count_reg;
+  reg                   [3:0] cookies_count_new;
+  reg                   [3:0] cookies_count_reg;
+
 
   reg                         error_state_we;
   reg        [BITS_STATE-1:0] error_state_new;
@@ -540,6 +541,8 @@ module nts_parser_ctrl #(
 
   reg [31:0] api_read_data;
 
+  wire [3:0] cookies_to_emit;
+
   reg copy_done; //wire
 
   reg             [63:0] crypto_cookieprefix;
@@ -593,6 +596,8 @@ module nts_parser_ctrl #(
   //----------------------------------------------------------------
   // Connectivity for ports etc.
   //----------------------------------------------------------------
+
+  assign cookies_to_emit = 1 + { 1'b0, nts_valid_placeholders_reg };
 
   assign detect_ipv4     = (ipdecode_ethernet_protocol_reg == E_TYPE_IPV4) && (ipdecode_ip_version_reg == IP_V4);
   assign detect_ipv4_bad = detect_ipv4 && ipdecode_ip4_ihl_reg != 5;
@@ -1495,16 +1500,16 @@ module nts_parser_ctrl #(
             end
           end
         end
-      STATE_EMIT_FIRST_COOKIE_TL:
-        begin
-          copy_tx_addr_we  = 1;
-          copy_tx_addr_new = copy_tx_addr_reg + 8;
-        end
-      STATE_EMIT_FIRST_COOKIE_V:
-        if (crypto_fsm_reg == CRYPTO_FSM_DONE_SUCCESS) begin
-          copy_tx_addr_we  = 1;
-          copy_tx_addr_new = copy_tx_addr_reg + 'h60; //TODO create a constant for 68
-        end
+    //STATE_EMIT_FIRST_COOKIE_TL:
+    //  begin
+    //    copy_tx_addr_we  = 1;
+    //    copy_tx_addr_new = copy_tx_addr_reg + 8;
+    //  end
+    //STATE_EMIT_FIRST_COOKIE_V:
+    //  if (crypto_fsm_reg == CRYPTO_FSM_DONE_SUCCESS) begin
+    //    copy_tx_addr_we  = 1;
+    //    copy_tx_addr_new = copy_tx_addr_reg + 'h60; //TODO create a constant for 68
+    //  end
       STATE_TX_EMIT_TL_NL_CL:
         begin
           copy_tx_addr_we  = 1;
@@ -1716,7 +1721,7 @@ module nts_parser_ctrl #(
     tx_authenticator_length_new = BYTES_AUTH_OVERHEAD /*TL, NL, CL */ + BYTES_AUTH_NONCE + tx_ciphertext_length_reg;
     tx_address_internal = 0;
     tx_address = 0;
-    tx_ciphertext_length_new = BYTES_AUTH_TAG + LEN_NTS_COOKIE * nts_valid_placeholders_reg;
+    tx_ciphertext_length_new = BYTES_AUTH_TAG + LEN_NTS_COOKIE * cookies_to_emit;
     tx_header_index_we = 0;
     tx_header_index_new = 0;
     tx_sum_reset = 0;
@@ -1750,12 +1755,12 @@ module nts_parser_ctrl #(
           tx_write_en   = i_access_port_rd_dv;
           tx_write_data = i_access_port_rd_data;
         end
-      STATE_EMIT_FIRST_COOKIE_TL:
-        begin
-          tx_address    = copy_tx_addr_reg;
-          tx_write_en   = 1;
-          tx_write_data = { TAG_NTS_COOKIE, LEN_NTS_COOKIE, keymem_key_id_reg };
-        end
+    //STATE_EMIT_FIRST_COOKIE_TL:
+    //  begin
+    //    tx_address    = copy_tx_addr_reg;
+    //    tx_write_en   = 1;
+    //    tx_write_data = { TAG_NTS_COOKIE, LEN_NTS_COOKIE, keymem_key_id_reg };
+    //  end
       STATE_TX_EMIT_TL_NL_CL:
         begin
           tx_address    = copy_tx_addr_reg;
@@ -1910,16 +1915,16 @@ module nts_parser_ctrl #(
               crypto_fsm_we  = 1;
               crypto_fsm_new = CRYPTO_FSM_RX_AUTH_PACKET;
             end
-          STATE_GENERATE_FIRST_COOKIE:
-            begin
-              crypto_fsm_we  = 1;
-              crypto_fsm_new = CRYPTO_FSM_GEN_COOKIE;
-            end
-          STATE_EMIT_FIRST_COOKIE_V:
-            begin
-              crypto_fsm_we  = 1;
-              crypto_fsm_new = CRYPTO_FSM_EMIT_FIRST_COOKIE;
-            end
+        //STATE_GENERATE_FIRST_COOKIE:
+        //  begin
+        //    crypto_fsm_we  = 1;
+        //    crypto_fsm_new = CRYPTO_FSM_GEN_COOKIE;
+        //  end
+        //STATE_EMIT_FIRST_COOKIE_V:
+        //  begin
+        //    crypto_fsm_we  = 1;
+        //    crypto_fsm_new = CRYPTO_FSM_EMIT_FIRST_COOKIE;
+        //  end
           STATE_RESET_EXTRA_COOKIES:
             begin
               crypto_fsm_we  = 1;
@@ -2323,46 +2328,47 @@ module nts_parser_ctrl #(
             set_error_state ( ERROR_CAUSE_KEY_CURRENT_FAIL );
           end else if (keymem_key_word_reg == 'b111) begin
             state_we  = 'b1;
-            state_new = STATE_GENERATE_FIRST_COOKIE;
+            state_new = STATE_RESET_EXTRA_COOKIES;
+          //state_new = STATE_GENERATE_FIRST_COOKIE;
           end
         end
-      STATE_GENERATE_FIRST_COOKIE:
-        case (crypto_fsm_reg)
-          CRYPTO_FSM_DONE_FAILURE:
-            set_error_state( ERROR_CAUSE_COOKIE1_GEN_FAIL );
-          CRYPTO_FSM_DONE_SUCCESS:
-            begin
-              state_we  = 'b1;
-              state_new = STATE_EMIT_FIRST_COOKIE_TL;
-            end
-          default: ;
-        endcase
-      STATE_EMIT_FIRST_COOKIE_TL:
-        begin
-          state_we  = 'b1;
-          state_new = STATE_EMIT_FIRST_COOKIE_V;
-        end
-      STATE_EMIT_FIRST_COOKIE_V:
-        case (crypto_fsm_reg)
-          CRYPTO_FSM_DONE_FAILURE:
-            set_error_state( ERROR_CAUSE_COOKIE1_TX_FAIL );
-          CRYPTO_FSM_DONE_SUCCESS:
-            begin
-              state_we  = 'b1;
-              state_new = STATE_RESET_EXTRA_COOKIES;
-            end
-          default: ;
-        endcase
+    //STATE_GENERATE_FIRST_COOKIE:
+    //  case (crypto_fsm_reg)
+    //    CRYPTO_FSM_DONE_FAILURE:
+    //      set_error_state( ERROR_CAUSE_COOKIE1_GEN_FAIL );
+    //    CRYPTO_FSM_DONE_SUCCESS:
+    //      begin
+    //        state_we  = 'b1;
+    //        state_new = STATE_EMIT_FIRST_COOKIE_TL;
+    //      end
+    //    default: ;
+    //  endcase
+    //STATE_EMIT_FIRST_COOKIE_TL:
+    //  begin
+    //    state_we  = 'b1;
+    //    state_new = STATE_EMIT_FIRST_COOKIE_V;
+    //  end
+    //STATE_EMIT_FIRST_COOKIE_V:
+    //  case (crypto_fsm_reg)
+    //    CRYPTO_FSM_DONE_FAILURE:
+    //      set_error_state( ERROR_CAUSE_COOKIE1_TX_FAIL );
+    //    CRYPTO_FSM_DONE_SUCCESS:
+    //      begin
+    //        state_we  = 'b1;
+    //        state_new = STATE_RESET_EXTRA_COOKIES;
+    //      end
+    //    default: ;
+    //  endcase
       STATE_RESET_EXTRA_COOKIES:
         if (crypto_fsm_reg == CRYPTO_FSM_DONE_SUCCESS) begin
           state_we  = 'b1;
           state_new = STATE_ADDITIONAL_COOKIES_CTRL;
         end
       STATE_ADDITIONAL_COOKIES_CTRL:
-        if (cookies_count_reg < nts_valid_placeholders_reg) begin // for(i=0; i<nts_valid_placeholders; i++) {
-                                                                  //   generateCookie();
-                                                                  //   storeCookie();
-                                                                  // }
+        if (cookies_count_reg < cookies_to_emit) begin // for(i=0; i < nts_valid_placeholders+1; i++) {
+                                                       //   generateCookie();
+                                                       //   storeCookie();
+                                                       // }
           state_we  = 'b1;
           state_new = STATE_GENERATE_EXTRA_COOKIE;
         end else begin
@@ -2486,13 +2492,14 @@ module nts_parser_ctrl #(
     cookies_count_new = 0;
 
     case (state_reg)
-      STATE_GENERATE_FIRST_COOKIE:
+    //STATE_GENERATE_FIRST_COOKIE:
+      STATE_RESET_EXTRA_COOKIES:
         begin
           cookies_count_we = 1;
           cookies_count_new = 0;
         end
       STATE_ADDITIONAL_COOKIES_CTRL:
-        if (cookies_count_reg < nts_valid_placeholders_reg) begin
+        if (cookies_count_reg < cookies_to_emit) begin
           cookies_count_we = 1;
           cookies_count_new = cookies_count_reg + 1;
         end

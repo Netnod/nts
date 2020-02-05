@@ -58,10 +58,6 @@ module nts_engine #(
   input  wire [31:0]           i_api_write_data,
   output wire [31:0]           o_api_read_data,
 
-  output wire                  o_noncegen_get,   //TODO incorporate internally later
-  input  wire [63:0]           i_noncegen_data,  //TODO incorporate internally later
-  input  wire                  i_noncegen_ready, //TODO incorporate internally later
-
   output wire                  o_detect_unique_identifier,
   output wire                  o_detect_nts_cookie,
   output wire                  o_detect_nts_cookie_placeholder,
@@ -144,9 +140,7 @@ module nts_engine #(
   wire                         detect_nts_cookie_placeholder;
   wire                         detect_nts_authenticator;
 
-  /* verilator lint_off UNUSED */
-  wire                         api_cs_cookie; //TODO implement
-  /* verilator lint_on UNUSED */
+  wire                         api_cs_cookie;
   wire                         api_cs_clock;
   wire                         api_cs_debug;
   wire                         api_cs_engine;
@@ -265,18 +259,12 @@ module nts_engine #(
   // Concurrent connectivity for ports etc.
   //----------------------------------------------------------------
 
-  assign api_read_data_cookie = 0; //TODO implement
-
   assign o_busy                          = parser_busy;
 
   assign o_detect_unique_identifier      = detect_unique_identifier;
   assign o_detect_nts_cookie             = detect_nts_cookie;
   assign o_detect_nts_cookie_placeholder = detect_nts_cookie_placeholder;
   assign o_detect_nts_authenticator      = detect_nts_authenticator;
-
-  assign o_noncegen_get        = crypto_noncegen_get; //TODO incorporate internally later
-  assign noncegen_crypto_nonce = i_noncegen_data;     //TODO incorporate internally later
-  assign noncegen_crypto_ready = i_noncegen_ready;    //TODO incorporate internally later
 
   assign ZERO = 0;
 
@@ -980,6 +968,25 @@ module nts_engine #(
     .i_noncegen_nonce ( noncegen_crypto_nonce ),
     .i_noncegen_ready ( noncegen_crypto_ready )
 
+  );
+
+  //----------------------------------------------------------------
+  // NTS Nonce Generator. Pseudorandom number generator.
+  //----------------------------------------------------------------
+
+  nts_noncegen noncegen (
+    .clk        ( i_clk    ),
+    .areset     ( i_areset ),
+    //API
+    .cs         ( api_cs_cookie        ),
+    .we         ( api_we               ),
+    .address    ( api_address          ),
+    .write_data ( api_write_data       ),
+    .read_data  ( api_read_data_cookie ),
+    //NonceGen
+    .get_nonce  ( crypto_noncegen_get   ),
+    .nonce      ( noncegen_crypto_nonce ),
+    .ready      ( noncegen_crypto_ready )
   );
 
   //----------------------------------------------------------------

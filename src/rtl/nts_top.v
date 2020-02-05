@@ -63,11 +63,6 @@ module nts_top #(
   wire                          extractor_engine_packet_read;
   wire                          extractor_engine_fifo_rd_en;
 
-  wire                          engine_noncegen_get_DUMMY;
-  reg                           noncegen_engine_ready_DUMMY;
-  reg                    [63:0] noncegen_engine_data_DUMMY;
-
-
   wire   [API_RW_WIDTH - 1:0] api_extractor_read_data;
   wire   [API_RW_WIDTH - 1:0] api_dispatcher_read_data;
   assign o_api_dispatcher_read_data = api_dispatcher_read_data | api_extractor_read_data;
@@ -191,10 +186,6 @@ module nts_top #(
         .i_api_write_data(api_write_data),
         .o_api_read_data(api_read_data[API_RW_WIDTH*engine_index+:API_RW_WIDTH]),
 
-        .o_noncegen_get(engine_noncegen_get_DUMMY),
-        .i_noncegen_data(noncegen_engine_data_DUMMY),
-        .i_noncegen_ready(noncegen_engine_ready_DUMMY),
-
         .o_detect_unique_identifier(engine_debug_detect_unique_identifier[engine_index]),
         .o_detect_nts_cookie(engine_debug_detect_nts_cookie[engine_index]),
         .o_detect_nts_cookie_placeholder(engine_debug_detect_nts_cookie_placeholder[engine_index]),
@@ -203,31 +194,5 @@ module nts_top #(
 /*
   endgenerate
 */
-
-  //----------------------------------------------------------------
-  // Dummy: Nonce Generator
-  //----------------------------------------------------------------
-
-  reg   [3:0] nonce_delay;
-
-  always @(posedge i_clk or posedge i_areset)
-  begin
-    if (i_areset) begin
-      noncegen_engine_data_DUMMY <= 64'h0;
-      noncegen_engine_ready_DUMMY <= 0;
-      nonce_delay <= 0;
-    end else begin
-      noncegen_engine_ready_DUMMY <= 0;
-      if (nonce_delay == 4'hF) begin
-        nonce_delay <= 0;
-        noncegen_engine_ready_DUMMY <= 1;
-        noncegen_engine_data_DUMMY <= noncegen_engine_data_DUMMY + 1;
-      end else if (nonce_delay > 0) begin
-        nonce_delay <= nonce_delay + 1;
-      end else if (engine_noncegen_get_DUMMY) begin
-        nonce_delay <= 1;
-      end
-    end
-  end
 
 endmodule

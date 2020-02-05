@@ -41,6 +41,20 @@ module nts_top_tb;
   localparam [11:0] API_ADDR_KEYMEM_KEY3_START  = API_ADDR_KEYMEM_BASE + 12'h70;
   localparam [11:0] API_ADDR_KEYMEM_KEY3_END    = API_ADDR_KEYMEM_BASE + 12'h7f;
 
+  localparam [11:0] API_ADDR_NONCEGEN_BASE     = 12'h020;
+  localparam [11:0] API_ADDR_NONCEGEN_CTRL     = API_ADDR_NONCEGEN_BASE + 'h08;
+  localparam [11:0] API_ADDR_NONCEGEN_KEY0     = API_ADDR_NONCEGEN_BASE + 'h10;
+  localparam [11:0] API_ADDR_NONCEGEN_KEY1     = API_ADDR_NONCEGEN_BASE + 'h11;
+  localparam [11:0] API_ADDR_NONCEGEN_KEY2     = API_ADDR_NONCEGEN_BASE + 'h12;
+  localparam [11:0] API_ADDR_NONCEGEN_KEY3     = API_ADDR_NONCEGEN_BASE + 'h13;
+  localparam [11:0] API_ADDR_NONCEGEN_LABEL    = API_ADDR_NONCEGEN_BASE + 'h20;
+  localparam [11:0] API_ADDR_NONCEGEN_CONTEXT0 = API_ADDR_NONCEGEN_BASE + 'h40;
+  localparam [11:0] API_ADDR_NONCEGEN_CONTEXT1 = API_ADDR_NONCEGEN_BASE + 'h41;
+  localparam [11:0] API_ADDR_NONCEGEN_CONTEXT2 = API_ADDR_NONCEGEN_BASE + 'h42;
+  localparam [11:0] API_ADDR_NONCEGEN_CONTEXT3 = API_ADDR_NONCEGEN_BASE + 'h43;
+  localparam [11:0] API_ADDR_NONCEGEN_CONTEXT4 = API_ADDR_NONCEGEN_BASE + 'h44;
+  localparam [11:0] API_ADDR_NONCEGEN_CONTEXT5 = API_ADDR_NONCEGEN_BASE + 'h45;
+
   localparam [11:0] API_DISPATCHER_ADDR_NAME               = 'h000;
   localparam [11:0] API_DISPATCHER_ADDR_VERSION            = 'h002;
   localparam [11:0] API_DISPATCHER_ADDR_DUMMY              = 'h003;
@@ -305,6 +319,23 @@ module nts_top_tb;
   end
   endtask
 
+  task init_noncegen;
+  begin
+    api_write32( 32'h5eb6_3bbb, API_ADDR_NONCEGEN_KEY0);
+    api_write32( 32'he01e_eed0, API_ADDR_NONCEGEN_KEY1);
+    api_write32( 32'h93cb_22bb, API_ADDR_NONCEGEN_KEY2);
+    api_write32( 32'h8f5a_cdc3, API_ADDR_NONCEGEN_KEY3);
+    api_write32( 32'h6adf_b183, API_ADDR_NONCEGEN_CONTEXT0);
+    api_write32( 32'ha4a2_c94a, API_ADDR_NONCEGEN_CONTEXT1);
+    api_write32( 32'h2f92_dab5, API_ADDR_NONCEGEN_CONTEXT2);
+    api_write32( 32'hade7_62a4, API_ADDR_NONCEGEN_CONTEXT3);
+    api_write32( 32'h7889_a5a1, API_ADDR_NONCEGEN_CONTEXT4);
+    api_write32( 32'hdead_beef, API_ADDR_NONCEGEN_CONTEXT5);
+    api_write32( 32'h0000_0000, API_ADDR_NONCEGEN_LABEL); //TODO: Use 16B engine counter as nonce label
+    api_write32( 32'h0000_0001, API_ADDR_NONCEGEN_CTRL);
+  end
+  endtask
+
   //----------------------------------------------------------------
   // Test bench macros
   //----------------------------------------------------------------
@@ -423,25 +454,22 @@ module nts_top_tb;
     i_areset = 0;
     #10;
 
-    install_key_256bit( NTS_TEST_REQUEST_MASTER_KEY_ID_1, NTS_TEST_REQUEST_MASTER_KEY_1, 0 );
-    install_key_256bit( NTS_TEST_REQUEST_MASTER_KEY_ID_2, NTS_TEST_REQUEST_MASTER_KEY_2, 1 );
 
     begin : loop
       integer i;
-      for (i = 0; i < 3; i = i + 1) begin
-        while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
+      for (i = 0; i < 100; i = i + 1) begin
+        case (i)
+          5: install_key_256bit( NTS_TEST_REQUEST_MASTER_KEY_ID_1, NTS_TEST_REQUEST_MASTER_KEY_1, 0 );
+          6: install_key_256bit( NTS_TEST_REQUEST_MASTER_KEY_ID_2, NTS_TEST_REQUEST_MASTER_KEY_2, 1 );
+          7: init_noncegen();
+          default: ;
+        endcase
         send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_KEYID}, 2160, 0);
-        while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
         send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_KEYID}, 2160, 0);
-        while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
         send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_COOKIE}, 2160, 0);
-        while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
         send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_AUTH}, 2160, 0);
-        while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
         send_packet({63696'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_1}, 1840, 1);
-        while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
         send_packet({57552'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_3}, 7984, 0); //same key _2 packets, but 7 placeholders
-        while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
         send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160, 0);
         send_packet({63696'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_1}, 1840, 0);
         send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160, 0);
@@ -450,6 +478,9 @@ module nts_top_tb;
     end
     //while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
     //send_packet({63696'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_1}, 1840, 0);
+    while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
+    #200;
+    send_packet({57552'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_3}, 7984, 0); //same key _2 packets, but 7 placeholders
     while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
     #200;
     send_packet({57552'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_3}, 7984, 0); //same key _2 packets, but 7 placeholders
@@ -730,6 +761,17 @@ module nts_top_tb;
         $display("%s:%0d dut.engine.crypto.key_c2s_reg: %h", `__FILE__, `__LINE__, dut.engine.crypto.key_c2s_reg);
       always @*
         $display("%s:%0d dut.engine.crypto.key_s2c_reg: %h", `__FILE__, `__LINE__, dut.engine.crypto.key_s2c_reg);
+      always @(posedge i_clk)
+        begin
+          if (dut.engine.crypto.nonce_a_we)
+            $display("%s:%0d dut.engine.crypto.nonce_a_we=1: %h", `__FILE__, `__LINE__, dut.engine.crypto.nonce_new);
+          if (dut.engine.crypto.nonce_b_we)
+            $display("%s:%0d dut.engine.crypto.nonce_b_we=1: %h", `__FILE__, `__LINE__, dut.engine.crypto.nonce_new);
+          if (dut.engine.crypto.ramnc_en && dut.engine.crypto.ramnc_we)
+            $display("%s:%0d dut.engine.crypto.ramnc_wdata: %h", `__FILE__, `__LINE__, dut.engine.crypto.ramnc_wdata);
+        end
+      always @*
+        $display("%s:%0d dut.engine.crypto.i_noncegen ready:%h nonce:%h", `__FILE__, `__LINE__, dut.engine.crypto.i_noncegen_ready, dut.engine.crypto.i_noncegen_nonce);
       always @*
         $display("%s:%0d dut.engine.parser.state_reg: %h", `__FILE__, `__LINE__, dut.engine.parser.state_reg);
       always @*

@@ -396,9 +396,10 @@ module nts_verify_secure #(
   // Wires - Nonce generation
   //----------------------------------------------------------------
 
-  reg         nonce_generate_we;  // Hey Mr RNG,
-  reg         nonce_generate_new; // please give me some 64
-  reg         nonce_generate_reg; // bits of randomness.
+  reg         nonce_generate;
+
+  reg         nonce_read_new;
+  reg         nonce_read_reg;
 
   reg  [63:0] nonce_new;          // New nonce
 
@@ -440,7 +441,7 @@ module nts_verify_secure #(
 
   assign o_error = (state_reg == STATE_ERROR) || (core_addr[15:BRAM_WIDTH-1] != 0);
 
-  assign o_noncegen_get = nonce_generate_reg;
+  assign o_noncegen_get = nonce_generate;
 
   assign o_rx_addr = rx_addr_reg;
   assign o_rx_rd_en = rx_rd_en_reg;
@@ -559,7 +560,7 @@ module nts_verify_secure #(
       nonce_a_valid_reg <= 0;
       nonce_b_reg <= 0;
       nonce_b_valid_reg <= 0;
-      nonce_generate_reg <= 0;
+      nonce_read_reg <= 0;
       ramld_addr_reg <= 0;
       ramrx_addr_reg <= 0;
       ramtx_addr_reg <= 0;
@@ -634,8 +635,7 @@ module nts_verify_secure #(
         nonce_b_valid_reg <= ~ nonce_invalidate;
       end
 
-      if (nonce_generate_we)
-        nonce_generate_reg <= nonce_generate_new;
+      nonce_read_reg <= nonce_read_new;
 
       if (ramcookie_addr_load_we)
         ramcookie_addr_load_reg <= ramcookie_addr_load_new;
@@ -1361,39 +1361,47 @@ module nts_verify_secure #(
     ramnc_we = 0;
     ramnc_wdata = 0;
     //External (noncegen)
-    nonce_generate_we = 0;
-    nonce_generate_new = 0;
+    nonce_generate = 0; //Signal to nonce generator. Give us nonce.
+    nonce_read_new = 0; //Register. Indicates double read scenario, must not sample nonce output.
 
-    if (state_reg == STATE_AUTH_MEMSTORE_NONCE) begin
-      nonce_a_we = 1;
-      nonce_b_we = 1;
-      nonce_invalidate = 1;
-      ramnc_en = 1;
-      ramnc_we = 1;
-      ramnc_wdata = { nonce_a_reg, nonce_b_reg };
-    end
-    else
-    if (nonce_generate_reg) begin
-      if (i_noncegen_ready) begin
-        nonce_generate_we = 1;
-        nonce_generate_new = 0;
+    if (nonce_a_valid_reg && nonce_b_valid_reg) begin
+      if (state_reg == STATE_AUTH_MEMSTORE_NONCE) begin
+        nonce_a_we = 1;
+        nonce_b_we = 1;
+        nonce_invalidate = 1;
+        ramnc_en = 1;
+        ramnc_we = 1;
+        ramnc_wdata = { nonce_a_reg, nonce_b_reg };
+      end
+
+    end else if (i_noncegen_ready) begin
+      if (nonce_read_reg) begin
+
         if (nonce_a_valid_reg == 'b0) begin
           nonce_new = i_noncegen_nonce;
           nonce_a_we = 1;
-          //$display("%s:%0d nonce_a = %h", `__FILE__, `__LINE__, nonce_new);
-        end
-        else if (nonce_b_valid_reg == 'b0) begin
+
+        end else if (nonce_b_valid_reg == 'b0) begin
           nonce_new = i_noncegen_nonce;
           nonce_b_we = 1;
-          //$display("%s:%0d nonce_b = %h", `__FILE__, `__LINE__, nonce_new);
         end
       end
     end
-    else if (nonce_a_valid_reg == 'b0 || nonce_b_valid_reg == 'b0) begin
-      //$display("%s:%0d Request new nonce", `__FILE__, `__LINE__);
-      nonce_generate_we = 1;
-      nonce_generate_new = 1;
-    end
+
+   if (i_noncegen_ready == 0)
+     nonce_generate = 1;
+
+   if (nonce_invalidate)
+     nonce_generate = 1;
+
+   if (nonce_a_we)
+     nonce_generate = 1;
+
+   if (nonce_b_we)
+     nonce_generate = 1;
+
+   nonce_read_new = nonce_generate;
+
   end
 
   //----------------------------------------------------------------
@@ -1622,7 +1630,7 @@ module nts_verify_secure #(
           state_new = STATE_ERROR;
         end
       STATE_AUTH_MEMSTORE_NONCE:
-        begin
+        if (nonce_invalidate) begin
           state_we = 1;
           state_new = STATE_SIV_AUTH_WAIT_0;
         end

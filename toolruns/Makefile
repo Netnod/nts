@@ -37,6 +37,8 @@ AES_SRC = $(AES_SRC_PATH)/aes_core.v $(AES_SRC_PATH)/aes_decipher_block.v $(AES_
 CMAC_SRC = ../sub/cmac/src/rtl/cmac_core.v $(AES_SRC)
 SIV_SRC = ../sub/aes-siv/src/rtl/aes_siv_core.v $(CMAC_SRC)
 KEYMEM_SRC = ../sub/keymem/src/rtl/nts_keymem.v
+SIPHASH_SRC = ../sub/siphash/src/rtl/siphash_core.v
+NONCEGEN_SRC = ../sub/nts_noncegen/src/rtl/nts_noncegen.v $(SIPHASH_SRC)
 ENGINE_SRC = ../src/rtl/nts_engine/nts_engine.v \
  ../src/rtl/nts_engine/nts_verify_secure.v \
  ../src/rtl/nts_engine/nts_tx_buffer.v \
@@ -49,6 +51,7 @@ ENGINE_SRC = ../src/rtl/nts_engine/nts_engine.v \
  ../src/rtl/memory/bram_dpge.v \
  ../src/rtl/memory/bram_dp2w.v \
  $(KEYMEM_SRC) \
+ $(NONCEGEN_SRC) \
  $(SIV_SRC)
 
 OUTPUT = ../output/vvp

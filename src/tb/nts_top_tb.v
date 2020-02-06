@@ -768,10 +768,10 @@ module nts_top_tb;
           if (dut.engine.crypto.nonce_b_we)
             $display("%s:%0d dut.engine.crypto.nonce_b_we=1: %h", `__FILE__, `__LINE__, dut.engine.crypto.nonce_new);
           if (dut.engine.crypto.ramnc_en && dut.engine.crypto.ramnc_we)
-            $display("%s:%0d dut.engine.crypto.ramnc_wdata: %h", `__FILE__, `__LINE__, dut.engine.crypto.ramnc_wdata);
+            $display("%s:%0d dut.engine.crypto.ramnc_wdata: %h_%h", `__FILE__, `__LINE__, dut.engine.crypto.ramnc_wdata[127:64], dut.engine.crypto.ramnc_wdata[63:0]);
         end
       always @*
-        $display("%s:%0d dut.engine.crypto.i_noncegen ready:%h nonce:%h", `__FILE__, `__LINE__, dut.engine.crypto.i_noncegen_ready, dut.engine.crypto.i_noncegen_nonce);
+        $display("%s:%0d dut.engine.crypto.i_noncegen ready:%h valid: %h nonce:%h", `__FILE__, `__LINE__, dut.engine.crypto.i_noncegen_ready, dut.engine.crypto.i_noncegen_nonce_valid, dut.engine.crypto.i_noncegen_nonce);
       always @*
         $display("%s:%0d dut.engine.parser.state_reg: %h", `__FILE__, `__LINE__, dut.engine.parser.state_reg);
       always @*

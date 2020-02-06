@@ -251,6 +251,7 @@ module nts_engine #(
 
   wire                    crypto_noncegen_get;
   wire             [63:0] noncegen_crypto_nonce;
+  wire                    noncegen_crypto_nonce_valid;
   wire                    noncegen_crypto_ready;
 
   wire             [31:0] ZERO;
@@ -964,9 +965,10 @@ module nts_engine #(
     .o_tx_write_data ( crypto_txbuf_write_data ),
     .o_tx_address    ( crypto_txbuf_address    ),
 
-    .o_noncegen_get   ( crypto_noncegen_get   ),
-    .i_noncegen_nonce ( noncegen_crypto_nonce ),
-    .i_noncegen_ready ( noncegen_crypto_ready )
+    .o_noncegen_get         ( crypto_noncegen_get         ),
+    .i_noncegen_nonce       ( noncegen_crypto_nonce       ),
+    .i_noncegen_nonce_valid ( noncegen_crypto_nonce_valid ),
+    .i_noncegen_ready       ( noncegen_crypto_ready       )
 
   );
 
@@ -984,9 +986,10 @@ module nts_engine #(
     .write_data ( api_write_data       ),
     .read_data  ( api_read_data_cookie ),
     //NonceGen
-    .get_nonce  ( crypto_noncegen_get   ),
-    .nonce      ( noncegen_crypto_nonce ),
-    .ready      ( noncegen_crypto_ready )
+    .get_nonce   ( crypto_noncegen_get         ),
+    .nonce       ( noncegen_crypto_nonce       ),
+    .nonce_valid ( noncegen_crypto_nonce_valid ),
+    .ready       ( noncegen_crypto_ready       )
   );
 
   //----------------------------------------------------------------

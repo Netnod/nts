@@ -92,6 +92,7 @@ module nts_verify_secure #(
 
   output wire                         o_noncegen_get,
   input  wire                [63 : 0] i_noncegen_nonce,
+  input  wire                         i_noncegen_nonce_valid,
   input  wire                         i_noncegen_ready
 
 );
@@ -126,6 +127,9 @@ module nts_verify_secure #(
   localparam [BITS_STATE-1:0] STATE_STORE_TX_CB_INIT     = 22;
   localparam [BITS_STATE-1:0] STATE_STORE_TX_CB          = 23;
   localparam [BITS_STATE-1:0] STATE_ERROR                = 31;
+
+  localparam NONCE_IDLE    = 0;
+  localparam NONCE_WAITING = 1;
 
   localparam BRAM_WIDTH = 10;
   localparam [15:BRAM_WIDTH-1] CORE_ADDR_MSB_ZERO=0;
@@ -393,17 +397,10 @@ module nts_verify_secure #(
   wire            [63:0] ram_b_rdata;
 
   //----------------------------------------------------------------
-  // Wires - Nonce generation
+  // Registers - Nonces
   //----------------------------------------------------------------
 
-  reg         nonce_generate;
-
-  reg         nonce_read_new;
-  reg         nonce_read_reg;
-
-  reg  [63:0] nonce_new;          // New nonce
-
-  reg         nonce_invalidate;   // Invalidate nonce regs
+  reg  [63:0] nonce_new;           // New nonce
 
   reg         nonce_a_we;          // First 64bit nonce
   reg  [63:0] nonce_a_reg;
@@ -412,6 +409,18 @@ module nts_verify_secure #(
   reg         nonce_b_we;          // Second 64bit nonce
   reg  [63:0] nonce_b_reg;
   reg         nonce_b_valid_reg;
+
+  //----------------------------------------------------------------
+  // Wires - Nonce generation
+  //----------------------------------------------------------------
+
+  reg         nonce_fsm_we;
+  reg   [0:0] nonce_fsm_new;
+  reg   [0:0] nonce_fsm_reg;
+
+  reg         nonce_copy;       // Copy nonce from nonce generator to nonce registers
+  reg         nonce_generate;   // Request nonce generator start
+  reg         nonce_invalidate; // Invalidate nonce registers
 
   //----------------------------------------------------------------
   // Wires - Misc.
@@ -560,7 +569,7 @@ module nts_verify_secure #(
       nonce_a_valid_reg <= 0;
       nonce_b_reg <= 0;
       nonce_b_valid_reg <= 0;
-      nonce_read_reg <= 0;
+      nonce_fsm_reg <= NONCE_IDLE;
       ramld_addr_reg <= 0;
       ramrx_addr_reg <= 0;
       ramtx_addr_reg <= 0;
@@ -635,7 +644,8 @@ module nts_verify_secure #(
         nonce_b_valid_reg <= ~ nonce_invalidate;
       end
 
-      nonce_read_reg <= nonce_read_new;
+      if (nonce_fsm_we)
+        nonce_fsm_reg <= nonce_fsm_new;
 
       if (ramcookie_addr_load_we)
         ramcookie_addr_load_reg <= ramcookie_addr_load_new;
@@ -1360,9 +1370,6 @@ module nts_verify_secure #(
     ramnc_en = 0;
     ramnc_we = 0;
     ramnc_wdata = 0;
-    //External (noncegen)
-    nonce_generate = 0; //Signal to nonce generator. Give us nonce.
-    nonce_read_new = 0; //Register. Indicates double read scenario, must not sample nonce output.
 
     if (nonce_a_valid_reg && nonce_b_valid_reg) begin
       if (state_reg == STATE_AUTH_MEMSTORE_NONCE) begin
@@ -1373,35 +1380,60 @@ module nts_verify_secure #(
         ramnc_we = 1;
         ramnc_wdata = { nonce_a_reg, nonce_b_reg };
       end
+    end
 
-    end else if (i_noncegen_ready) begin
-      if (nonce_read_reg) begin
+    if (nonce_copy) begin
 
-        if (nonce_a_valid_reg == 'b0) begin
-          nonce_new = i_noncegen_nonce;
-          nonce_a_we = 1;
+      if (nonce_a_valid_reg == 'b0) begin
+        nonce_new = i_noncegen_nonce;
+        nonce_a_we = 1;
 
-        end else if (nonce_b_valid_reg == 'b0) begin
-          nonce_new = i_noncegen_nonce;
-          nonce_b_we = 1;
-        end
+      end else if (nonce_b_valid_reg == 'b0) begin
+        nonce_new = i_noncegen_nonce;
+        nonce_b_we = 1;
       end
     end
 
-   if (i_noncegen_ready == 0)
-     nonce_generate = 1;
+  end
 
-   if (nonce_invalidate)
-     nonce_generate = 1;
+  always @*
+  begin : nonce_ctrl
+    reg need_more_nonces;
 
-   if (nonce_a_we)
-     nonce_generate = 1;
+    //External (noncegen)
+    nonce_generate = 0;
 
-   if (nonce_b_we)
-     nonce_generate = 1;
+    //Internal
+    nonce_copy = 0;
+    nonce_fsm_we = 0;
+    nonce_fsm_new = NONCE_IDLE;
+    need_more_nonces = 0;
 
-   nonce_read_new = nonce_generate;
+    if (nonce_invalidate)
+      need_more_nonces = 1;
 
+    if (nonce_a_valid_reg == 1'b0)
+      need_more_nonces = 1;
+
+    if (nonce_b_valid_reg == 1'b0)
+      need_more_nonces = 1;
+
+    case (nonce_fsm_reg)
+      NONCE_IDLE:
+        if (need_more_nonces) begin
+          nonce_fsm_we = 1;
+          nonce_fsm_new = NONCE_WAITING;
+          nonce_generate = 1;
+        end
+      NONCE_WAITING:
+        if (i_noncegen_ready) begin
+          nonce_fsm_we = 1;
+          nonce_fsm_new = NONCE_IDLE;
+          if (i_noncegen_nonce_valid)
+            nonce_copy = 1;
+        end
+      default: ;
+    endcase
   end
 
   //----------------------------------------------------------------

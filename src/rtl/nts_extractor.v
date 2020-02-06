@@ -157,6 +157,8 @@ module nts_extractor #(
   reg engine_fifo_rd_en_new;
   reg engine_fifo_rd_en_reg;
 
+  reg [7:0] lwdv_expanded_reg;
+
   reg [ADDR_WIDTH-1:0] tx_count;
   reg [ADDR_WIDTH-1:0] tx_last;
   reg            [7:0] tx_lwdv;
@@ -418,6 +420,24 @@ module nts_extractor #(
   end
   endfunction
 
+  function [7:0] mac_last_word_data_valid_expander( input [3:0] lwdv );
+  begin : lwdv_expander
+    reg [7:0] x;
+    case (lwdv)
+      default: x = 8'b0000_0000;
+      1: x = 8'b0000_0001;
+      2: x = 8'b0000_0011;
+      3: x = 8'b0000_0111;
+      4: x = 8'b0000_1111;
+      5: x = 8'b0001_1111;
+      6: x = 8'b0011_1111;
+      7: x = 8'b0111_1111;
+      8: x = 8'b1111_1111;
+    endcase
+    mac_last_word_data_valid_expander = x;
+  end
+  endfunction
+
   //----------------------------------------------------------------
   // MAC Media Access Controller
   //----------------------------------------------------------------
@@ -557,17 +577,7 @@ module nts_extractor #(
       BR_START_TX:
         if (tx_state == TX_IDLE) begin
           tx_start = 1;
-          case (buffer_lwdv_reg[buffer_mac_selected_reg])
-            default: tx_start_lwdv = 8'b0000_0000;
-            1: tx_start_lwdv = 8'b0000_0001;
-            2: tx_start_lwdv = 8'b0000_0011;
-            3: tx_start_lwdv = 8'b0000_0111;
-            4: tx_start_lwdv = 8'b0000_1111;
-            5: tx_start_lwdv = 8'b0001_1111;
-            6: tx_start_lwdv = 8'b0011_1111;
-            7: tx_start_lwdv = 8'b0111_1111;
-            8: tx_start_lwdv = 8'b1111_1111;
-          endcase
+          tx_start_lwdv = lwdv_expanded_reg;
           tx_start_last = br_write_addr_reg;
           br_state_we = 1;
           br_state_new = BR_IDLE;
@@ -671,13 +681,14 @@ module nts_extractor #(
       br_write_addr_reg <= 0;
       buffer_engine_selected_reg <= 0;
       buffer_mac_selected_reg <= 0;
+      buffer_initilized_reg <= 0;
       counter_bytes_reg <= 0;
       counter_bytes_lsb_reg <= 0;
       counter_packets_reg <= 0;
       counter_packets_lsb_reg <= 0;
       engine_fifo_rd_en_reg <= 0;
       engine_packet_read_reg <= 0;
-      buffer_initilized_reg <= 0;
+      lwdv_expanded_reg <= 0;
       //note: mac moved to its own clocked process to get timing, behaivor etc very similar to pp_tx
     //mac_start_reg <= 0;
     //mac_data_reg <= 0;
@@ -715,6 +726,8 @@ module nts_extractor #(
 
       engine_fifo_rd_en_reg <= engine_fifo_rd_en_new;
       engine_packet_read_reg <= engine_packet_read_new;
+
+      lwdv_expanded_reg <= mac_last_word_data_valid_expander( buffer_lwdv_reg[buffer_mac_selected_reg] );
 
       //mac moved to its own clocked process to get timing, behaivor etc very similar to pp_tx
     //mac_start_reg <= mac_start_new;

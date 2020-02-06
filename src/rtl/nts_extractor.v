@@ -224,7 +224,7 @@ module nts_extractor #(
 
   assign o_api_read_data = api_read_data;
 
-  assign o_mac_tx_data = mac_byte_txreverse( mac_data, mac_data_valid );
+  assign o_mac_tx_data = mac_data;
   assign o_mac_tx_data_valid = mac_data_valid;
   assign o_mac_tx_start = mac_start;
 
@@ -458,8 +458,9 @@ module nts_extractor #(
         TX_IDLE:
           if (tx_start) begin
             mac_start <= 1;
-            mac_data <= txmem[0];
+            mac_data <= mac_byte_txreverse( txmem[0], 8'hff );
             mac_data_valid <= 8'hff;
+
             tx_last <= tx_start_last;
             tx_lwdv <= tx_start_lwdv;
             tx_count <= 2;
@@ -467,8 +468,9 @@ module nts_extractor #(
           end
         TX_AWAIT_ACK:
           if (i_mac_tx_ack) begin
-            mac_data <= txmem[1];
+            mac_data <= mac_byte_txreverse( txmem[1], 8'hff );
             mac_data_valid <= 8'hff;
+
             tx_state <= TX_WRITE;
           end else begin
             mac_data <= mac_data;
@@ -476,12 +478,15 @@ module nts_extractor #(
           end
         TX_WRITE:
           begin
-            mac_data <= txmem[tx_count];
-            mac_data_valid <= 8'hff;
             tx_count <= tx_count + 1;
             if (tx_count >= tx_last) begin
+              mac_data <= mac_byte_txreverse( txmem[tx_count], tx_lwdv );
               mac_data_valid <= tx_lwdv;
+
               tx_state <= TX_SILENT_CYCLE;
+            end else begin
+              mac_data <= mac_byte_txreverse( txmem[tx_count], 8'hff );
+              mac_data_valid <= 8'hff;
             end
           end
         TX_SILENT_CYCLE: //just ensure we do feed D: 64'h0, DV: 8'h0 one cycle so MAC gets packet end.

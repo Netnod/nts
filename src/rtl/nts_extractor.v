@@ -346,6 +346,8 @@ module nts_extractor #(
       case (buffer_engine_state)
         BUFFER_STATE_UNUSED:
           if (i_engine_packet_available && i_engine_fifo_empty==1'b0) begin
+            buffer_engine_addr_we = 1;
+            buffer_engine_addr_new = 0;
             buffer_engine_lwdv_we = 1;
             buffer_engine_lwdv_new = i_engine_bytes_last_word;
             buffer_engine_state_we = 1;

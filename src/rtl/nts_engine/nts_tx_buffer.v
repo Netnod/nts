@@ -378,18 +378,32 @@ module nts_tx_buffer #(
   begin : internet_sum_locals1
     reg  [3:0] carry;
     reg  [2:0] msb;
+    reg  [2:0] msb_p1;
     reg [15:0] sum_d;
+    reg [15:0] sum_e;
+    reg        sum_e_carry;
+    reg [15:0] sum_e_p1;
 
     carry[2:0] = c_in;
 
     { carry[3], sum_d } = { 1'b0, s_in0 } + { 1'b0, s_in1 }; //add data sums to original sum
 
-    msb = { 2'b00, carry[0] } +
-          { 2'b00, carry[1] } +
-          { 2'b00, carry[2] } +
-          { 2'b00, carry[3] };
+    msb =
+      { 2'b00, carry[0] } +
+      { 2'b00, carry[1] } +
+      { 2'b00, carry[2] } +
+      { 2'b00, carry[3] };
 
-    s_out = sum_d + { 13'h0, msb }; //cannot overflow, largest number is 5 * 0xffff = 0x4FFFB = 0xFFFB + 4 = 0xffff
+    msb_p1 =
+      { 2'b00, carry[0] } +
+      { 2'b00, carry[1] } +
+      { 2'b00, carry[2] } +
+      { 2'b00, carry[3] } + 3'b001 ;
+
+    { sum_e_carry, sum_e } = { 1'b0, sum_d } + { 14'h0, msb };
+    sum_e_p1 = sum_d + { 13'h0, msb_p1 };
+
+    s_out = sum_e_carry ? sum_e_p1 : sum_e;
   end
   endtask
 

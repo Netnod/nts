@@ -604,7 +604,8 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
   endtask
 
   task test_udp_checksum_nts;
-  begin
+  begin : test_udp
+    reg [15:0] csum;
     // a real NTS packet, from a tcpdump hexdump.
     write128(  'h0000, 128'hd8cb8a36ac3c000000000bb208004500); // ...6.<........E.
     write128(  'h0010, 128'h03d884df40003c11c469c23acad350d8); // ....@.<..i.:..P.
@@ -669,11 +670,41 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
     write128(  'h03c0, 128'h6f58321f6f8c839e8c087e1d9a956ae0); // oX2.o.....~...j.
     write128(  'h03d0, 128'hd4641be799959ecf3b4b3382e90e97bd); // .d......;K3.....
     write128(  'h03e0, 128'h6d2b4e3bd23c00000000000000000000); //  m+N;.<
+    $display("%s:%0d UDP.1 Validate UDP check OK for an inbound packet.", `__FILE__, `__LINE__);
     checksum_reset('h11);
     checksum_without_reset(14+12, 4+4); //14 = eth overhead, 12 = ipv4 ports offset. 4+4 = ipv4 addresses
     checksum_without_reset(14+20+2+2, 2); //14 = eth overhead, 20 = ipv4 overhead
     checksum_without_reset(14+20, 'h03c4); //34: udp data offset
     `assert(o_sum == 'hffff);
+
+    write128(  'h0000,   128'h98_03_9b_3c_1c_66_52_5a_2c_18_2e_b1_08_00_45_00 ); //  ...<.fRZ,..±..E.
+    write128(  'h0010,   128'h01_00_00_00_40_00_ff_11_a9_85_c0_a8_28_15_c0_a8 ); //  ....@.ÿ.©.À¨(.À¨
+  //write128(  'h0020,   128'h28_01_00_7b_c4_05_00_ec_7a_28_24_01_00_00_00_00 ); //  (..{Ä..ìz($..... (bug: 7a28 incorrect, 7a27 correct)
+    write128(  'h0020,   128'h28_01_00_7b_c4_05_00_ec_00_00_24_01_00_00_00_00 ); //  (..{Ä..ìz($.....
+    write128(  'h0030,   128'h00_00_00_00_00_00_00_00_00_00_e1_e7_ec_73_00_00 ); //  ..........áçìs..
+    write128(  'h0040,   128'h00_00_e6_a8_9d_3f_e5_38_27_50_e1_e7_ec_74_42_49 ); //  ..æ¨.?å8'PáçìtBI
+    write128(  'h0050,   128'h25_9a_e1_e7_ec_74_42_4a_15_fd_01_04_00_24_5f_7a ); //  %.áçìtBJ.ý...$_z
+    write128(  'h0060,   128'h1b_9d_ee_e9_07_4f_1e_5f_87_85_f4_4d_e1_6b_72_02 ); //  ..îé.O._..ôMákr.
+    write128(  'h0070,   128'hf6_5d_c6_a2_f1_b6_d1_65_4a_db_58_bc_8c_c6_04_04 ); //  ö]Æ¢ñ¶ÑeJÛX¼.Æ..
+    write128(  'h0080,   128'h00_90_00_10_00_78_80_6e_6b_f4_e6_96_3b_18_8c_c9 ); //  .....x.nkôæ.;..É
+    write128(  'h0090,   128'hd4_f0_fd_8c_0e_67_b1_17_a8_47_f3_3a_58_23_85_d5 ); //  Ôðý..g±.¨Gó:X#.Õ
+    write128(  'h00a0,   128'h6f_94_4e_1b_64_f3_4b_fc_cf_fb_84_1b_7d_e4_9e_b1 ); //  o.N.dóKüÏû..}ä.±
+    write128(  'h00b0,   128'he6_03_1a_8e_74_e7_20_f6_56_84_b5_46_56_6b_20_1f ); //  æ...tç öV.µFVk .
+    write128(  'h00c0,   128'hcf_7d_9c_6b_db_bb_0f_85_65_91_61_e0_58_16_81_0f ); //  Ï}.kÛ»..e.aàX...
+    write128(  'h00d0,   128'hdc_a4_1d_1c_32_c4_3b_e0_78_02_b9_8f_c1_cc_5f_69 ); //  Ü¤..2Ä;àx.¹.ÁÌ_i
+    write128(  'h00e0,   128'h80_47_f9_ac_a7_6a_6b_2c_0b_3b_17_5f_08_ef_41_b9 ); //  .Gù¬§jk,.;._.ïA¹
+    write128(  'h00f0,   128'h08_0c_08_d9_bb_a8_77_86_63_f1_f2_4e_34_71_92_23 ); //  ...Ù»¨w.cñòN4q.#
+    write128(  'h0100,   128'h54_e8_00_0d_41_85_07_18_5c_61_bc_ae_95_f3_00_00 ); //  Tè..A...\a¼®.ó
+    $display("%s:%0d UDP.2 Validate UDP check OK for an outbound packet known to trigger a off-by-one bug previously.", `__FILE__, `__LINE__);
+    checksum_reset('h11);
+    checksum_without_reset(14+12, 4+4); //14 = eth overhead, 12 = ipv4 ports offset. 4+4 = ipv4 addresses
+    checksum_without_reset(14+20+2+2, 2); //14 = eth overhead, 20 = ipv4 overhead
+    checksum_without_reset(14+20, 'h0ec); //34: udp data offset
+    csum = ~ o_sum;
+    $display("%s:%0d UDP.2 Checksum calculated: %h (expected: 7a27).", `__FILE__, `__LINE__, csum);
+    `assert(csum == 'h7a27);
+
+
   end
   endtask
 

@@ -164,9 +164,7 @@ module nts_engine #(
   wire                [31 : 0] keymem_internal_server_key_id;
   wire                 [2 : 0] keymem_internal_key_word;
   wire                         keymem_internal_key_valid;
-  /* verilator lint_off UNUSED */
-  wire                [31 : 0] keymem_internal_key_id; //TODO implement
-  /* verilator lint_on UNUSED */
+  wire                [31 : 0] keymem_internal_key_id;
   wire                [31 : 0] keymem_internal_key_data;
   wire                         keymem_internal_ready;
 
@@ -216,6 +214,7 @@ module nts_engine #(
   wire                    crypto_parser_busy;
   wire                    crypto_error;
   wire                    crypto_parser_verify_tag_ok;
+  wire                    parser_crypto_sample_key;
   wire                    parser_crypto_rx_op_copy_ad;
   wire                    parser_crypto_rx_op_copy_nonce;
   wire                    parser_crypto_rx_op_copy_pc;
@@ -812,6 +811,7 @@ module nts_engine #(
    .i_crypto_verify_tag_ok(crypto_parser_verify_tag_ok),
 
    .o_crypto_cookieprefix(parser_crypto_cookieprefix),
+   .o_crypto_sample_key(parser_crypto_sample_key),
    .o_crypto_rx_op_copy_ad(parser_crypto_rx_op_copy_ad),
    .o_crypto_rx_op_copy_nonce(parser_crypto_rx_op_copy_nonce),
    .o_crypto_rx_op_copy_pc(parser_crypto_rx_op_copy_pc),
@@ -917,9 +917,9 @@ module nts_engine #(
 
     .o_verify_tag_ok( crypto_parser_verify_tag_ok ),
 
-    .i_key_word   ( keymem_internal_key_word   ),
-    .i_key_valid  ( keymem_internal_key_valid  ),
-    .i_key_data   ( keymem_internal_key_data   ),
+    .i_key_word   ( keymem_internal_key_word ),
+    .i_key_valid  ( parser_crypto_sample_key ),
+    .i_key_data   ( keymem_internal_key_data ),
 
     .i_unrwapped_s2c  ( ZERO[ 0:0] ),
     .i_unwrapped_c2s  ( ZERO[ 0:0] ),

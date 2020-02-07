@@ -100,6 +100,7 @@ module nts_parser_ctrl #(
   input  wire                         i_crypto_busy,
   input  wire                         i_crypto_verify_tag_ok,
 
+  output wire                         o_crypto_sample_key,
   output wire                  [63:0] o_crypto_cookieprefix,
   output wire                         o_crypto_rx_op_copy_ad,
   output wire                         o_crypto_rx_op_copy_nonce,
@@ -545,6 +546,7 @@ module nts_parser_ctrl #(
 
   reg copy_done; //wire
 
+  reg                    crypto_sample_key;
   reg             [63:0] crypto_cookieprefix;
   reg                    crypto_op_cookie_loadkeys;
   reg                    crypto_op_cookie_rencrypt;
@@ -640,6 +642,8 @@ module nts_parser_ctrl #(
   assign o_timestamp_origin_timestamp         = timestamp_origin_timestamp_reg;
   assign o_timestamp_version_number           = timestamp_version_number_reg;
   assign o_timestamp_poll                     = 0; //TODO timestamp_poll_reg;
+
+  assign o_crypto_sample_key       = crypto_sample_key;
 
   assign o_crypto_rx_addr          = crypto_rx_addr;
   assign o_crypto_rx_bytes         = crypto_rx_bytes;
@@ -1535,6 +1539,7 @@ module nts_parser_ctrl #(
 
   always @*
   begin : keymem_control
+    crypto_sample_key          = 'b0;
     keymem_get_current_key_new = 'b0;
     keymem_get_key_with_id_new = 'b0;
 
@@ -1564,30 +1569,35 @@ module nts_parser_ctrl #(
       STATE_VERIFY_KEY_FROM_COOKIE2:
         if (i_keymem_ready && keymem_get_key_with_id_reg == 'b0) begin
           if (i_keymem_key_valid == 'b0) begin
-             ; // reset, zero all output
+            ; // reset, zero all output
           end else if (keymem_key_word_reg == 'b111) begin
+            crypto_sample_key = 1;
             ; // reset, zero all output
           end else begin
             // Yay! We read a key word
+            crypto_sample_key = 1;
+            keymem_get_key_with_id_new = 'b1;
             keymem_key_word_we         = 'b1;
             keymem_key_word_new        = keymem_key_word_reg + 1;
-            keymem_get_key_with_id_new = 'b1;
           end
         end
       STATE_RETRIVE_CURRENT_KEY_0:
         begin
           keymem_get_current_key_new = 'b1;
           keymem_key_word_we         = 'b1;
+          keymem_key_word_new        = 'b0;
         end
       STATE_RETRIVE_CURRENT_KEY_1:
-        if (i_keymem_ready && keymem_get_key_with_id_reg == 'b0) begin
+        if (i_keymem_ready && keymem_get_current_key_reg == 'b0) begin
           if (i_keymem_key_valid == 'b0) begin
              ; // reset, zero all output
           end else if (keymem_key_word_reg == 'b111) begin
+            crypto_sample_key = 1;
             ; // reset, zero all output
           end else begin
             // Yay! We read a key word
             //TODO error if key_id changes during read
+            crypto_sample_key = 1;
             keymem_get_current_key_new = 'b1;
             keymem_key_id_we           = 'b1;
             keymem_key_id_new          = i_keymem_key_id;

@@ -319,6 +319,15 @@ module nts_top_tb;
   end
   endtask
 
+  task set_current_key( input [1:0] current_key );
+  begin : set_current_key_
+    reg [31:0] tmp;
+    api_read32(tmp, API_ADDR_KEYMEM_ADDR_CTRL);
+    tmp = { tmp[31:18], current_key, tmp[15:0] };
+    api_write32(tmp, API_ADDR_KEYMEM_ADDR_CTRL);
+  end
+  endtask
+
   task init_noncegen;
   begin
     api_write32( 32'h5eb6_3bbb, API_ADDR_NONCEGEN_KEY0);
@@ -441,6 +450,9 @@ module nts_top_tb;
   // Test bench code
   //----------------------------------------------------------------
 
+  localparam  [31:0] TRACE_MASTER_KEY_ID = 32'hf001_fefe;
+  localparam [255:0] TRACE_MASTER_KEY = { 128'hf001_AAA0_f001_AAA1_f001_AAA2_f001_AAA3,
+                                          128'hf001_BBB0_f001_BBB1_f001_BBB2_f001_BBB3 };
   initial begin
     $display("Test start: %s:%0d", `__FILE__, `__LINE__);
     i_clk    = 0;
@@ -461,7 +473,9 @@ module nts_top_tb;
         case (i)
           5: install_key_256bit( NTS_TEST_REQUEST_MASTER_KEY_ID_1, NTS_TEST_REQUEST_MASTER_KEY_1, 0 );
           6: install_key_256bit( NTS_TEST_REQUEST_MASTER_KEY_ID_2, NTS_TEST_REQUEST_MASTER_KEY_2, 1 );
-          7: init_noncegen();
+          7: install_key_256bit( TRACE_MASTER_KEY_ID, TRACE_MASTER_KEY, 2 );
+          8: init_noncegen();
+          9: set_current_key(2);
           default: ;
         endcase
         send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_KEYID}, 2160, 0);
@@ -763,6 +777,8 @@ module nts_top_tb;
         $display("%s:%0d dut.engine.crypto.key_s2c_reg: %h", `__FILE__, `__LINE__, dut.engine.crypto.key_s2c_reg);
       always @(posedge i_clk)
         begin
+          if (dut.engine.crypto.i_key_valid)
+            $display("%s:%0d dut.engine.crypto.i_key_valid word[%h]=%h", `__FILE__, `__LINE__, dut.engine.crypto.i_key_word, dut.engine.crypto.i_key_data );
           if (dut.engine.crypto.nonce_a_we)
             $display("%s:%0d dut.engine.crypto.nonce_a_we=1: %h", `__FILE__, `__LINE__, dut.engine.crypto.nonce_new);
           if (dut.engine.crypto.nonce_b_we)

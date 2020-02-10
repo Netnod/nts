@@ -498,6 +498,10 @@ module nts_top_tb;
     while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
     #200;
     send_packet({57552'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_3}, 7984, 0); //same key _2 packets, but 7 placeholders
+    while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
+    #200;
+    #900000;
+    send_packet({57392'b0, NTS_TEST_REQUEST_WITH_KEY_IPV6_3}, 8144, 0);
     #900000;
 
     //----------------------------------------------------------------
@@ -794,6 +798,14 @@ module nts_top_tb;
         $display("%s:%0d dut.engine.parser.i_last_word_data_valid: %b", `__FILE__, `__LINE__, dut.engine.parser.i_last_word_data_valid);
       always @*
         $display("%s:%0d dut.engine.parser.word_counter_reg: %h", `__FILE__, `__LINE__, dut.engine.parser.word_counter_reg);
+      always @*
+        $display("%s:%0d dut.engine.parser.ipdecode_ip6_ip_dst_reg: %h", `__FILE__, `__LINE__, dut.engine.parser.ipdecode_ip6_ip_dst_reg);
+      always @*
+        $display("%s:%0d dut.engine.parser.ipdecode_ip6_ip_src_reg: %h", `__FILE__, `__LINE__, dut.engine.parser.ipdecode_ip6_ip_src_reg);
+      always @*
+        $display("%s:%0d dut.engine.parser.ipdecode_udp_port_dst_reg: %h (%0d)", `__FILE__, `__LINE__, dut.engine.parser.ipdecode_udp_port_dst_reg, dut.engine.parser.ipdecode_udp_port_dst_reg);
+      always @*
+        $display("%s:%0d dut.engine.parser.ipdecode_udp_port_src_reg: %h (%0d)", `__FILE__, `__LINE__, dut.engine.parser.ipdecode_udp_port_src_reg, dut.engine.parser.ipdecode_udp_port_src_reg);
       always @*
         $display("%s:%0d dut.engine.parser.ipdecode_udp_length_reg: %h (%0d)", `__FILE__, `__LINE__, dut.engine.parser.ipdecode_udp_length_reg, dut.engine.parser.ipdecode_udp_length_reg);
       always @*

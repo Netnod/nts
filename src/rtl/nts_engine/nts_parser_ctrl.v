@@ -1856,7 +1856,11 @@ module nts_parser_ctrl #(
           //tx_write_data = 64'hdead_f00d_dead_f00d;
           //$display("%s:%0d IP_HEADER_0: TX[%h (%0d)] = [%h]", `__FILE__, `__LINE__, tx_address,tx_address, tx_write_data);
         end else if (detect_ipv6) begin
-          //TODO implement
+          tx_address = HEADER_LENGTH_ETHERNET;
+          tx_write_en = 1;
+          tx_write_data = tx_header_ipv6[40*8-1-:64];
+          // |Version| Traffic Class |           Flow Label                  |
+          // |         Payload Length        |  Next Header  |   Hop Limit   |
         end
       STATE_WRITE_NEW_IP_HEADER_1:
         if (detect_ipv4) begin
@@ -1947,16 +1951,6 @@ module nts_parser_ctrl #(
               crypto_fsm_we  = 1;
               crypto_fsm_new = CRYPTO_FSM_RX_AUTH_PACKET;
             end
-        //STATE_GENERATE_FIRST_COOKIE:
-        //  begin
-        //    crypto_fsm_we  = 1;
-        //    crypto_fsm_new = CRYPTO_FSM_GEN_COOKIE;
-        //  end
-        //STATE_EMIT_FIRST_COOKIE_V:
-        //  begin
-        //    crypto_fsm_we  = 1;
-        //    crypto_fsm_new = CRYPTO_FSM_EMIT_FIRST_COOKIE;
-        //  end
           STATE_RESET_EXTRA_COOKIES:
             begin
               crypto_fsm_we  = 1;

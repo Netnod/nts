@@ -437,6 +437,10 @@ module nts_tx_buffer #(
       sum_we = 1;
       internet_sum_pipelinestage1( sum_reg, sum_delayed_reg, carry_delayed_reg, sum_new );
     end
+    if (i_sum_en) begin
+      if (i_sum_bytes == 0)
+        sum_done_new = 1;
+    end
     if (i_sum_reset) begin
       sum_we = 1;
       sum_new = i_sum_reset_value;

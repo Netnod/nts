@@ -154,6 +154,9 @@ module nts_tx_buffer #(
   reg sum_done_new;
   reg sum_done_reg;
 
+  reg sum_pipelinestage1_execute_new;
+  reg sum_pipelinestage1_execute_reg;
+
   reg                  sync_reset_metastable;
   reg                  sync_reset;
 
@@ -287,7 +290,6 @@ module nts_tx_buffer #(
       read_cycle_reg  <= 0;
       sum_reg         <= 0;
       sum_addr_reg    <= 0;
-      sum_done_reg    <= 0;
       sum_counter_reg <= 0;
       sum_cycle_reg   <= 0;
 
@@ -300,7 +302,9 @@ module nts_tx_buffer #(
       //Pipleline stage 1
       carry_delayed_reg    <= 0;
       sum_delayed_reg      <= 0;
+      sum_done_reg         <= 0;
       sum_done_delayed_reg <= 0;
+      sum_pipelinestage1_execute_reg <= 0;
 
     end else begin
       //Pipeline stage 0
@@ -330,6 +334,7 @@ module nts_tx_buffer #(
       carry_delayed_reg <= carry_delayed_new;
       sum_delayed_reg <= sum_delayed_new;
       sum_done_delayed_reg <= sum_done_delayed_new;
+      sum_pipelinestage1_execute_reg <= sum_pipelinestage1_execute_new;
     end
   end
 
@@ -424,10 +429,24 @@ module nts_tx_buffer #(
   endtask
 
   always @*
-  begin : sum_process
-    reg  [7:0] sum_ctrl;
+  begin
     sum_we = 0;
     sum_new = 0;
+    sum_done_new = sum_done_delayed_reg;
+    if (sum_pipelinestage1_execute_reg) begin
+      sum_we = 1;
+      internet_sum_pipelinestage1( sum_reg, sum_delayed_reg, carry_delayed_reg, sum_new );
+    end
+    if (i_sum_reset) begin
+      sum_we = 1;
+      sum_new = i_sum_reset_value;
+    end
+  end
+
+  always @*
+  begin : sum_process
+    reg  [7:0] sum_ctrl;
+    sum_pipelinestage1_execute_new = 0;
     sum_delayed_new = 0;
     carry_delayed_new = 0;
     sum_addr_we = 0;
@@ -437,22 +456,14 @@ module nts_tx_buffer #(
     sum_ctrl = 0;
     sum_cycle_new = 0;
     sum_done_delayed_new = 0;
-    sum_done_new = sum_done_delayed_reg;
 
-    sum_we = 1;
-    internet_sum_pipelinestage1( sum_reg, sum_delayed_reg, carry_delayed_reg, sum_new );
-
-    if (i_sum_reset) begin
-      sum_we = 1;
-      sum_new = i_sum_reset_value;
-    end
-    else if (sum_cycle_reg) begin : sum_ctrl_locals
+    if (sum_cycle_reg) begin : sum_ctrl_locals
       reg [63:0] data;
       reg [15:0] d0;
       reg [15:0] d1;
       reg [15:0] d2;
       reg [15:0] d3;
-      sum_we = 1;
+      sum_pipelinestage1_execute_new = 1;
 
       case (sum_counter_reg)
         0: sum_ctrl = 8'b0000_0000;
@@ -473,8 +484,7 @@ module nts_tx_buffer #(
       d1 = { sum_ctrl[5] ? data[47-:8] : 8'h00, sum_ctrl[4] ? data[39-:8] : 8'h00 };
       d2 = { sum_ctrl[3] ? data[31-:8] : 8'h00, sum_ctrl[2] ? data[23-:8] : 8'h00 };
       d3 = { sum_ctrl[1] ? data[15-:8] : 8'h00, sum_ctrl[0] ? data[7-:8] : 8'h00 };
-      //$display("%s:%0d %h - %h %h - %h %h %h %h", `__FILE__, `__LINE__, sum_counter_reg, sum_ctrl, data, d0, d1, d2, d3 );
-      //internet_sum(sum_reg, d0, d1, d2, d3, sum_new);
+      $display("%s:%0d %h - %h %h - %h %h %h %h", `__FILE__, `__LINE__, sum_counter_reg, sum_ctrl, data, d0, d1, d2, d3 );
       internet_sum_pipelinestage0( d0, d1, d2, d3, sum_delayed_new, carry_delayed_new );
     end
 
@@ -486,8 +496,6 @@ module nts_tx_buffer #(
             sum_addr_new = { i_address_hi, i_address_lo };
             sum_counter_we = 1;
             sum_counter_new = i_sum_bytes;
-            if (i_sum_bytes == 0)
-              sum_done_new = 1;
           end
         end
       STATE_CHECKSUM:
@@ -650,6 +658,10 @@ module nts_tx_buffer #(
           begin
             { ram_addr_hi[parser], ram_addr_lo[parser] } = sum_addr_reg;
             ram_rd[parser] = 1;
+            if (sum_counter_we && sum_counter_new <= 8) begin
+              mem_state_we[parser] = 1;
+              mem_state_new[parser] = STATE_HAS_DATA;
+            end
             if (sum_counter_reg <= 8) begin
               mem_state_we[parser] = 1;
               mem_state_new[parser] = STATE_HAS_DATA;

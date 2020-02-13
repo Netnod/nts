@@ -704,6 +704,81 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
     $display("%s:%0d UDP.2 Checksum calculated: %h (expected: 7a27).", `__FILE__, `__LINE__, csum);
     `assert(csum == 'h7a27);
 
+    write128(  'h0000, 128'h98039b3c1c66525a2c182e8086dd6000 ); //  ...<.fRZ,....Ý`.
+    write128(  'h0010, 128'h000003c411fffd75502fe221ddcf0000 ); //  ...Ä.ÿýuP/â!ÝÏ..
+    write128(  'h0020, 128'h000000000002fd75502fe221ddcf0000 ); //  ......ýuP/â!ÝÏ..
+  //write128(  'h0030, 128'h000000000001007ba7dd03c4e0f92401 ); //  .......{§Ý.Äàù$.
+    write128(  'h0030, 128'h000000000001007ba7dd03c400002401 ); //  .......{§Ý.Äàù$.
+    write128(  'h0040, 128'h0000000000000000000000000000e1ee ); //  ..............áî
+    write128(  'h0050, 128'h5ac80000000010206e8a39910a0ee1ee ); //  ZÈ..... n.9...áî
+    write128(  'h0060, 128'h5ac9729e26b3e1ee5ac972a066a10104 ); //  ZÉr.&³áîZÉr f¡..
+    write128(  'h0070, 128'h00248725eea95d8914987921d54ad12b ); //  .$.%î©]...y!ÕJÑ+
+    write128(  'h0080, 128'h6a94948588794809508f2a8f6d4d2236 ); //  j....yH.P.*.mM"6
+    write128(  'h0090, 128'he25b0404036800100350697056939d22 ); //  â[...h...PipV.."
+    write128(  'h00a0, 128'h78578c22cb2f1792e8b8856f7e3f6e9c ); //  xW."Ë/..è¸.o~?n.
+    write128(  'h00b0, 128'h3bd3140daf2193a1361a13eee6beff76 ); //  ;Ó..¯!.¡6..îæ¾ÿv
+    write128(  'h00c0, 128'h96974125f2a0a7124336014513d43901 ); //  ..A%ò §.C6.E.Ô9.
+    write128(  'h00d0, 128'hf332a38428996d047f891412468f95cd ); //  ó2£.(.m.....F..Í
+    write128(  'h00e0, 128'h156cd26fb348705803047a49445514fd ); //  .lÒo³HpX..zIDU.ý
+    write128(  'h00f0, 128'hd9faa6099033a85be535d1fd3b9df1e4 ); //  Ùú¦..3¨[å5Ñý;.ñä
+    write128(  'h0100, 128'h7092da4662b2de7538ea156dfc974f48 ); //  p.ÚFb²Þu8ê.mü.OH
+    write128(  'h0110, 128'ha62f4cfe11fb8909ea2cdd986d06b382 ); //  ¦/Lþ.û..ê,Ý.m.³.
+    write128(  'h0120, 128'h72d0905b01059f0021f22a70026a7e12 ); //  rÐ.[....!ò*p.j~.
+    write128(  'h0130, 128'h5069c287210b17d37fdfb7cc0941b659 ); //  PiÂ.!..Ó.ß·Ì.A¶Y
+    write128(  'h0140, 128'hbc204de11b21f7814232fee0959e505f ); //  ¼ Má.!÷.B2þà..P_
+    write128(  'h0150, 128'h513c292b054dbbb569632bfd8df67443 ); //  Q<)+.M»µic+ý.ötC
+    write128(  'h0160, 128'hca0ba2e419fadec0c4c10b1338a4250a ); //  Ê.¢ä.úÞÀÄÁ..8¤%.
+    write128(  'h0170, 128'h1b34189011265d00826fd60b9cb38694 ); //  .4...&]..oÖ..³..
+    write128(  'h0180, 128'h2a8edfa5d55ed8a8afeca54699d462d1 ); //  *.ß¥Õ^Ø¨¯ì¥F.ÔbÑ
+    write128(  'h0190, 128'h54db6cd214d6052d1fca65b8bd249e7e ); //  TÛlÒ.Ö.-.Êe¸½$.~
+    write128(  'h01a0, 128'h9e159685bd08d92aa2ba9d7b7ece0654 ); //  ....½.Ù*¢º.{~Î.T
+    write128(  'h01b0, 128'he154c5614a418017b81f7e690660a122 ); //  áTÅaJA..¸.~i.`¡"
+    write128(  'h01c0, 128'hb1dca3f391f44b80b45e96d8e880fea7 ); //  ±Ü£ó.ôK.´^.Øè.þ§
+    write128(  'h01d0, 128'h30fa3e9cae4eff1a731102ab1875089f ); //  0ú>.®Nÿ.s..«.u..
+    write128(  'h01e0, 128'h0d9e857e495272003ebd9c6f7d333959 ); //  ...~IRr.>½.o}39Y
+    write128(  'h01f0, 128'h0cfdee5b6233e4fcf87674b801242d68 ); //  .ýî[b3äüøvt¸.$-h
+    write128(  'h0200, 128'h39248cfd90520bc85aff9a0164d66980 ); //  9$.ý.R.ÈZÿ..dÖi.
+    write128(  'h0210, 128'h4a8866aad9e2578a46b0f87e0ab393cc ); //  J.fªÙâW.F°ø~.³.Ì
+    write128(  'h0220, 128'hae6be86d63eb18160c02dc65faf9479a ); //  ®kèmcë....ÜeúùG.
+    write128(  'h0230, 128'h0da02cf9d0e9dbaf5c19005c7d961574 ); //  . ,ùÐéÛ¯\..\}..t
+    write128(  'h0240, 128'h9de9bc2a494b16170703ba39c682abfb ); //  .é¼*IK....º9Æ.«û
+    write128(  'h0250, 128'h46bebf845ebfb5f236674986fa21561a ); //  F¾¿.^¿µò6gI.ú!V.
+    write128(  'h0260, 128'h3bde3bbb93df2a652974cf4ff4c16f60 ); //  ;Þ;».ß*e)tÏOôÁo`
+    write128(  'h0270, 128'h18cfa79f8bf39a3c38f4118546b04334 ); //  .Ï§..ó.<8ô..F°C4
+    write128(  'h0280, 128'h6cae53d785bf3cf65106d83eead4356f ); //  l®S×.¿<öQ.Ø>êÔ5o
+    write128(  'h0290, 128'he847ae72f5c9e595b3da2099233907e7 ); //  èG®rõÉå.³Ú .#9.ç
+    write128(  'h02a0, 128'h1f34644e716a876d849e73d60a2b96c8 ); //  .4dNqj.m..sÖ.+.È
+    write128(  'h02b0, 128'hfdeaa4ddf9be0172d68db1bbd23d0e23 ); //  ýê¤Ýù¾.rÖ.±»Ò=.#
+    write128(  'h02c0, 128'hd2787e08408599c987bc05e08612a5f6 ); //  Òx~.@..É.¼.à..¥ö
+    write128(  'h02d0, 128'hc20b39ae32731e314490d17d8e1fdb83 ); //  Â.9®2s.1D.Ñ}..Û.
+    write128(  'h02e0, 128'h5d5aa9d99e2a88bc61bc6112f87e4a0c ); //  ]Z©Ù.*.¼a¼a.ø~J.
+    write128(  'h02f0, 128'h280acd15065ecbf3b6d3412045aca8b2 ); //  (.Í..^Ëó¶ÓA E¬¨²
+    write128(  'h0300, 128'hb463a05051bcd498ff5a5a8c0f264eac ); //  ´c PQ¼Ô.ÿZZ..&N¬
+    write128(  'h0310, 128'h857e922d0852d35ac082d3103ba4ddc4 ); //  .~.-.RÓZÀ.Ó.;¤ÝÄ
+    write128(  'h0320, 128'h0e7b579b59081a4cfac20812a5c87647 ); //  .{W.Y..LúÂ..¥ÈvG
+    write128(  'h0330, 128'h557ed81ffdd7c7945a4a98632a82ebe9 ); //  U~Ø.ý×Ç.ZJ.c*.ëé
+    write128(  'h0340, 128'h9f07b5db7243b0a6d7790e79b4427cb2 ); //  ..µÛrC°¦×y.y´B|²
+    write128(  'h0350, 128'h5402c423b1a07cd8c93a7e5fad67230c ); //  T.Ä#± |ØÉ:~_.g#.
+    write128(  'h0360, 128'h5f093c081dc4af068dde6bd47ff99ad2 ); //  _.<..Ä¯..ÞkÔ.ù.Ò
+    write128(  'h0370, 128'h8741061e276b5be367413f176fad8538 ); //  .A..'k[ãgA?.o..8
+    write128(  'h0380, 128'h9b19aa4b2241ec10471afd26d9ccf20f ); //  ..ªK"Aì.G.ý&ÙÌò.
+    write128(  'h0390, 128'h8c9c861b18505e79ea177fc54bfe2a23 ); //  .....P^yê..ÅKþ*#
+    write128(  'h03a0, 128'h12f60bd266ac1a2d958a8722fb6e2f2c ); //  .ö.Òf¬.-..."ûn/,
+    write128(  'h03b0, 128'h4d36edac67c1127cfadddca614df5692 ); //  M6í¬gÁ.|úÝÜ¦.ßV.
+    write128(  'h03c0, 128'h696975c6070f832a5b5ecb7ce2f93146 ); //  iiuÆ...*[^Ë|âù1F
+    write128(  'h03d0, 128'h3b4e0c8fbe3f92bee84ce2d3e414bbdf ); //  ;N..¾?.¾èLâÓä.»ß
+    write128(  'h03e0, 128'hd21331dd35c11daba3fbac83417bdc97 ); //  Ò.1Ý5Á.«£û¬.A{Ü.
+    write128(  'h03f0, 128'hbf93041e79872dcfc23f000000000000 ); //  ¿...y.-ÏÂ?
+
+    $display("%s:%0d UDP.3 Validate UDP check OK for an outbound IPV6 packet.", `__FILE__, `__LINE__);
+    checksum_reset('h11);
+    checksum_without_reset(14+8, 32); //14 = eth overhead, 8 = ipv6 ports offset.
+    checksum_without_reset(14+40+2+2, 2); //14 = eth overhead
+    checksum_without_reset(14+40, 'h03c4); //34: udp data offset
+    csum = ~ o_sum;
+    $display("%s:%0d UDP.3 Checksum calculated: %h (expected: 0d20).", `__FILE__, `__LINE__, csum);
+    `assert(csum == 'h0d20);
+
 
   end
   endtask

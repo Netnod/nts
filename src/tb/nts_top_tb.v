@@ -874,7 +874,7 @@ module nts_top_tb;
       always @(posedge i_clk)
         begin
           if (dut.engine.parser_txbuf_sum_en)
-            $display("%s:%0d dut.engine.sum_en, bytes: %h (%0d)", `__FILE__, `__LINE__, dut.engine.parser_txbuf_sum_bytes, dut.engine.txbuf_parser_sum_done);
+            $display("%s:%0d dut.engine.sum_en, addr: %h (%0d), bytes: %h (%0d)", `__FILE__, `__LINE__, dut.engine.parser_txbuf_address, dut.engine.parser_txbuf_address, dut.engine.parser_txbuf_sum_bytes, dut.engine.parser_txbuf_sum_bytes);
           if (dut.engine.txbuf_parser_sum_done)
             $display("%s:%0d dut.engine.sum_done, sum: %h", `__FILE__, `__LINE__, dut.engine.txbuf_parser_sum);
       end

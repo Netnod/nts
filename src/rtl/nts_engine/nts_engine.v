@@ -190,6 +190,7 @@ module nts_engine #(
   wire                  [15:0] txbuf_parser_sum;
   wire                         txbuf_parser_sum_done;
 
+  wire                         parser_timestamp_kiss_of_death;
   wire                         parser_timestamp_record_rectime;
   wire                         parser_timestamp_transmit;
   wire                [63 : 0] parser_timestamp_client_orgtime;
@@ -801,6 +802,7 @@ module nts_engine #(
    .o_keymem_server_id(keymem_internal_server_key_id),
 
    .i_timestamp_busy(timestamp_parser_busy),
+   .o_timestamp_kiss_of_death(parser_timestamp_kiss_of_death),
    .o_timestamp_record_receive_timestamp(parser_timestamp_record_rectime),
    .o_timestamp_transmit(parser_timestamp_transmit),
    .o_timestamp_origin_timestamp(parser_timestamp_client_orgtime),
@@ -886,6 +888,7 @@ module nts_engine #(
 
     // Parsed information
     .i_parser_clear(parser_txbuf_clear), //parser request ignore current packet
+    .i_parser_kiss_of_death(parser_timestamp_kiss_of_death),
     .i_parser_record_receive_timestamp(parser_timestamp_record_rectime),
     .i_parser_transmit(parser_timestamp_transmit), //parser signal packet transmit OK
     .i_parser_origin_timestamp(parser_timestamp_client_orgtime),

@@ -493,15 +493,18 @@ module nts_top_tb;
     //while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
     //send_packet({63696'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_1}, 1840, 0);
     while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
-    #200;
+    #20000;
     send_packet({57552'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_3}, 7984, 0); //same key _2 packets, but 7 placeholders
     while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
-    #200;
+    #20000;
     send_packet({57552'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_3}, 7984, 0); //same key _2 packets, but 7 placeholders
     while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
-    #200;
-    #900000;
+    #20000;
     send_packet({57392'b0, NTS_TEST_REQUEST_WITH_KEY_IPV6_3}, 8144, 0);
+    while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
+    #20000;
+    #900000;
+    send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_KEYID}, 2160, 0);
     #900000;
 
     //----------------------------------------------------------------

@@ -46,6 +46,7 @@ module nts_timestamp (
   input wire  [63 : 0] i_parser_origin_timestamp,
   input wire  [ 2 : 0] i_parser_version_number,
   input wire  [ 7 : 0] i_parser_poll,
+  input wire           i_parser_kiss_of_death,
 
   output wire          o_tx_wr_en,
   output wire [ 2 : 0] o_tx_ntp_header_block,
@@ -73,14 +74,20 @@ module nts_timestamp (
 
   localparam CORE_NAME0   = 32'h74696d65; //"time"
   localparam CORE_NAME1   = 32'h73746d70; //"stmp"
-  localparam CORE_VERSION = 32'h302e3030; //"0.00"
+  localparam CORE_VERSION = 32'h302e3031; //"0.01"
 
   //----------------------------------------------------------------
   // NTP related locaal constants
   //----------------------------------------------------------------
-  localparam       NTP_HEADER_BITS      = 384;
-  localparam       NTP_HEADER_BLOCKS    = NTP_HEADER_BITS/64; //6
-  localparam [2:0] NTP_HEADER_BLOCKS_M1 = NTP_HEADER_BLOCKS[2:0] - 1;
+  localparam        NTP_HEADER_BITS      = 384;
+  localparam        NTP_HEADER_BLOCKS    = NTP_HEADER_BITS/64; //6
+  localparam  [2:0] NTP_HEADER_BLOCKS_M1 = NTP_HEADER_BLOCKS[2:0] - 1;
+
+  //----------------------------------------------------------------
+  // NTS related locaal constants
+  //----------------------------------------------------------------
+
+  localparam [31:0] NTS_KISS_OF_DEATH = 32'h4e_54_53_4e; //"NTSN"
 
   //----------------------------------------------------------------
   // States
@@ -179,7 +186,8 @@ module nts_timestamp (
   assign p_LI        = ntp_config_reg[31:30];
   assign p_VN        = ntp_config_reg[29:27] != 3'b0 ? ntp_config_reg[29:27] : p_version_number_reg;
   assign p_MODE      = ntp_config_reg[26:24] != 3'b0 ? ntp_config_reg[26:24] : 3'd4 /* NTPv4 */;
-  assign p_STRATUM   = ntp_config_reg[23:16] != 8'b0 ? ntp_config_reg[23:16] : 8'd1;
+  assign p_STRATUM   = i_parser_kiss_of_death ? 8'h0 //rfc5905 7.4 Kiss-o'-Death
+                     : (ntp_config_reg[23:16] != 8'b0 ? ntp_config_reg[23:16] : 8'd1);
   assign p_POLL      = ntp_config_reg[15:8]  != 8'b0 ? ntp_config_reg[15:8]  : p_client_poll_reg;
   assign p_PRECISION = ntp_config_reg[7:0];
 
@@ -214,7 +222,7 @@ module nts_timestamp (
   assign packet = { p_LI, p_VN, p_MODE, p_STRATUM, p_POLL, p_PRECISION,
                     ntp_root_delay_reg,
                     ntp_root_disp_reg,
-                    ntp_ref_id_reg,
+                    i_parser_kiss_of_death ? NTS_KISS_OF_DEATH : ntp_ref_id_reg,
                     ntp_ref_ts,
                     p_origin_timestamp_reg,
                     p_receive_timestamp_reg,

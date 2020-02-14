@@ -96,6 +96,7 @@ module nts_parser_ctrl #(
   output wire                [63 : 0] o_timestamp_origin_timestamp,
   output wire                [ 2 : 0] o_timestamp_version_number,
   output wire                [ 7 : 0] o_timestamp_poll,
+  output wire                         o_timestamp_kiss_of_death,
 
   input  wire                         i_crypto_busy,
   input  wire                         i_crypto_verify_tag_ok,
@@ -191,8 +192,7 @@ module nts_parser_ctrl #(
   localparam [BITS_STATE-1:0] STATE_RX_AUTH_COOKIE           = 6'h08;
   localparam [BITS_STATE-1:0] STATE_RX_AUTH_PACKET           = 6'h09;
 
-  localparam [BITS_STATE-1:0] STATE_WRITE_HEADER_IPV4        = 6'h0a; //TX handling states
-  localparam [BITS_STATE-1:0] STATE_WRITE_HEADER_IPV6        = 6'h0b;
+  localparam [BITS_STATE-1:0] STATE_WRITE_HEADER_IPV4_IPV6   = 6'h0a; //TX handling states
   localparam [BITS_STATE-1:0] STATE_TIMESTAMP                = 6'h0c;
   localparam [BITS_STATE-1:0] STATE_TIMESTAMP_WAIT           = 6'h0d;
   localparam [BITS_STATE-1:0] STATE_UNIQUE_IDENTIFIER_COPY_0 = 6'h0e;
@@ -480,6 +480,9 @@ module nts_parser_ctrl #(
   reg       [ADDR_WIDTH+3-1:0] nts_authenticator_start_addr_reg;
   reg                          nts_basic_sanity_check_packet_ok_new;
   reg                          nts_basic_sanity_check_packet_ok_reg;
+  reg                          nts_kiss_of_death_we;
+  reg                          nts_kiss_of_death_new;
+  reg                          nts_kiss_of_death_reg;
   reg       [ADDR_WIDTH+3-1:0] nts_unique_identifier_addr_new;
   reg       [ADDR_WIDTH+3-1:0] nts_unique_identifier_addr_reg;
   reg                   [15:0] nts_unique_identifier_length_new;
@@ -653,6 +656,7 @@ module nts_parser_ctrl #(
   assign o_tx_sum_en          = tx_sum_en;
   assign o_tx_sum_bytes       = tx_sum_bytes;
 
+  assign o_timestamp_kiss_of_death            = nts_kiss_of_death_reg;
   assign o_timestamp_record_receive_timestamp = timestamp_record_receive_timestamp_reg;
   assign o_timestamp_transmit                 = (state_reg == STATE_TIMESTAMP);
   assign o_timestamp_origin_timestamp         = timestamp_origin_timestamp_reg;
@@ -953,6 +957,7 @@ module nts_parser_ctrl #(
       nts_authenticator_start_addr_reg     <= 'b0;
       nts_basic_sanity_check_packet_ok_reg <= 'b0;
       nts_cookie_start_addr_reg            <= 'b0;
+      nts_kiss_of_death_reg                <= 'b0;
       nts_unique_identifier_addr_reg       <= 'b0;
       nts_unique_identifier_length_reg     <= 'b0;
       nts_valid_placeholders_reg           <= 'b0;
@@ -1113,6 +1118,10 @@ module nts_parser_ctrl #(
       nts_authenticator_start_addr_reg     <= nts_authenticator_start_addr_new;
       nts_basic_sanity_check_packet_ok_reg <= nts_basic_sanity_check_packet_ok_new;
       nts_cookie_start_addr_reg            <= nts_cookie_start_addr_new;
+
+      if (nts_kiss_of_death_we)
+        nts_kiss_of_death_reg <= nts_kiss_of_death_new;
+
       nts_unique_identifier_addr_reg       <= nts_unique_identifier_addr_new;
       nts_unique_identifier_length_reg     <= nts_unique_identifier_length_new;
       nts_valid_placeholders_reg           <= nts_valid_placeholders_new;
@@ -1230,6 +1239,48 @@ module nts_parser_ctrl #(
       STATE_IDLE:
         if (i_process_initial)
           last_bytes_we = 'b1;
+      default: ;
+    endcase
+  end
+
+  //----------------------------------------------------------------
+  // NTS Kiss-o'-Death
+  // If the server is unable to validate the cookie or authenticate
+  // the request, it SHOULD respond with a Kiss-o'-Death (KoD)
+  // packet (see RFC 5905, Section 7.4 [RFC5905]) with kiss code
+  // "NTSN", meaning "NTS negative-acknowledgment (NAK)".  It MUST
+  // NOT include any NTS Cookie or NTS Authenticator and Encrypted
+  // Extension Fields extension fields.
+  // https://tools.ietf.org/html/draft-ietf-ntp-using-nts-for-ntp-21
+  //----------------------------------------------------------------
+
+  always @*
+  begin : nts_kiss_of_death
+    nts_kiss_of_death_we = 0;
+    nts_kiss_of_death_new = 0;
+    case (state_reg)
+      STATE_IDLE:
+        begin
+          nts_kiss_of_death_we = 1;
+          nts_kiss_of_death_new = 0;
+        end
+      STATE_VERIFY_KEY_FROM_COOKIE2:
+        if (i_keymem_ready && keymem_get_key_with_id_reg == 'b0 ) begin
+          if (i_keymem_key_valid == 'b0) begin
+            nts_kiss_of_death_we = 1;
+            nts_kiss_of_death_new = 1;
+          end
+        end
+      STATE_RX_AUTH_COOKIE:
+        if (crypto_fsm_reg == CRYPTO_FSM_DONE_FAILURE) begin
+          nts_kiss_of_death_we = 1;
+          nts_kiss_of_death_new = 1;
+        end
+      STATE_RX_AUTH_PACKET:
+        if (crypto_fsm_reg == CRYPTO_FSM_DONE_FAILURE) begin
+          nts_kiss_of_death_we = 1;
+          nts_kiss_of_death_new = 1;
+        end
       default: ;
     endcase
   end
@@ -1503,6 +1554,13 @@ module nts_parser_ctrl #(
     tmp_bytes = copy_bytes_reg[ADDR_WIDTH+3-1:0];
 
     case (state_reg)
+      STATE_TIMESTAMP_WAIT:
+        begin
+          //Kiss-o'-Death requires copy_tx_addr_reg set earlier, ahead of jump
+          //from STATE_TIMESTAMP_WAIT to TX_UPDATE_LENGTH
+          copy_tx_addr_we   = 1;
+          copy_tx_addr_new  = ipdecode_offset_ntp_ext;
+        end
       STATE_UNIQUE_IDENTIFIER_COPY_0:
         begin
           copy_bytes_we     = 1;
@@ -1767,8 +1825,8 @@ module nts_parser_ctrl #(
             tx_header_ipv6_index_new = 7;
           end
         end
-      STATE_WRITE_HEADER_IPV4:
-        begin : emit_ipv4_headers
+      STATE_WRITE_HEADER_IPV4_IPV6:
+        if (detect_ipv4) begin : emit_ipv4_headers
           reg [6*64-1:0] header;
           tx_address_internal = 1;
           tx_header_ipv4_index_we = 1;
@@ -1777,8 +1835,7 @@ module nts_parser_ctrl #(
           tx_write_en = 1;
           tx_write_data = header[ tx_header_ipv4_index_reg*64+:64 ];
         end
-      STATE_WRITE_HEADER_IPV6:
-        begin : emit_ipv6_headers
+        else if (detect_ipv6) begin : emit_ipv6_headers
           reg [8*64-1:0] header;
           tx_address_internal = 1;
           tx_header_ipv6_index_we = 1;
@@ -2279,7 +2336,9 @@ module nts_parser_ctrl #(
       STATE_VERIFY_KEY_FROM_COOKIE2:
         if (i_keymem_ready && keymem_get_key_with_id_reg == 'b0 ) begin
           if (i_keymem_key_valid == 'b0) begin
-            set_error_state( ERROR_CAUSE_KEY_COOKIE_FAIL );
+          //set_error_state( ERROR_CAUSE_KEY_COOKIE_FAIL );
+            state_we  = 'b1;
+            state_new = STATE_WRITE_HEADER_IPV4_IPV6; //Kiss-o'-Death
           end else if (keymem_key_word_reg == 'b111) begin
             state_we  = 'b1;
             state_new = STATE_RX_AUTH_COOKIE;
@@ -2295,7 +2354,7 @@ module nts_parser_ctrl #(
           CRYPTO_FSM_DONE_FAILURE:
             begin
               state_we  = 'b1;
-              state_new = STATE_ERROR_GENERAL; //TODO Signal Kiss Of Death upon auth failures;
+              state_new = STATE_WRITE_HEADER_IPV4_IPV6; //Kiss-o'-Death
             end
           default: ;
         endcase
@@ -2304,29 +2363,29 @@ module nts_parser_ctrl #(
           CRYPTO_FSM_DONE_SUCCESS:
             begin
               state_we  = 'b1;
-              if (detect_ipv4)
-                state_new = STATE_WRITE_HEADER_IPV4;
-              else if (detect_ipv6)
-                state_new = STATE_WRITE_HEADER_IPV6;
-              else
-                set_error_state( ERROR_CAUSE_IPV_CONFUSED );
+              state_new = STATE_WRITE_HEADER_IPV4_IPV6;
+
             end
           CRYPTO_FSM_DONE_FAILURE:
             begin
               state_we  = 'b1;
-              state_new = STATE_ERROR_GENERAL; //TODO Signal Kiss Of Death upon auth failures;
+              state_new = STATE_WRITE_HEADER_IPV4_IPV6; //Kiss-o'-Death
             end
           default: ;
         endcase
-      STATE_WRITE_HEADER_IPV4:
-        if (tx_header_ipv4_index_reg == 0) begin
-          state_we  = 'b1;
-          state_new = STATE_TIMESTAMP;
-        end
-      STATE_WRITE_HEADER_IPV6:
-        if (tx_header_ipv6_index_reg == 0) begin
-          state_we  = 'b1;
-          state_new = STATE_TIMESTAMP;
+      STATE_WRITE_HEADER_IPV4_IPV6:
+        if (detect_ipv4) begin
+          if (tx_header_ipv4_index_reg == 0) begin
+            state_we  = 'b1;
+            state_new = STATE_TIMESTAMP;
+          end
+        end else if (detect_ipv6) begin
+          if (tx_header_ipv6_index_reg == 0) begin
+            state_we  = 'b1;
+            state_new = STATE_TIMESTAMP;
+          end
+        end else begin
+          set_error_state( ERROR_CAUSE_IPV_CONFUSED );
         end
       STATE_TIMESTAMP:
         begin
@@ -2335,8 +2394,13 @@ module nts_parser_ctrl #(
         end
       STATE_TIMESTAMP_WAIT:
         if (i_timestamp_busy == 'b0) begin
-          state_we  = 'b1;
-          state_new = STATE_UNIQUE_IDENTIFIER_COPY_0;
+          if (nts_kiss_of_death_reg) begin
+            state_we  = 'b1;
+            state_new = STATE_TX_UPDATE_LENGTH; //Kiss-o'-Death
+          end else begin
+            state_we  = 'b1;
+            state_new = STATE_UNIQUE_IDENTIFIER_COPY_0;
+          end
         end
       STATE_UNIQUE_IDENTIFIER_COPY_0:
         begin
@@ -2495,7 +2559,6 @@ module nts_parser_ctrl #(
     cookies_count_new = 0;
 
     case (state_reg)
-    //STATE_GENERATE_FIRST_COOKIE:
       STATE_RESET_EXTRA_COOKIES:
         begin
           cookies_count_we = 1;
@@ -2673,13 +2736,14 @@ module nts_parser_ctrl #(
   //----------------------------------------------------------------
 
   always @*
-  begin
+  begin : tx_ip_udp
     tx_ipv4_totlen_we = 0;
     tx_ipv4_totlen_new = 0;
     tx_udp_length_we = 0;
     tx_udp_length_new = 0;
     tx_udp_checksum_we = 0;
     tx_udp_checksum_new = 0;
+
     case (state_reg)
       STATE_IDLE:
         begin

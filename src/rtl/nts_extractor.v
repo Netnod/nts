@@ -59,7 +59,7 @@ module nts_extractor #(
   // Local parameters, constants, definitions etc
   //----------------------------------------------------------------
 
-  localparam BRAM_WIDTH = 16;
+  localparam BRAM_WIDTH = 10;
   localparam ADDR_WIDTH = 8;
 
   localparam BUFFER_SELECT_ADDRESS_WIDTH = BRAM_WIDTH - ADDR_WIDTH;

@@ -187,6 +187,8 @@ module nts_dispatcher #(
   reg        counter_sof_detect_lsb_we;
   reg [31:0] counter_sof_detect_lsb_reg;
 
+  reg        counter_bad_inc_new;
+  reg        counter_bad_inc_reg;
   reg        counter_bad_we;
   reg [63:0] counter_bad_new;
   reg [63:0] counter_bad_reg;
@@ -511,6 +513,7 @@ module nts_dispatcher #(
       bus_we_reg   <= 0;
       bus_addr_reg <= 0;
 
+      counter_bad_inc_reg <= 0;
       counter_bad_reg <= 0;
       counter_bad_lsb_reg <= 0;
       counter_bytes_rx_reg <= 0;
@@ -566,6 +569,8 @@ module nts_dispatcher #(
       bus_cs_reg   <= bus_cs_new;
       bus_we_reg   <= bus_we_new;
       bus_addr_reg <= bus_addr_new;
+
+      counter_bad_inc_reg <= counter_bad_inc_new;
 
       if (counter_bad_we)
        counter_bad_reg <= counter_bad_new;
@@ -638,6 +643,7 @@ module nts_dispatcher #(
   always @*
   begin : debug_regs
 
+    counter_bad_inc_new = i_rx_bad_frame;
     counter_bad_we = 0;
     counter_bad_new = 0;
 
@@ -653,7 +659,7 @@ module nts_dispatcher #(
     counter_sof_detect_we = 0;
     counter_sof_detect_new = 0;
 
-    if (i_rx_bad_frame) begin
+    if (counter_bad_inc_reg) begin //increment 1 cycle later to reduce setup requirements
       counter_bad_we = 1;
       counter_bad_new = counter_bad_reg + 1;
     end

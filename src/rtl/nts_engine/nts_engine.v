@@ -39,7 +39,7 @@ module nts_engine #(
 
   input  wire                  i_dispatch_rx_packet_available,
   output wire                  o_dispatch_rx_packet_read_discard,
-  input  wire [7:0]            i_dispatch_rx_data_last_valid,
+  input  wire [3:0]            i_dispatch_rx_data_last_valid,
   input  wire                  i_dispatch_rx_fifo_empty,
   output wire                  o_dispatch_rx_fifo_rd_start,
   input  wire                  i_dispatch_rx_fifo_rd_valid,

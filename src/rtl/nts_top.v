@@ -27,7 +27,7 @@ module nts_top #(
   input  wire   [API_RW_WIDTH - 1:0] i_api_dispatcher_write_data,
   output wire   [API_RW_WIDTH - 1:0] o_api_dispatcher_read_data
 );
-  localparam LAST_DATA_VALID_WIDTH = 8;
+  localparam LAST_DATA_VALID_WIDTH = 4;
 
   reg               [63:0] ntp_time_reg;
   reg                [7:0] rx_data_valid_reg;

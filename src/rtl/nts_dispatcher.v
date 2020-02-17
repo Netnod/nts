@@ -46,7 +46,7 @@ module nts_dispatcher #(
 
   output wire                  o_dispatch_packet_available,
   input  wire                  i_dispatch_packet_read_discard,
-  output wire [7:0]            o_dispatch_data_valid,
+  output wire [3:0]            o_dispatch_data_valid,
   output wire                  o_dispatch_fifo_empty,
   input  wire                  i_dispatch_fifo_rd_start,
   output wire                  o_dispatch_fifo_rd_valid,
@@ -157,8 +157,8 @@ module nts_dispatcher #(
   reg  [ADDR_WIDTH-1:0] counter_new_rx;
   reg  [ADDR_WIDTH-1:0] counter_reg [1:0];
 
-  reg  [7:0]         data_valid_new_rx;
-  reg  [7:0]         data_valid_reg [1:0];
+  reg  [3:0]         data_valid_new_rx;
+  reg  [3:0]         data_valid_reg [1:0];
 
   reg [63:0] fifo_rd_data_new;  //out
   reg [63:0] fifo_rd_data_reg;  //out
@@ -171,7 +171,7 @@ module nts_dispatcher #(
   wire      error_state;
 
   reg [63:0] mac_rx_corrected;
-
+  reg  [3:0] rx_data_valid_4bit;
 
   //----------------------------------------------------------------
   // API Debug, counter etc registers
@@ -731,10 +731,13 @@ module nts_dispatcher #(
       8'b0000_0000: bytes = 0;
       default: ;
     endcase
+
     if (bytes != 0) begin
       counter_bytes_rx_we = 1;
       counter_bytes_rx_new = counter_bytes_rx_reg + { 60'h0, bytes };
     end
+
+    rx_data_valid_4bit = bytes;
   end
 
   //----------------------------------------------------------------
@@ -892,7 +895,7 @@ module nts_dispatcher #(
     reg            [3:0] fifo_state;
     reg            [3:0] rx_state;
     reg [ADDR_WIDTH-1:0] rx_counter;
-    reg            [7:0] rx_data_valid;
+    reg            [3:0] rx_data_valid;
 
     fifo_state    = mem_state_reg[ ~ current_mem_reg ];
     rx_state      = mem_state_reg[ current_mem_reg ];
@@ -939,8 +942,7 @@ module nts_dispatcher #(
                 ram_w_data_new_rx = mac_rx_corrected; // i_rx_data but last word shifted logically correct
               end
               if (i_rx_good_frame) begin
-                //$display("%s:%0d data_valid: %h (%b)", `__FILE__, `__LINE__, i_rx_data_valid, i_rx_data_valid);
-                data_valid_new_rx = i_rx_data_valid;
+                data_valid_new_rx = rx_data_valid_4bit;
                 mem_state_rx_new  = STATE_PACKET_RECEIVED;
               end
             end

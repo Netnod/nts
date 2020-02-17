@@ -53,7 +53,7 @@ module nts_parser_ctrl #(
 
   input  wire                         i_clear,
   input  wire                         i_process_initial,
-  input  wire                   [7:0] i_last_word_data_valid,
+  input  wire                   [3:0] i_last_word_data_valid,
   input  wire                  [63:0] i_data,
 
   input  wire                         i_tx_busy,
@@ -1222,23 +1222,14 @@ module nts_parser_ctrl #(
   always @*
   begin : convert_lwdv_to_byte_counter
     last_bytes_we = 'b0;
-
-    case (i_last_word_data_valid)
-      8'b00000001: last_bytes_new = 1;
-      8'b00000011: last_bytes_new = 2;
-      8'b00000111: last_bytes_new = 3;
-      8'b00001111: last_bytes_new = 4;
-      8'b00011111: last_bytes_new = 5;
-      8'b00111111: last_bytes_new = 6;
-      8'b01111111: last_bytes_new = 7;
-      8'b11111111: last_bytes_new = 8;
-      default: last_bytes_new = 'b0; //illegal value
-    endcase
+    last_bytes_new = 0;
 
     case (state_reg)
       STATE_IDLE:
-        if (i_process_initial)
+        if (i_process_initial) begin
           last_bytes_we = 'b1;
+          last_bytes_new = i_last_word_data_valid;
+        end
       default: ;
     endcase
   end
@@ -2264,17 +2255,6 @@ module nts_parser_ctrl #(
           if (i_process_initial) begin
             state_we  = 'b1;
             state_new = STATE_COPY;
-            case (i_last_word_data_valid) //TODO rewrite interface so engine/parser doesn't have to deal with this
-              8'b00000001: ;
-              8'b00000011: ;
-              8'b00000111: ;
-              8'b00001111: ;
-              8'b00011111: ;
-              8'b00111111: ;
-              8'b01111111: ;
-              8'b11111111: ;
-              default: set_error_state( ERROR_CAUSE_BAD_RXW );
-            endcase
           end
           if (i_tx_full)
             set_error_state( ERROR_CAUSE_TX_FULL );

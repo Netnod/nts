@@ -48,7 +48,8 @@ module nts_engine #(
   output wire                  o_dispatch_tx_packet_available,
   input  wire                  i_dispatch_tx_packet_read,
   output wire                  o_dispatch_tx_fifo_empty,
-  input  wire                  i_dispatch_tx_fifo_rd_en,
+  input  wire                  i_dispatch_tx_fifo_rd_start,
+  output wire                  o_dispatch_tx_fifo_rd_valid,
   output wire [63:0]           o_dispatch_tx_fifo_rd_data,
   output wire  [3:0]           o_dispatch_tx_bytes_last_word,
 
@@ -711,7 +712,8 @@ module nts_engine #(
     .o_dispatch_tx_packet_available(o_dispatch_tx_packet_available),
     .i_dispatch_tx_packet_read(i_dispatch_tx_packet_read),
     .o_dispatch_tx_fifo_empty(o_dispatch_tx_fifo_empty),
-    .i_dispatch_tx_fifo_rd_en(i_dispatch_tx_fifo_rd_en),
+    .i_dispatch_tx_fifo_rd_start(i_dispatch_tx_fifo_rd_start),
+    .o_dispatch_tx_fifo_rd_valid(o_dispatch_tx_fifo_rd_valid),
     .o_dispatch_tx_fifo_rd_data(o_dispatch_tx_fifo_rd_data),
     .o_dispatch_tx_bytes_last_word(o_dispatch_tx_bytes_last_word),
 

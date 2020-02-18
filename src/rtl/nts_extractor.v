@@ -46,7 +46,8 @@ module nts_extractor #(
   input  wire        i_engine_packet_available,
   output wire        o_engine_packet_read,
   input  wire        i_engine_fifo_empty,
-  output wire        o_engine_fifo_rd_en,
+  output wire        o_engine_fifo_rd_start,
+  input  wire        i_engine_fifo_rd_valid,
   input  wire [63:0] i_engine_fifo_rd_data,
   input  wire  [3:0] i_engine_bytes_last_word,
 
@@ -154,8 +155,8 @@ module nts_extractor #(
 
   reg engine_packet_read_new;
   reg engine_packet_read_reg;
-  reg engine_fifo_rd_en_new;
-  reg engine_fifo_rd_en_reg;
+  reg engine_fifo_rd_start_new;
+  reg engine_fifo_rd_start_reg;
 
   reg [7:0] lwdv_expanded_reg;
 
@@ -229,7 +230,7 @@ module nts_extractor #(
   assign o_mac_tx_start = mac_start;
 
   assign o_engine_packet_read = engine_packet_read_reg;
-  assign o_engine_fifo_rd_en  = engine_fifo_rd_en_reg;
+  assign o_engine_fifo_rd_start = engine_fifo_rd_start_reg;
 
   always @*
   begin
@@ -349,7 +350,7 @@ module nts_extractor #(
     buffer_initilized_we = 0;
     buffer_initilized_new = 0;
     engine_packet_read_new = 0;
-    engine_fifo_rd_en_new = 0;
+    engine_fifo_rd_start_new = 0;
     write_wdata_new = 0;
     write_wren_new = 0;
     write_addr_new = 0;
@@ -366,23 +367,22 @@ module nts_extractor #(
           buffer_initilized_we = 1;
           buffer_initilized_new = buffer_initilized_reg;
           buffer_initilized_new[buffer_engine_selected_reg] = 1;
-          engine_fifo_rd_en_new = 1;
+          engine_fifo_rd_start_new = 1;
         end
       BUFFER_STATE_WRITING:
-        if (i_engine_fifo_empty) begin
-          engine_packet_read_new = 1;
-          buffer_engine_state_we = 1;
-          buffer_engine_state_new = BUFFER_STATE_LOADED;
-          buffer_engine_selected_we = 1;
-          buffer_engine_selected_new = buffer_engine_selected_reg + 1;
-        end else begin
+        if (i_engine_fifo_rd_valid) begin
           buffer_engine_addr_we = 1;
           buffer_engine_addr_new = buffer_engine_addr + 1;
           write_addr_new[BRAM_WIDTH-1:ADDR_WIDTH] = buffer_engine_selected_reg;
           write_addr_new[ADDR_WIDTH-1:0] = buffer_engine_addr;
           write_wdata_new = i_engine_fifo_rd_data;
           write_wren_new = 1;
-          engine_fifo_rd_en_new = 1;
+        end else if (i_engine_fifo_empty) begin
+          engine_packet_read_new = 1;
+          buffer_engine_state_we = 1;
+          buffer_engine_state_new = BUFFER_STATE_LOADED;
+          buffer_engine_selected_we = 1;
+          buffer_engine_selected_new = buffer_engine_selected_reg + 1;
         end
       BUFFER_STATE_LOADED: ;
       BUFFER_STATE_READING: ;
@@ -691,7 +691,7 @@ module nts_extractor #(
       counter_bytes_lsb_reg <= 0;
       counter_packets_reg <= 0;
       counter_packets_lsb_reg <= 0;
-      engine_fifo_rd_en_reg <= 0;
+      engine_fifo_rd_start_reg <= 0;
       engine_packet_read_reg <= 0;
       lwdv_expanded_reg <= 0;
       //note: mac moved to its own clocked process to get timing, behaivor etc very similar to pp_tx
@@ -729,7 +729,7 @@ module nts_extractor #(
       if (buffer_mac_selected_we)
         buffer_mac_selected_reg <= buffer_mac_selected_new;
 
-      engine_fifo_rd_en_reg <= engine_fifo_rd_en_new;
+      engine_fifo_rd_start_reg <= engine_fifo_rd_start_new;
       engine_packet_read_reg <= engine_packet_read_new;
 
       lwdv_expanded_reg <= mac_last_word_data_valid_expander( buffer_lwdv_reg[buffer_mac_selected_reg] );

@@ -40,7 +40,8 @@ module nts_tx_buffer #(
   output wire        o_dispatch_tx_packet_available,
   input  wire        i_dispatch_tx_packet_read,
   output wire        o_dispatch_tx_fifo_empty,
-  input  wire        i_dispatch_tx_fifo_rd_en,
+  input  wire        i_dispatch_tx_fifo_rd_start,
+  output wire        o_dispatch_tx_fifo_rd_valid,
   output wire [63:0] o_dispatch_tx_fifo_rd_data,
   output wire  [3:0] o_dispatch_tx_bytes_last_word,
 
@@ -80,8 +81,9 @@ module nts_tx_buffer #(
   localparam STATE_CHECKSUM             = 1;
   localparam STATE_HAS_DATA             = 2;
   localparam STATE_FIFO_OUT             = 3;
-  localparam STATE_ERROR_GENERAL        = 4;
-  localparam STATE_ERROR_BUFFER_OVERRUN = 5;
+  localparam STATE_FIFO_OUT_TRANSMIT    = 4;
+  localparam STATE_ERROR_GENERAL        = 5;
+  localparam STATE_ERROR_BUFFER_OVERRUN = 6;
 
   //localparam STATE_IP4_LENGTH           = 2;
   //localparam STATE_IP4_CHECKSUM         = 3;
@@ -107,6 +109,9 @@ module nts_tx_buffer #(
   reg                  current_mem_we;
   reg                  current_mem_new;
   reg                  current_mem_reg;
+
+  reg                  fifo_rd_valid_new;
+  reg                  fifo_rd_valid_reg;
 
   reg                  mem_state_we    [0:1];
   reg            [2:0] mem_state_new   [0:1];
@@ -165,6 +170,16 @@ module nts_tx_buffer #(
   reg [ADDR_WIDTH-1:0] word_count_reg  [0:1];
 
   //----------------------------------------------------------------
+  // Output buffer regs for tx/extractor connection.
+  //----------------------------------------------------------------
+
+  reg        tx_packet_available_reg;
+  reg        tx_fifo_empty_reg;
+  reg        tx_fifo_rd_valid_reg;
+  reg [63:0] tx_fifo_rd_data_reg;
+  reg  [3:0] tx_bytes_last_word_reg;
+
+  //----------------------------------------------------------------
   // Wires
   //----------------------------------------------------------------
 
@@ -196,10 +211,12 @@ module nts_tx_buffer #(
                          (i_read_en || i_sum_en || i_parser_update_length || i_parser_ipv4_done || i_parser_ipv6_done);
 
 
-  assign o_dispatch_tx_packet_available  = mem_state_reg[ fifo ] == STATE_FIFO_OUT;
-  assign o_dispatch_tx_fifo_empty        = (mem_state_reg[ fifo ] == STATE_FIFO_OUT) && (ram_addr_hi_reg[ fifo ] == fifo_word_count_p1);
-  assign o_dispatch_tx_fifo_rd_data      = ram_rd_data[ fifo ];
-  assign o_dispatch_tx_bytes_last_word   = bytes_last_word_reg[ fifo ];
+  assign o_dispatch_tx_packet_available  = tx_packet_available_reg;
+  assign o_dispatch_tx_fifo_empty        = tx_fifo_empty_reg;
+  assign o_dispatch_tx_fifo_rd_valid     = tx_fifo_rd_valid_reg;
+  assign o_dispatch_tx_fifo_rd_data      = tx_fifo_rd_data_reg;
+  assign o_dispatch_tx_bytes_last_word   = tx_bytes_last_word_reg;
+
   assign o_parser_current_empty          = mem_state_reg[ parser ] == STATE_EMPTY;
   assign o_parser_current_memory_full    = (mem_state_reg[ parser ] == STATE_HAS_DATA && ram_addr_hi_reg[ parser ] == ADDRESS_FULL) ||
                                            (mem_state_reg[ parser ] == STATE_HAS_DATA && ram_addr_hi_reg[ parser ] == ADDRESS_ALMOST_FULL && i_write_en) ||
@@ -207,6 +224,34 @@ module nts_tx_buffer #(
   assign o_read_data = read_data;
   assign o_sum = sum_reg;
   assign o_sum_done = sum_done_reg;
+
+  //----------------------------------------------------------------
+  // Output reg buffers
+  //----------------------------------------------------------------
+
+  always @(posedge i_clk or posedge i_areset)
+  if (i_areset) begin
+    tx_packet_available_reg <= 0;
+    tx_fifo_empty_reg       <= 0;
+    tx_fifo_rd_valid_reg    <= 0;
+    tx_fifo_rd_data_reg     <= 0;
+    tx_bytes_last_word_reg  <= 0;
+  end else begin
+    tx_packet_available_reg <= (mem_state_reg[ fifo ] == STATE_FIFO_OUT);
+
+    tx_fifo_empty_reg <= 0;
+    if (ram_addr_hi_reg[ fifo ] == fifo_word_count_p1) begin
+      case (mem_state_reg[ fifo ])
+        STATE_FIFO_OUT:          tx_fifo_empty_reg <= 1;
+        STATE_FIFO_OUT_TRANSMIT: tx_fifo_empty_reg <= 1;
+        default: ;
+      endcase
+    end
+
+    tx_fifo_rd_valid_reg   <= fifo_rd_valid_reg;
+    tx_fifo_rd_data_reg    <= ram_rd_data[ fifo ];
+    tx_bytes_last_word_reg <= bytes_last_word_reg[ fifo ];
+  end
 
   //----------------------------------------------------------------
   // Memory holding the Tx buffer
@@ -306,6 +351,8 @@ module nts_tx_buffer #(
       sum_done_delayed_reg <= 0;
       sum_pipelinestage1_execute_reg <= 0;
 
+      fifo_rd_valid_reg   <= 0;
+
     end else begin
       //Pipeline stage 0
       bad_input_reg <= bad_input_new;
@@ -335,6 +382,9 @@ module nts_tx_buffer #(
       sum_delayed_reg <= sum_delayed_new;
       sum_done_delayed_reg <= sum_done_delayed_new;
       sum_pipelinestage1_execute_reg <= sum_pipelinestage1_execute_new;
+
+      //Misc.
+      fifo_rd_valid_reg <= fifo_rd_valid_new;
     end
   end
 
@@ -522,13 +572,6 @@ module nts_tx_buffer #(
   end
 
 
-//always @*
-//begin
-//  $display("%s:%0d %h + %h + %h + %h", `__FILE__, `__LINE__, sum_data_reg[0], sum_data_reg[1], sum_data_reg[2], sum_data_reg[3]);
-//  display("%s:%0d ADDRESS_FULL: ", `__FILE__, `__LINE__, ADDRESS_FULL);
-//end
-
-
   //----------------------------------------------------------------
   // Parser/FIFO main proc
   //----------------------------------------------------------------
@@ -537,6 +580,7 @@ module nts_tx_buffer #(
   begin
     current_mem_we = 0;
     current_mem_new = 0;
+    fifo_rd_valid_new = 0;
     read_cycle_new = 0;
 
     begin : defaults
@@ -688,15 +732,28 @@ module nts_tx_buffer #(
       STATE_EMPTY: ;
       STATE_FIFO_OUT:
         begin
-          ram_rd[fifo] = 1;
-          if (i_dispatch_tx_fifo_rd_en) begin
-            if (ram_addr_hi_reg[fifo] >= fifo_word_count_p1) begin
-              ram_addr_hi     [fifo] = ram_addr_hi_reg[fifo];
-            end else begin
-              ram_addr_hi     [fifo] = ram_addr_hi_reg[fifo] + 1;
-              ram_addr_hi_we  [fifo] = 1;
-              ram_addr_hi_new [fifo] = ram_addr_hi_reg[fifo] + 1;
-            end
+          ram_rd[fifo]      = 1;
+          ram_addr_hi[fifo] = ram_addr_hi_reg[fifo];
+          if (i_dispatch_tx_fifo_rd_start) begin
+            mem_state_we [fifo] = 1;
+            mem_state_new[fifo] = STATE_FIFO_OUT_TRANSMIT;
+          end
+          if (i_dispatch_tx_packet_read) begin
+            mem_state_we [fifo] = 1;
+            mem_state_new[fifo] = STATE_EMPTY;
+            ram_addr_hi_we[fifo] = 1;
+            ram_addr_hi_new[fifo] = 0;
+          end
+        end
+      STATE_FIFO_OUT_TRANSMIT:
+        begin
+          ram_rd[fifo]      = 1;
+          ram_addr_hi[fifo] = ram_addr_hi_reg[fifo];
+
+          if (ram_addr_hi_reg[fifo] < fifo_word_count_p1) begin
+            fifo_rd_valid_new      = 1;
+            ram_addr_hi_we  [fifo] = 1;
+            ram_addr_hi_new [fifo] = ram_addr_hi_reg[fifo] + 1;
           end
           if (i_dispatch_tx_packet_read) begin
             mem_state_we [fifo] = 1;

@@ -624,7 +624,7 @@ module nts_top_tb;
       { i_mac_rx_data_valid, i_mac_rx_data, i_mac_rx_bad_frame, i_mac_rx_good_frame } <= 0;
 
       if (rx_busy) begin
-        $display("%s:%0d %h %h", `__FILE__, `__LINE__, rx_current[71:64], rx_current[63:0]);
+        $display("%s:%0d RX: %h %h", `__FILE__, `__LINE__, rx_current[71:64], rx_current[63:0]);
         { i_mac_rx_data_valid, i_mac_rx_data } <= rx_current;
         if (rx_ptr == 0) begin
           rx_busy <= 0;
@@ -746,6 +746,11 @@ module nts_top_tb;
 
 
   if (DEBUG>0) begin
+    always @(posedge i_clk)
+      if (dut.extractor_engine_fifo_rd_start || dut.engine_extractor_fifo_rd_valid)
+        begin
+          $display("%s:%0d extractor_engine_fifo_rd_start: %h, engine_extractor_fifo_rd_valid: %h, engine_extractor_fifo_rd_data: %h",`__FILE__,`__LINE__, dut.extractor_engine_fifo_rd_start, dut.engine_extractor_fifo_rd_valid, dut.engine_extractor_fifo_rd_data);
+        end
     always @(posedge i_clk)
       if (dut.engine.parser.ntp_extension_we)
         $display("%s:%0d ntp_ext[%0d] = tag:%h,length:%h,addr:%h",

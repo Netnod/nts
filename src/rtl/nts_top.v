@@ -57,11 +57,12 @@ module nts_top #(
 
   wire                          engine_extractor_packet_available;
   wire                          engine_extractor_fifo_empty;
+  wire                          engine_extractor_fifo_rd_valid;
   wire [MAC_DATA_WIDTH - 1 : 0] engine_extractor_fifo_rd_data;
   wire                    [3:0] engine_extractor_bytes_last_word;
 
   wire                          extractor_engine_packet_read;
-  wire                          extractor_engine_fifo_rd_en;
+  wire                          extractor_engine_fifo_rd_start;
 
   wire   [API_RW_WIDTH - 1:0] api_extractor_read_data;
   wire   [API_RW_WIDTH - 1:0] api_dispatcher_read_data;
@@ -141,7 +142,8 @@ module nts_top #(
     .i_engine_packet_available(engine_extractor_packet_available),
     .o_engine_packet_read(extractor_engine_packet_read),
     .i_engine_fifo_empty(engine_extractor_fifo_empty),
-    .o_engine_fifo_rd_en(extractor_engine_fifo_rd_en),
+    .o_engine_fifo_rd_start(extractor_engine_fifo_rd_start),
+    .i_engine_fifo_rd_valid(engine_extractor_fifo_rd_valid),
     .i_engine_fifo_rd_data(engine_extractor_fifo_rd_data),
     .i_engine_bytes_last_word(engine_extractor_bytes_last_word)
   );
@@ -176,7 +178,8 @@ module nts_top #(
         .o_dispatch_tx_packet_available(engine_extractor_packet_available),
         .i_dispatch_tx_packet_read(extractor_engine_packet_read),
         .o_dispatch_tx_fifo_empty(engine_extractor_fifo_empty),
-        .i_dispatch_tx_fifo_rd_en(extractor_engine_fifo_rd_en),
+        .i_dispatch_tx_fifo_rd_start(extractor_engine_fifo_rd_start),
+        .o_dispatch_tx_fifo_rd_valid(engine_extractor_fifo_rd_valid),
         .o_dispatch_tx_fifo_rd_data(engine_extractor_fifo_rd_data),
         .o_dispatch_tx_bytes_last_word(engine_extractor_bytes_last_word),
 

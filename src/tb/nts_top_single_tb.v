@@ -5,7 +5,6 @@ module nts_top_tb;
   localparam [11:0] API_ADDR_ENGINE_NAME0       = API_ADDR_ENGINE_BASE;
   localparam [11:0] API_ADDR_ENGINE_NAME1       = API_ADDR_ENGINE_BASE + 1;
   localparam [11:0] API_ADDR_ENGINE_VERSION     = API_ADDR_ENGINE_BASE + 2;
-  localparam [11:0] API_ADDR_ENGINE_CTRL        = API_ADDR_ENGINE_BASE + 8;
 
   localparam [11:0] API_ADDR_DEBUG_BASE           = 12'h180;
   localparam [11:0] API_ADDR_DEBUG_NTS_PROCESSED  = API_ADDR_DEBUG_BASE + 0;
@@ -62,8 +61,6 @@ module nts_top_tb;
   localparam [11:0] API_DISPATCHER_ADDR_SYSTICK32          = 'h004;
   localparam [11:0] API_DISPATCHER_ADDR_NTPTIME            = 'h006;
   localparam [11:0] API_DISPATCHER_ADDR_BYTES_RX           = 'h00a;
-  localparam [11:0] API_DISPATCHER_AADR_NTS_ENGINES_READY  = 'h010;
-  localparam [11:0] API_DISPATCHER_ADDR_NTS_ENGINES_ALL    = 'h011;
   localparam [11:0] API_DISPATCHER_ADDR_COUNTER_FRAMES     = 'h020;
   localparam [11:0] API_DISPATCHER_ADDR_COUNTER_GOOD       = 'h022;
   localparam [11:0] API_DISPATCHER_ADDR_COUNTER_BAD        = 'h024;
@@ -111,7 +108,7 @@ module nts_top_tb;
 
   localparam DEBUG           = 1;
   localparam BENCHMARK       = 1;
-  localparam ENGINES         = 4;
+  localparam ENGINES         = 1; //Beware: only ENGINES=1 supported for now
   localparam API_ADDR_WIDTH  = 12;
   localparam API_RW_WIDTH    = 32;
   localparam MAC_DATA_WIDTH  = 64;
@@ -206,14 +203,15 @@ module nts_top_tb;
   end
   endtask
 
-  task api_read32( output [31:0] out, input [11:0] engine, input [11:0] addr );
+  //TODO make this support > 1 engine in the future
+  task api_read32( output [31:0] out, input [11:0] addr );
   begin : api_read32_
     reg [31:0] id_cmd_addr;
     reg [31:0] result;
     reg [31:0] status;
     result = 0;
 
-    id_cmd_addr = { engine, BUS_READ, addr };
+    id_cmd_addr = { 12'h0, BUS_READ, addr };
     dispatcher_write32( id_cmd_addr, API_DISPATCHER_ADDR_BUS_ID_CMD_ADDR );
     dispatcher_write32( 32'h0000_0001, API_DISPATCHER_ADDR_BUS_STATUS );
 
@@ -227,12 +225,13 @@ module nts_top_tb;
   end
   endtask
 
-  task api_write32( input [31:0] data, input [11:0] engine, input [11:0] addr );
+  //TODO make this support > 1 engine in the future
+  task api_write32( input [31:0] data, input [11:0] addr );
   begin : api_write_32_
     reg [31:0] id_cmd_addr;
     reg [31:0] status;
 
-    id_cmd_addr = { engine, BUS_WRITE, addr };
+    id_cmd_addr = { 12'h0, BUS_WRITE, addr };
     dispatcher_write32( id_cmd_addr, API_DISPATCHER_ADDR_BUS_ID_CMD_ADDR );
     dispatcher_write32( data, API_DISPATCHER_ADDR_BUS_DATA );
     dispatcher_write32( 32'h0000_0001, API_DISPATCHER_ADDR_BUS_STATUS );
@@ -244,12 +243,13 @@ module nts_top_tb;
   end
   endtask
 
-  task api_read64( output [63:0] out, input [11:0] engine, input [11:0] addr );
+  //TODO make this support > 1 engine in the future
+  task api_read64( output [63:0] out, input [11:0] addr );
   begin : api_read64_
     reg [63:0] result;
     result = 0;
-    api_read32( result[63:32], engine, addr );
-    api_read32( result[31:0], engine, addr+1 );
+    api_read32( result[63:32], addr );
+    api_read32( result[31:0], addr+1 );
     out = result;
   end
   endtask
@@ -259,7 +259,6 @@ module nts_top_tb;
   //----------------------------------------------------------------
 
   task install_key_256bit(
-    input  [11:0] engine,
     input  [31:0] keyid,
     input [255:0] key,
     input   [1:0] key_index );
@@ -298,57 +297,51 @@ module nts_top_tb;
       default: ;
     endcase
 
-    api_read32(tmp, engine, API_ADDR_KEYMEM_ADDR_CTRL);
+    api_read32(tmp, API_ADDR_KEYMEM_ADDR_CTRL);
 
     tmp = tmp & ~ (1<<key_index);
 
-    api_write32( tmp,   engine, API_ADDR_KEYMEM_ADDR_CTRL );
-    api_write32( keyid, engine, addr_keyid );
-    api_write32( 0,     engine, addr_length );
+    api_write32( tmp,   API_ADDR_KEYMEM_ADDR_CTRL );
+    api_write32( keyid, addr_keyid );
+    api_write32( 0,     addr_length );
 
     for (i = 0; i < 8; i = i + 1) begin
       index = i[2:0];
-      api_write32( key[32*index+:32], engine, addr_key + {8'b00, index} ); //256bit LSB
+      api_write32( key[32*index+:32], addr_key + {8'b00, index} ); //256bit LSB
     end
     for (i = 0; i < 8; i = i + 1) begin
       index = i[2:0];
-      api_write32( 0, engine, addr_key + {8'b01, index} ); //256bit MSB, all zeros
+      api_write32( 0, addr_key + {8'b01, index} ); //256bit MSB, all zeros
     end
 
     tmp = tmp | (1<<key_index);
-    api_write32( tmp, engine, API_ADDR_KEYMEM_ADDR_CTRL );
+    api_write32( tmp, API_ADDR_KEYMEM_ADDR_CTRL );
   end
   endtask
 
-  task set_current_key( input [11:0] engine, input [1:0] current_key );
+  task set_current_key( input [1:0] current_key );
   begin : set_current_key_
     reg [31:0] tmp;
-    api_read32(tmp, engine, API_ADDR_KEYMEM_ADDR_CTRL);
+    api_read32(tmp, API_ADDR_KEYMEM_ADDR_CTRL);
     tmp = { tmp[31:18], current_key, tmp[15:0] };
-    api_write32(tmp, engine, API_ADDR_KEYMEM_ADDR_CTRL);
+    api_write32(tmp, API_ADDR_KEYMEM_ADDR_CTRL);
   end
   endtask
 
-  task init_noncegen ( input [11:0] engine );
+  task init_noncegen;
   begin
-    api_write32( 32'h5eb6_3bbb, engine, API_ADDR_NONCEGEN_KEY0);
-    api_write32( 32'he01e_eed0, engine, API_ADDR_NONCEGEN_KEY1);
-    api_write32( 32'h93cb_22bb, engine, API_ADDR_NONCEGEN_KEY2);
-    api_write32( 32'h8f5a_cdc3, engine, API_ADDR_NONCEGEN_KEY3);
-    api_write32( 32'h6adf_b183, engine, API_ADDR_NONCEGEN_CONTEXT0);
-    api_write32( 32'ha4a2_c94a, engine, API_ADDR_NONCEGEN_CONTEXT1);
-    api_write32( 32'h2f92_dab5, engine, API_ADDR_NONCEGEN_CONTEXT2);
-    api_write32( 32'hade7_62a4, engine, API_ADDR_NONCEGEN_CONTEXT3);
-    api_write32( 32'h7889_a5a1, engine, API_ADDR_NONCEGEN_CONTEXT4);
-    api_write32( 32'hdead_beef, engine, API_ADDR_NONCEGEN_CONTEXT5);
-    api_write32( 32'h0000_0000, engine, API_ADDR_NONCEGEN_LABEL); //TODO: Use 16B engine counter as nonce label
-    api_write32( 32'h0000_0001, engine, API_ADDR_NONCEGEN_CTRL);
-  end
-  endtask
-
-  task enable_engine ( input [11:0] engine );
-  begin
-    api_write32( 32'h00000_0001, engine, API_ADDR_ENGINE_CTRL);
+    api_write32( 32'h5eb6_3bbb, API_ADDR_NONCEGEN_KEY0);
+    api_write32( 32'he01e_eed0, API_ADDR_NONCEGEN_KEY1);
+    api_write32( 32'h93cb_22bb, API_ADDR_NONCEGEN_KEY2);
+    api_write32( 32'h8f5a_cdc3, API_ADDR_NONCEGEN_KEY3);
+    api_write32( 32'h6adf_b183, API_ADDR_NONCEGEN_CONTEXT0);
+    api_write32( 32'ha4a2_c94a, API_ADDR_NONCEGEN_CONTEXT1);
+    api_write32( 32'h2f92_dab5, API_ADDR_NONCEGEN_CONTEXT2);
+    api_write32( 32'hade7_62a4, API_ADDR_NONCEGEN_CONTEXT3);
+    api_write32( 32'h7889_a5a1, API_ADDR_NONCEGEN_CONTEXT4);
+    api_write32( 32'hdead_beef, API_ADDR_NONCEGEN_CONTEXT5);
+    api_write32( 32'h0000_0000, API_ADDR_NONCEGEN_LABEL); //TODO: Use 16B engine counter as nonce label
+    api_write32( 32'h0000_0001, API_ADDR_NONCEGEN_CTRL);
   end
   endtask
 
@@ -473,31 +466,18 @@ module nts_top_tb;
     i_areset = 0;
     #10;
 
-    begin : sanity_check
-      reg [63:0] dispatcher_name;
-      reg [31:0] dispatcher_engines_all;
-      dispatcher_read64(dispatcher_name, API_DISPATCHER_ADDR_NAME);
-      `assert( dispatcher_name == 64'h4e_54_53_2d_44_49_53_50);
-
-      dispatcher_read32(dispatcher_engines_all, API_DISPATCHER_ADDR_NTS_ENGINES_ALL);
-      `assert( ENGINES == dispatcher_engines_all );
-    end
 
     begin : loop
       integer i;
-      reg [11:0] engine;
       for (i = 0; i < 100; i = i + 1) begin
-        for (engine = 0; engine < ENGINES; engine = engine + 1) begin
-          case (i)
-            5: install_key_256bit( engine, NTS_TEST_REQUEST_MASTER_KEY_ID_1, NTS_TEST_REQUEST_MASTER_KEY_1, 0 );
-            6: install_key_256bit( engine, NTS_TEST_REQUEST_MASTER_KEY_ID_2, NTS_TEST_REQUEST_MASTER_KEY_2, 1 );
-            7: install_key_256bit( engine, TRACE_MASTER_KEY_ID, TRACE_MASTER_KEY, 2 );
-            8: init_noncegen(engine);
-            9: set_current_key(engine, 2);
-            10: enable_engine(engine);
-            default: ;
-          endcase
-        end
+        case (i)
+          5: install_key_256bit( NTS_TEST_REQUEST_MASTER_KEY_ID_1, NTS_TEST_REQUEST_MASTER_KEY_1, 0 );
+          6: install_key_256bit( NTS_TEST_REQUEST_MASTER_KEY_ID_2, NTS_TEST_REQUEST_MASTER_KEY_2, 1 );
+          7: install_key_256bit( TRACE_MASTER_KEY_ID, TRACE_MASTER_KEY, 2 );
+          8: init_noncegen();
+          9: set_current_key(2);
+          default: ;
+        endcase
         send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_KEYID}, 2160, 0);
         send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_KEYID}, 2160, 0);
         send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_COOKIE}, 2160, 0);
@@ -533,7 +513,6 @@ module nts_top_tb;
 
     #100 ;
     begin : fin_locals_
-      reg [11:0] engine;
       reg [63:0] engine_name;
       reg [31:0] engine_version;
       reg [63:0] clock_name;
@@ -563,20 +542,29 @@ module nts_top_tb;
       reg [11:0] addr;
       reg [31:0] value;
 
-      for (engine = 0; engine < ENGINES; engine = engine + 1) begin
-        for (addr = 0; addr < 12'hFFF; addr = addr + 1) begin
-          api_read32(value, engine, addr);
-          if (value != 0)
-            $display("%s:%0d: *** Engine:%0d[%h] = %h", `__FILE__, `__LINE__, engine, addr, value);
-        end
-      end
-
       for (addr = 0; addr < 12'hFFF; addr = addr + 1) begin
         dispatcher_read32(value, addr);
         if (value != 0)
           $display("%s:%0d: *** Dispatcher[%h] = %h", `__FILE__, `__LINE__, addr, value);
       end
+      for (addr = 0; addr < 12'hFFF; addr = addr + 1) begin
+        api_read32(value, addr);
+        if (value != 0)
+          $display("%s:%0d: *** Engine[%h] = %h", `__FILE__, `__LINE__, addr, value);
+      end
 
+      api_read64(engine_name, API_ADDR_ENGINE_NAME0);
+      api_read32(engine_version, API_ADDR_ENGINE_VERSION);
+      api_read64(clock_name, API_ADDR_CLOCK_NAME0);
+      api_read32(debug_name, API_ADDR_DEBUG_NAME);
+      api_read64(keymem_name, API_ADDR_KEYMEM_NAME0);
+      api_read32(debug_systick32, API_ADDR_DEBUG_SYSTICK32);
+      api_read64(engine_stats_nts_bad_auth, API_ADDR_DEBUG_NTS_BAD_AUTH);
+      api_read64(engine_stats_nts_bad_cookie, API_ADDR_DEBUG_NTS_BAD_COOKIE);
+      api_read64(engine_stats_nts_bad_keyid, API_ADDR_DEBUG_NTS_BAD_KEYID);
+      api_read64(engine_stats_nts_processed, API_ADDR_DEBUG_NTS_PROCESSED);
+      api_read64(crypto_err, API_ADDR_DEBUG_ERR_CRYPTO);
+      api_read64(txbuf_err, API_ADDR_DEBUG_ERR_TXBUF);
       dispatcher_read64(dispatcher_name, API_DISPATCHER_ADDR_NAME);
       dispatcher_read32(dispatcher_version, API_DISPATCHER_ADDR_VERSION);
       dispatcher_read32(dispatcher_systick32, API_DISPATCHER_ADDR_SYSTICK32);
@@ -591,7 +579,19 @@ module nts_top_tb;
       dispatcher_read32(extractor_version, API_EXTRACTOR_ADDR_VERSION);
       dispatcher_read64(extractor_bytes, API_EXTRACTOR_ADDR_BYTES);
       dispatcher_read64(extractor_packets, API_EXTRACTOR_ADDR_PACKETS);
-      $display("%s:%0d: *** Dispatcher CORE: %s %s", `__FILE__, `__LINE__, dispatcher_name, dispatcher_version);
+      $display("%s:%0d: *** CORE: %s %s", `__FILE__, `__LINE__, dispatcher_name, dispatcher_version);
+      $display("%s:%0d: *** CORE: %s %s", `__FILE__, `__LINE__, extractor_name, extractor_version);
+      $display("%s:%0d: *** CORE: %s %s", `__FILE__, `__LINE__, engine_name, engine_version);
+      $display("%s:%0d: *** CORE: %s", `__FILE__, `__LINE__, clock_name);
+      $display("%s:%0d: *** CORE: %s", `__FILE__, `__LINE__, debug_name);
+      $display("%s:%0d: *** CORE: %s", `__FILE__, `__LINE__, keymem_name);
+      $display("%s:%0d: *** DEBUG, systick32:      %0d", `__FILE__, `__LINE__, debug_systick32);
+      $display("%s:%0d: *** DEBUG, NTS bad auth:   %0d", `__FILE__, `__LINE__, engine_stats_nts_bad_auth);
+      $display("%s:%0d: *** DEBUG, NTS bad cookie: %0d", `__FILE__, `__LINE__, engine_stats_nts_bad_cookie);
+      $display("%s:%0d: *** DEBUG, NTS bad key id: %0d", `__FILE__, `__LINE__, engine_stats_nts_bad_keyid);
+      $display("%s:%0d: *** DEBUG, NTS processed:  %0d", `__FILE__, `__LINE__, engine_stats_nts_processed);
+      $display("%s:%0d: *** DEBUG, Errors Crypto:  %0d", `__FILE__, `__LINE__, crypto_err);
+      $display("%s:%0d: *** DEBUG, Errors TxBuf:   %0d", `__FILE__, `__LINE__, txbuf_err);
       $display("%s:%0d: *** Dispatcher, ntp_time:            %016x", `__FILE__, `__LINE__, dispatcher_ntp_time);
       $display("%s:%0d: *** Dispatcher, systick32:           %0d", `__FILE__, `__LINE__, dispatcher_systick32);
       $display("%s:%0d: *** Dispatcher, bytes received:      %0d", `__FILE__, `__LINE__, dispatcher_counter_bytes_rx);
@@ -600,37 +600,8 @@ module nts_top_tb;
       $display("%s:%0d: *** Dispatcher, bad frame counter:   %0d", `__FILE__, `__LINE__, dispatcher_counter_bad);
       $display("%s:%0d: *** Dispatcher, dispatched counter:  %0d", `__FILE__, `__LINE__, dispatcher_counter_dispatched);
       $display("%s:%0d: *** Dispatcher, error counter:       %0d", `__FILE__, `__LINE__, dispatcher_counter_error);
-      $display("%s:%0d: *** Extractor CORE: %s %s", `__FILE__, `__LINE__, extractor_name, extractor_version);
       $display("%s:%0d: *** Extractor, bytes transmitted:    %0d", `__FILE__, `__LINE__, extractor_bytes);
       $display("%s:%0d: *** Extractor, packets transmitted:  %0d", `__FILE__, `__LINE__, extractor_packets);
-
-
-      for (engine = 0; engine < ENGINES; engine = engine + 1) begin
-        api_read64(engine_name, engine, API_ADDR_ENGINE_NAME0);
-        api_read32(engine_version, engine, API_ADDR_ENGINE_VERSION);
-        api_read64(clock_name, engine, API_ADDR_CLOCK_NAME0);
-        api_read32(debug_name, engine, API_ADDR_DEBUG_NAME);
-        api_read64(keymem_name, engine, API_ADDR_KEYMEM_NAME0);
-        api_read32(debug_systick32, engine, API_ADDR_DEBUG_SYSTICK32);
-        api_read64(engine_stats_nts_bad_auth, engine, API_ADDR_DEBUG_NTS_BAD_AUTH);
-        api_read64(engine_stats_nts_bad_cookie, engine, API_ADDR_DEBUG_NTS_BAD_COOKIE);
-        api_read64(engine_stats_nts_bad_keyid, engine, API_ADDR_DEBUG_NTS_BAD_KEYID);
-        api_read64(engine_stats_nts_processed, engine, API_ADDR_DEBUG_NTS_PROCESSED);
-        api_read64(crypto_err, engine, API_ADDR_DEBUG_ERR_CRYPTO);
-        api_read64(txbuf_err, engine, API_ADDR_DEBUG_ERR_TXBUF);
-        $display("%s:%0d: *** Engine %0d (%h)", `__FILE__, `__LINE__, engine, engine);
-        $display("%s:%0d: ***   CORE: %s %s", `__FILE__, `__LINE__, engine_name, engine_version);
-        $display("%s:%0d: ***   CORE: %s", `__FILE__, `__LINE__, clock_name);
-        $display("%s:%0d: ***   CORE: %s", `__FILE__, `__LINE__, debug_name);
-        $display("%s:%0d: ***   CORE: %s", `__FILE__, `__LINE__, keymem_name);
-        $display("%s:%0d: ***   DEBUG, systick32:      %0d", `__FILE__, `__LINE__, debug_systick32);
-        $display("%s:%0d: ***   DEBUG, NTS bad auth:   %0d", `__FILE__, `__LINE__, engine_stats_nts_bad_auth);
-        $display("%s:%0d: ***   DEBUG, NTS bad cookie: %0d", `__FILE__, `__LINE__, engine_stats_nts_bad_cookie);
-        $display("%s:%0d: ***   DEBUG, NTS bad key id: %0d", `__FILE__, `__LINE__, engine_stats_nts_bad_keyid);
-        $display("%s:%0d: ***   DEBUG, NTS processed:  %0d", `__FILE__, `__LINE__, engine_stats_nts_processed);
-        $display("%s:%0d: ***   DEBUG, Errors Crypto:  %0d", `__FILE__, `__LINE__, crypto_err);
-        $display("%s:%0d: ***   DEBUG, Errors TxBuf:   %0d", `__FILE__, `__LINE__, txbuf_err);
-      end
     end
 
     $display("Test stop: %s:%0d", `__FILE__, `__LINE__);
@@ -773,37 +744,148 @@ module nts_top_tb;
     #5 i_clk = ~i_clk;
   end
 
-  //----------------------------------------------------------------
-  // Debu traces - occationally timestamp output
-  //----------------------------------------------------------------
-
-  if (DEBUG>0) begin : clock_stamp
-    reg [63:0] clock;
-    always  @(posedge i_clk or posedge i_areset)
-    if (i_areset) begin
-      clock <= 0;
-    end else begin
-      clock <= clock + 1;
-      if ((clock & 64'hffff) == 64'h0)
-        $display("%s:%0d DEBUG CLOCK: %0d (%h) ticks", `__FILE__, `__LINE__, clock, clock);
-    end
-  end
-
-  //----------------------------------------------------------------
-  // Debug traces
-  //----------------------------------------------------------------
 
   if (DEBUG>0) begin
-    always @*
-      $display("%s:%0d dut.dispatcher.engines_ready_reg: %h", `__FILE__, `__LINE__,  dut.dispatcher.engines_ready_reg);
-    always @*
-      $display("%s:%0d dut.dispatcher.mem_state[0]: %h", `__FILE__, `__LINE__, dut.dispatcher.mem_state_reg[0]);
-    always @*
-      $display("%s:%0d dut.dispatcher.mem_state[1]: %h", `__FILE__, `__LINE__, dut.dispatcher.mem_state_reg[1]);
-    always @*
-      $display("%s:%0d dut.dispatcher.current_mem: %h", `__FILE__, `__LINE__, dut.dispatcher.current_mem_reg);
-    always @*
-      $display("%s:%0d dut.dispatcher.mac_rx_corrected=%h",  `__FILE__, `__LINE__, dut.dispatcher.mac_rx_corrected);
+    always @(posedge i_clk)
+      if (dut.extractor_engine_fifo_rd_start || dut.engine_extractor_fifo_rd_valid)
+        begin
+          $display("%s:%0d extractor_engine_fifo_rd_start: %h, engine_extractor_fifo_rd_valid: %h, engine_extractor_fifo_rd_data: %h",`__FILE__,`__LINE__, dut.extractor_engine_fifo_rd_start, dut.engine_extractor_fifo_rd_valid, dut.engine_extractor_fifo_rd_data);
+        end
+    always @(posedge i_clk)
+      if (dut.engine.parser.ntp_extension_we)
+        $display("%s:%0d ntp_ext[%0d] = tag:%h,length:%h,addr:%h",
+          `__FILE__,
+          `__LINE__,
+          dut.engine.parser.ntp_extension_counter_reg,
+          dut.engine.parser.ntp_extension_tag_new,
+          dut.engine.parser.ntp_extension_length_new,
+          dut.engine.parser.ntp_extension_addr_new
+        );
+      always @(posedge i_clk)
+        if (dut.engine.parser.crypto_fsm_we == 1)
+          $display("%s:%0d State: %h CRYPTO_FSM state %h => %h [%s]",`__FILE__,`__LINE__,
+            dut.engine.parser.state_reg,
+            dut.engine.parser.crypto_fsm_reg,
+            dut.engine.parser.crypto_fsm_new,
+           (dut.engine.parser.crypto_fsm_new==dut.engine.parser.CRYPTO_FSM_DONE_SUCCESS) ? "Win!" : ((dut.engine.parser.crypto_fsm_new==dut.engine.parser.CRYPTO_FSM_DONE_FAILURE)?"Fail":"...."));
+      always @*
+        begin : tmp___
+          integer engine_index;
+          for (engine_index = 0; engine_index < ENGINES; engine_index = engine_index + 1)
+            if (dut.engine_busy[dut.engine_index]==1'b0)
+              $display("%s:%0d detect UI:%b C:%b CP:%b A:%b",  `__FILE__, `__LINE__,
+                dut.engine_debug_detect_unique_identifier[engine_index],
+                dut.engine_debug_detect_nts_cookie[engine_index],
+                dut.engine_debug_detect_nts_cookie_placeholder[engine_index],
+                dut.engine_debug_detect_nts_authenticator[engine_index]);
+        end
+      always @*
+        $display("%s:%0d dut.engine.crypto.key_master_reg: %h", `__FILE__, `__LINE__, dut.engine.crypto.key_master_reg);
+      always @*
+        $display("%s:%0d dut.engine.crypto.key_current_reg: %h", `__FILE__, `__LINE__, dut.engine.crypto.key_current_reg);
+      always @*
+        $display("%s:%0d dut.engine.crypto.key_c2s_reg: %h", `__FILE__, `__LINE__, dut.engine.crypto.key_c2s_reg);
+      always @*
+        $display("%s:%0d dut.engine.crypto.key_s2c_reg: %h", `__FILE__, `__LINE__, dut.engine.crypto.key_s2c_reg);
+      always @(posedge i_clk)
+        begin
+          if (dut.engine.crypto.i_key_valid)
+            $display("%s:%0d dut.engine.crypto.i_key_valid word[%h]=%h", `__FILE__, `__LINE__, dut.engine.crypto.i_key_word, dut.engine.crypto.i_key_data );
+          if (dut.engine.crypto.nonce_a_we)
+            $display("%s:%0d dut.engine.crypto.nonce_a_we=1: %h", `__FILE__, `__LINE__, dut.engine.crypto.nonce_new);
+          if (dut.engine.crypto.nonce_b_we)
+            $display("%s:%0d dut.engine.crypto.nonce_b_we=1: %h", `__FILE__, `__LINE__, dut.engine.crypto.nonce_new);
+          if (dut.engine.crypto.ramnc_en && dut.engine.crypto.ramnc_we)
+            $display("%s:%0d dut.engine.crypto.ramnc_wdata: %h_%h", `__FILE__, `__LINE__, dut.engine.crypto.ramnc_wdata[127:64], dut.engine.crypto.ramnc_wdata[63:0]);
+        end
+      always @*
+        $display("%s:%0d dut.engine.crypto.i_noncegen ready:%h valid: %h nonce:%h", `__FILE__, `__LINE__, dut.engine.crypto.i_noncegen_ready, dut.engine.crypto.i_noncegen_nonce_valid, dut.engine.crypto.i_noncegen_nonce);
+      always @*
+        $display("%s:%0d dut.engine.parser.state_reg: %h", `__FILE__, `__LINE__, dut.engine.parser.state_reg);
+      always @*
+        $display("%s:%0d dut.engine.parser.i_last_word_data_valid: %b", `__FILE__, `__LINE__, dut.engine.parser.i_last_word_data_valid);
+      always @*
+        $display("%s:%0d dut.engine.parser.word_counter_reg: %h", `__FILE__, `__LINE__, dut.engine.parser.word_counter_reg);
+      always @*
+        $display("%s:%0d dut.engine.parser.ipdecode_ip6_ip_dst_reg: %h", `__FILE__, `__LINE__, dut.engine.parser.ipdecode_ip6_ip_dst_reg);
+      always @*
+        $display("%s:%0d dut.engine.parser.ipdecode_ip6_ip_src_reg: %h", `__FILE__, `__LINE__, dut.engine.parser.ipdecode_ip6_ip_src_reg);
+      always @*
+        $display("%s:%0d dut.engine.parser.ipdecode_udp_port_dst_reg: %h (%0d)", `__FILE__, `__LINE__, dut.engine.parser.ipdecode_udp_port_dst_reg, dut.engine.parser.ipdecode_udp_port_dst_reg);
+      always @*
+        $display("%s:%0d dut.engine.parser.ipdecode_udp_port_src_reg: %h (%0d)", `__FILE__, `__LINE__, dut.engine.parser.ipdecode_udp_port_src_reg, dut.engine.parser.ipdecode_udp_port_src_reg);
+      always @*
+        $display("%s:%0d dut.engine.parser.ipdecode_udp_length_reg: %h (%0d)", `__FILE__, `__LINE__, dut.engine.parser.ipdecode_udp_length_reg, dut.engine.parser.ipdecode_udp_length_reg);
+      always @*
+        $display("%s:%0d dut.engine.parser.detect_ipv4: %b detect_ipv6: %b", `__FILE__, `__LINE__, dut.engine.parser.detect_ipv4, dut.engine.parser.detect_ipv6);
+      always @(posedge i_clk or posedge i_areset)
+        begin : tx_mux_inspect_locals_
+          reg [ADDR_WIDTH+3-1:0] addr;
+          addr = { dut.engine.mux_tx_address_hi, dut.engine.mux_tx_address_lo };
+          if (i_areset == 0)
+            if (dut.engine.mux_tx_write_en)
+              $display("%s:%0d dut.engine.mux_tx %h %h (%h %h) = %h",  `__FILE__, `__LINE__, dut.engine.mux_tx_address_internal, addr, dut.engine.mux_tx_address_hi, dut.engine.mux_tx_address_lo, dut.engine.mux_tx_write_data);
+        end
+      always @*
+        $display("%s:%0d dut.engine.i_dispatch_rx_fifo_rd_data: %h", `__FILE__, `__LINE__, dut.engine.i_dispatch_rx_fifo_rd_data);
+      always @*
+        $display("%s:%0d dut.engine.i_dispatch_rx_fifo_rd_valid: %h",  `__FILE__, `__LINE__, dut.engine.i_dispatch_rx_fifo_rd_valid);
+      always @*
+        $display("%s:%0d dut.dispatcher.mem_state[0]: %h", `__FILE__, `__LINE__, dut.dispatcher.mem_state_reg[0]);
+      always @*
+        $display("%s:%0d dut.dispatcher.mem_state[1]: %h", `__FILE__, `__LINE__, dut.dispatcher.mem_state_reg[1]);
+      always @*
+        $display("%s:%0d dut.dispatcher.current_mem: %h", `__FILE__, `__LINE__, dut.dispatcher.current_mem_reg);
+/*
+      always @*
+        $display("%s:%0d dut.o_dispatch_tx_bytes_last_word_DUMMY=%b (ignored)",  `__FILE__, `__LINE__, dut.o_dispatch_tx_bytes_last_word_DUMMY);
+      always @*
+        $display("%s:%0d dut.o_dispatch_tx_fifo_rd_data_DUMMY=%h (ignored)",  `__FILE__, `__LINE__, dut.o_dispatch_tx_fifo_rd_data_DUMMY);
+      always @*
+        $display("%s:%0d dut.tx_d=%h (ignored)",  `__FILE__, `__LINE__, dut.tx_d); //TODO doesn't work well now. Fix later.
+*/
+      always @*
+        $display("%s:%0d dut.dispatcher.mac_rx_corrected=%h",  `__FILE__, `__LINE__, dut.dispatcher.mac_rx_corrected);
+      always @(posedge i_clk or posedge i_areset)
+        if (i_areset == 0)
+          if (dut.engine.rx_buffer.memctrl_we)
+            if (dut.engine.rx_buffer.memctrl_new == dut.engine.rx_buffer.MEMORY_CTRL_ERROR) begin
+              $display("%s:%0d WARNING: Memory controller error state detected!", `__FILE__, `__LINE__);
+              $display("%s:%0d          memctrl_reg: %h", `__FILE__, `__LINE__, dut.engine.rx_buffer.memctrl_reg);
+              $display("%s:%0d          access_ws{8,16,32,64}bit_reg: %b", `__FILE__, `__LINE__, {dut.engine.rx_buffer.access_ws8bit_reg, dut.engine.rx_buffer.access_ws16bit_reg, dut.engine.rx_buffer.access_ws32bit_reg, dut.engine.rx_buffer.access_ws64bit_reg});
+              $display("%s:%0d          access_addr_lo_reg: %h", `__FILE__, `__LINE__, dut.engine.rx_buffer.access_addr_lo_reg);
+              $display("%s:%0d          i_parser_busy: %h", `__FILE__, `__LINE__, dut.engine.rx_buffer.i_parser_busy);
+          end
+      always @*
+        $display("%s:%0d dut.engine.parser.ipdecode_ethernet_mac_dst_reg: %h",  `__FILE__, `__LINE__, dut.engine.parser.ipdecode_ethernet_mac_dst_reg);
+      always @*
+        $display("%s:%0d dut.engine.parser.ipdecode_ethernet_mac_src_reg: %h",  `__FILE__, `__LINE__, dut.engine.parser.ipdecode_ethernet_mac_src_reg);
+      always @*
+        $display("%s:%0d dut.engine.parser.tx_header_ethernet_ipv4_udp: %h",  `__FILE__, `__LINE__, dut.engine.parser.tx_header_ethernet_ipv4_udp);
+      always @*
+        if (dut.engine.access_port_rd_dv_parser)
+          $display("%s:%0d dut.engine.access_port(parser)[%h:%h]=%h", `__FILE__, `__LINE__, dut.engine.access_port_addr_parser, dut.engine.access_port_wordsize_parser, dut.engine.access_port_rd_data_parser);
+      always @*
+        if (dut.engine.parser_txbuf_address_internal==0)
+          if (dut.engine.parser_txbuf_write_en)
+            $display("%s:%0d dut.engine.parser_txbuf[%h]=%h", `__FILE__, `__LINE__, dut.engine.parser_txbuf_address, dut.engine.parser_txbuf_write_data);
+      always @*
+        $display("%s:%0d dut.engine.parser.cookies_count_reg: %h", `__FILE__, `__LINE__, dut.engine.parser.cookies_count_reg);
+      always @*
+        $display("%s:%0d dut.engine.parser.nts_valid_placeholders_reg: %h", `__FILE__, `__LINE__, dut.engine.parser.nts_valid_placeholders_reg);
+      always @*
+        $display("%s:%0d dut.engine.crypto.state_reg: %h", `__FILE__, `__LINE__, dut.engine.crypto.state_reg);
+      always @*
+        $display("%s:%0d dut.engine.parser.tx_udp_length_reg: %h", `__FILE__, `__LINE__, dut.engine.parser.tx_udp_length_reg);
+      always @*
+        $display("%s:%0d dut.engine.parser.tx_ipv4_totlen_reg: %h", `__FILE__, `__LINE__, dut.engine.parser.tx_ipv4_totlen_reg);
+      always @(posedge i_clk)
+        begin
+          if (dut.engine.parser_txbuf_sum_en)
+            $display("%s:%0d dut.engine.sum_en, addr: %h (%0d), bytes: %h (%0d)", `__FILE__, `__LINE__, dut.engine.parser_txbuf_address, dut.engine.parser_txbuf_address, dut.engine.parser_txbuf_sum_bytes, dut.engine.parser_txbuf_sum_bytes);
+          if (dut.engine.txbuf_parser_sum_done)
+            $display("%s:%0d dut.engine.sum_done, sum: %h", `__FILE__, `__LINE__, dut.engine.txbuf_parser_sum);
+      end
     always @*
       $display("%s:%0d dut.engine_extractor_packet_available: %h", `__FILE__, `__LINE__, dut.engine_extractor_packet_available);
     always @*
@@ -814,6 +896,13 @@ module nts_top_tb;
            $display("%s:%0d extractor.RAM[%h]=%h", `__FILE__, `__LINE__, dut.extractor.ram_engine_addr, dut.extractor.ram_engine_wdata);
         if (dut.extractor.buffer_engine_selected_we)
             $display("%s:%0d extractor, next write buffer: %h", `__FILE__, `__LINE__, dut.extractor.buffer_engine_selected_new);
+      end
+    always @(posedge i_clk)
+      begin
+        if (dut.engine.tx_buffer.current_mem_we)
+          $display("%s:%0d txbuf word count: %h", `__FILE__, `__LINE__, dut.engine.tx_buffer.word_count_reg[dut.engine.tx_buffer.current_mem_reg]);
+        if (dut.engine.tx_buffer.i_parser_update_length)
+          $display("%s:%0d txbuf update word count: %h %h", `__FILE__, `__LINE__, dut.engine.tx_buffer.i_address_hi, dut.engine.tx_buffer.i_address_lo);
       end
     always @(posedge i_clk)
       begin
@@ -849,26 +938,22 @@ module nts_top_tb;
         if (old_parser_state == 0)
           old_tick_counter_packet <= tick_counter;
 
-        if (old_parser_state != dut.genblk1[0].engine.parser.state_reg) begin
+        if (old_parser_state != dut.engine.parser.state_reg) begin
           old_tick_counter <= tick_counter;
-          old_parser_state <= dut.genblk1[0].engine.parser.state_reg;
-
+          old_parser_state <= dut.engine.parser.state_reg;
           if (old_parser_state != 0)
-            $display("%s:%0d BENCHMARK: dut.genblk1[0].engine.parser.state_reg(%0d)->(%0d): %0d ticks", `__FILE__, `__LINE__,
-               old_parser_state, dut.genblk1[0].engine.parser.state_reg, tick_counter - old_tick_counter);
-          if (dut.genblk1[0].engine.parser.state_reg == 0)
-            $display("%s:%0d BENCHMARK: Packet took %0d ticks to process", `__FILE__, `__LINE__, tick_counter - old_tick_counter_packet);
+            $display("%s:%0d dut.engine.parser.state_reg(%0d)->(%0d): %0d ticks", `__FILE__, `__LINE__, old_parser_state, dut.engine.parser.state_reg, tick_counter - old_tick_counter);
+          if (dut.engine.parser.state_reg == 0)
+            $display("%s:%0d Packet took %0d ticks to process", `__FILE__, `__LINE__, tick_counter - old_tick_counter_packet);
         end
-        if (old_parser_state_crypto != dut.genblk1[0].engine.parser.crypto_fsm_reg) begin
+        if (old_parser_state_crypto != dut.engine.parser.crypto_fsm_reg) begin
           old_tick_counter_crypto <= tick_counter;
-          old_parser_state_crypto <= dut.genblk1[0].engine.parser.crypto_fsm_reg;
-          $display("%s:%0d BENCHMARK: dut.genblk1[0].engine.parser.crypto_fsm_reg(%0d)->(%0d): %0d ticks", `__FILE__, `__LINE__,
-            old_parser_state_crypto, dut.genblk1[0].engine.parser.crypto_fsm_reg, tick_counter - old_tick_counter_crypto);
+          old_parser_state_crypto <= dut.engine.parser.crypto_fsm_reg;
+          $display("%s:%0d dut.engine.parser.crypto_fsm_reg(%0d)->(%0d): %0d ticks", `__FILE__, `__LINE__, old_parser_state_crypto, dut.engine.parser.crypto_fsm_reg, tick_counter - old_tick_counter_crypto);
         end
 
       end
     end
  end
-
 
 endmodule

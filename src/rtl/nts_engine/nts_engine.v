@@ -58,6 +58,8 @@ module nts_engine #(
   input  wire [11:0]           i_api_address,
   input  wire [31:0]           i_api_write_data,
   output wire [31:0]           o_api_read_data,
+  output wire                  o_api_read_data_valid,
+  output wire                  o_api_busy,
 
   output wire                  o_detect_unique_identifier,
   output wire                  o_detect_nts_cookie,
@@ -81,12 +83,12 @@ module nts_engine #(
 
   localparam CORE_NAME0   = 32'h4e_54_53_5f; // "NTS_"
   localparam CORE_NAME1   = 32'h45_4e_47_4e; // "ENGN"
-  localparam CORE_VERSION = 32'h30_2e_30_33; // "0.03"
+  localparam CORE_VERSION = 32'h30_2e_30_35; // "0.05"
 
   localparam ADDR_NAME0         = 'h00;
   localparam ADDR_NAME1         = 'h01;
   localparam ADDR_VERSION       = 'h02;
-  localparam ADDR_CTRL          = 'h08; //TODO implement
+  localparam ADDR_CTRL          = 'h08;
   localparam ADDR_STATUS        = 'h09;
 
   localparam DEBUG_NAME = 32'h44_42_55_47; // "DBUG"
@@ -100,9 +102,16 @@ module nts_engine #(
   localparam ADDR_DEBUG_ERROR_CRYPTO   = 'h20;
   localparam ADDR_DEBUG_ERROR_TXBUF    = 'h22;
 
+  //----------------------------------------------------------------
+  // Control registers and related wires
+  //----------------------------------------------------------------
+
+  reg       ctrl_we;
+  reg [0:0] ctrl_new;
+  reg [0:0] ctrl_reg;
 
   //----------------------------------------------------------------
-  // Regs for Muxes
+  // TX mux wires
   //----------------------------------------------------------------
 
   reg                  mux_tx_write_en;
@@ -169,6 +178,7 @@ module nts_engine #(
   wire                [31 : 0] keymem_internal_key_data;
   wire                         keymem_internal_ready;
 
+  wire                         busy;
   wire                         parser_busy;
 
   wire                         parser_txbuf_clear;
@@ -261,7 +271,9 @@ module nts_engine #(
   // Concurrent connectivity for ports etc.
   //----------------------------------------------------------------
 
-  assign o_busy                          = parser_busy;
+  assign busy = (~ctrl_reg[0]) || parser_busy;
+
+  assign o_busy                          = busy;
 
   assign o_detect_unique_identifier      = detect_unique_identifier;
   assign o_detect_nts_cookie             = detect_nts_cookie;
@@ -366,6 +378,8 @@ module nts_engine #(
   begin : reg_up
     if (i_areset) begin
 
+      ctrl_reg <= 0;
+
       counter_nts_bad_auth_reg <= 0;
       counter_nts_bad_auth_lsb_reg <= 0;
 
@@ -387,6 +401,9 @@ module nts_engine #(
       systick32_reg <= 32'h0000_0001;
 
     end else begin
+      if (ctrl_we)
+        ctrl_reg <= ctrl_new;
+
       if (counter_nts_bad_auth_we)
         counter_nts_bad_auth_reg <= counter_nts_bad_auth_new;
 
@@ -434,15 +451,24 @@ module nts_engine #(
   always @*
   begin
     api_read_data_engine = 0;
+    ctrl_we = 0;
+    ctrl_new = 0;
     if (api_cs_engine) begin
       if (api_we) begin
-        ;
+        case (api_address)
+          ADDR_CTRL:
+            begin
+              ctrl_we  = 1;
+              ctrl_new = api_write_data[0:0];
+            end
+          default: ;
+        endcase
       end else begin
         case (api_address)
           ADDR_NAME0: api_read_data_engine = CORE_NAME0;
           ADDR_NAME1: api_read_data_engine = CORE_NAME1;
           ADDR_VERSION: api_read_data_engine = CORE_VERSION;
-          ADDR_CTRL: api_read_data_engine = 32'h0000_0001;
+          ADDR_CTRL: api_read_data_engine = { 31'h0000_0000, ctrl_reg };
           default: ;
         endcase
       end
@@ -531,11 +557,16 @@ module nts_engine #(
   //----------------------------------------------------------------
 
   nts_api api (
+    .i_clk( i_clk ),
+    .i_areset( i_areset ),
+    .o_busy( o_api_busy ),
+
     .i_external_api_cs(i_api_cs),
     .i_external_api_we(i_api_we),
     .i_external_api_address(i_api_address),
     .i_external_api_write_data(i_api_write_data),
     .o_external_api_read_data(o_api_read_data),
+    .o_external_api_read_data_valid(o_api_read_data_valid),
 
     .o_internal_api_we(api_we),
     .o_internal_api_address(api_address),
@@ -571,7 +602,7 @@ module nts_engine #(
      .i_areset(i_areset),
      .i_clk(i_clk),
 
-     .i_parser_busy(parser_busy),
+     .i_parser_busy(busy),
 
      .i_dispatch_packet_available(i_dispatch_rx_packet_available),
      .o_dispatch_packet_read(o_dispatch_rx_packet_read_discard),

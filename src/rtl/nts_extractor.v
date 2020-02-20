@@ -30,7 +30,8 @@
 
 module nts_extractor #(
   parameter API_ADDR_WIDTH = 12,
-  parameter API_ADDR_BASE  = 'h400
+  parameter API_ADDR_BASE  = 'h400,
+  parameter ENGINES        = 1
 ) (
   input  wire        i_areset, // async reset
   input  wire        i_clk,
@@ -43,13 +44,13 @@ module nts_extractor #(
   /* verilator lint_on UNUSED */
   output wire                 [31:0] o_api_read_data,
 
-  input  wire        i_engine_packet_available,
-  output wire        o_engine_packet_read,
-  input  wire        i_engine_fifo_empty,
-  output wire        o_engine_fifo_rd_start,
-  input  wire        i_engine_fifo_rd_valid,
-  input  wire [63:0] i_engine_fifo_rd_data,
-  input  wire  [3:0] i_engine_bytes_last_word,
+  input  wire      [ENGINES - 1 : 0] i_engine_packet_available,
+  output wire      [ENGINES - 1 : 0] o_engine_packet_read,
+  input  wire      [ENGINES - 1 : 0] i_engine_fifo_empty,
+  output wire      [ENGINES - 1 : 0] o_engine_fifo_rd_start,
+  input  wire      [ENGINES - 1 : 0] i_engine_fifo_rd_valid,
+  input  wire [64 * ENGINES - 1 : 0] i_engine_fifo_rd_data,
+  input  wire  [4 * ENGINES - 1 : 0] i_engine_bytes_last_word,
 
   output wire        o_mac_tx_start,
   input  wire        i_mac_tx_ack,
@@ -92,6 +93,9 @@ module nts_extractor #(
 
   localparam CORE_NAME    = 64'h4e_54_53_2d_45_58_54_52; //NTS-EXTR
   localparam CORE_VERSION = 32'h30_2e_30_31; //0.01
+
+  localparam MUX_SEARCH = 0;
+  localparam MUX_REMAIN = 1;
 
   //----------------------------------------------------------------
   // Asynchrononous registers
@@ -219,9 +223,32 @@ module nts_extractor #(
   reg            [7:0] tx_start_lwdv;
 
   //----------------------------------------------------------------
-  // Wire assignments
+  // Extractor MUX - Registers
   //----------------------------------------------------------------
 
+  reg      mux_in_ctrl_we;
+  reg      mux_in_ctrl_new;
+  reg      mux_in_ctrl_reg;
+  reg      mux_in_index_we;
+  integer  mux_in_index_new;
+  integer  mux_in_index_reg;
+
+  //----------------------------------------------------------------
+  // Extractor MUX - Wires
+  //----------------------------------------------------------------
+
+  reg [ENGINES - 1 : 0] mux_out_packet_read;
+  reg [ENGINES - 1 : 0] mux_out_fifo_rd_start;
+
+  reg           mux_in_packet_available;
+  reg           mux_in_fifo_empty;
+  reg           mux_in_fifo_rd_valid;
+  reg  [63 : 0] mux_in_fifo_rd_data;
+  reg   [3 : 0] mux_in_bytes_last_word;
+
+  //----------------------------------------------------------------
+  // Wire assignments
+  //----------------------------------------------------------------
 
   assign o_api_read_data = api_read_data;
 
@@ -229,8 +256,66 @@ module nts_extractor #(
   assign o_mac_tx_data_valid = mac_data_valid;
   assign o_mac_tx_start = mac_start;
 
-  assign o_engine_packet_read = engine_packet_read_reg;
-  assign o_engine_fifo_rd_start = engine_fifo_rd_start_reg;
+  assign o_engine_packet_read   = mux_out_packet_read;
+  assign o_engine_fifo_rd_start = mux_out_fifo_rd_start;
+
+  //----------------------------------------------------------------
+  // Extractor MUX
+  //----------------------------------------------------------------
+
+  always @*
+  begin : extractor_mux
+    reg discard;
+    reg forward_mux;
+    reg start;
+
+    discard = engine_packet_read_reg;
+    forward_mux = 0;
+    start = engine_fifo_rd_start_reg;
+
+    mux_in_ctrl_we = 0;
+    mux_in_ctrl_new = MUX_SEARCH;
+    mux_in_index_we = 0;
+    mux_in_index_new = 0;
+
+    mux_in_packet_available = i_engine_packet_available[mux_in_index_reg];
+    mux_in_fifo_empty       = i_engine_fifo_empty[mux_in_index_reg];
+    mux_in_fifo_rd_valid    = i_engine_fifo_rd_valid[mux_in_index_reg];
+    mux_in_fifo_rd_data     = i_engine_fifo_rd_data[64*mux_in_index_reg+:64];
+    mux_in_bytes_last_word  = i_engine_bytes_last_word[4*mux_in_index_reg+:4];
+
+    mux_out_fifo_rd_start = 0;
+    mux_out_fifo_rd_start[mux_in_index_reg] = start;
+
+    mux_out_packet_read = 0;
+    mux_out_packet_read[mux_in_index_reg] = discard;
+
+    case (mux_in_ctrl_reg)
+      MUX_REMAIN:
+        if (discard) begin
+          forward_mux = 1;
+          mux_in_ctrl_we = 1;
+          mux_in_ctrl_new = MUX_SEARCH;
+        end
+      MUX_SEARCH:
+        if (mux_in_packet_available) begin
+          mux_in_ctrl_we = 1;
+          mux_in_ctrl_new = MUX_REMAIN;
+        end else begin
+          forward_mux = 1;
+        end
+      default: ;
+    endcase
+
+    if (forward_mux) begin
+      mux_in_index_we = 1;
+      mux_in_index_new = (mux_in_index_reg + 1) % ENGINES;
+    end
+  end
+
+  //----------------------------------------------------------------
+  // Buffers
+  //----------------------------------------------------------------
 
   always @*
   begin
@@ -250,7 +335,6 @@ module nts_extractor #(
     end
 
   end
-
 
   //----------------------------------------------------------------
   // API
@@ -357,11 +441,11 @@ module nts_extractor #(
 
     case (buffer_engine_state)
       BUFFER_STATE_UNUSED:
-        if (i_engine_packet_available && i_engine_fifo_empty==1'b0) begin
+        if (mux_in_packet_available && mux_in_fifo_empty==1'b0) begin
           buffer_engine_addr_we = 1;
           buffer_engine_addr_new = 0;
           buffer_engine_lwdv_we = 1;
-          buffer_engine_lwdv_new = i_engine_bytes_last_word;
+          buffer_engine_lwdv_new = mux_in_bytes_last_word;
           buffer_engine_state_we = 1;
           buffer_engine_state_new = BUFFER_STATE_WRITING;
           buffer_initilized_we = 1;
@@ -370,14 +454,14 @@ module nts_extractor #(
           engine_fifo_rd_start_new = 1;
         end
       BUFFER_STATE_WRITING:
-        if (i_engine_fifo_rd_valid) begin
+        if (mux_in_fifo_rd_valid) begin
           buffer_engine_addr_we = 1;
           buffer_engine_addr_new = buffer_engine_addr + 1;
           write_addr_new[BRAM_WIDTH-1:ADDR_WIDTH] = buffer_engine_selected_reg;
           write_addr_new[ADDR_WIDTH-1:0] = buffer_engine_addr;
-          write_wdata_new = i_engine_fifo_rd_data;
+          write_wdata_new = mux_in_fifo_rd_data;
           write_wren_new = 1;
-        end else if (i_engine_fifo_empty) begin
+        end else if (mux_in_fifo_empty) begin
           engine_packet_read_new = 1;
           buffer_engine_state_we = 1;
           buffer_engine_state_new = BUFFER_STATE_LOADED;
@@ -694,10 +778,9 @@ module nts_extractor #(
       engine_fifo_rd_start_reg <= 0;
       engine_packet_read_reg <= 0;
       lwdv_expanded_reg <= 0;
+      mux_in_ctrl_reg  <= MUX_SEARCH;
+      mux_in_index_reg <= 0;
       //note: mac moved to its own clocked process to get timing, behaivor etc very similar to pp_tx
-    //mac_start_reg <= 0;
-    //mac_data_reg <= 0;
-    //mac_data_valid_reg <= 0;
     end else begin
       if (br_read_addr_we)
         br_read_addr_reg <= br_read_addr_new;
@@ -734,11 +817,13 @@ module nts_extractor #(
 
       lwdv_expanded_reg <= mac_last_word_data_valid_expander( buffer_lwdv_reg[buffer_mac_selected_reg] );
 
-      //mac moved to its own clocked process to get timing, behaivor etc very similar to pp_tx
-    //mac_start_reg <= mac_start_new;
-    //mac_data_reg <= mac_data_new;
-    //mac_data_valid_reg <= mac_data_valid_new;
+      if (mux_in_ctrl_we)
+        mux_in_ctrl_reg <= mux_in_ctrl_new;
 
+      if (mux_in_index_we)
+        mux_in_index_reg <= mux_in_index_new;
+
+      //mac moved to its own clocked process to get timing, behaivor etc very similar to pp_tx
     end
   end
 

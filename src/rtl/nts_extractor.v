@@ -88,11 +88,16 @@ module nts_extractor #(
   localparam ADDR_NAME0             = API_ADDR_BASE + 0;
   localparam ADDR_NAME1             = API_ADDR_BASE + 1;
   localparam ADDR_VERSION           = API_ADDR_BASE + 2;
-  localparam ADDR_BYTES             = API_ADDR_BASE + 10;
-  localparam ADDR_PACKETS           = API_ADDR_BASE + 12;
+  localparam ADDR_BYTES             = API_ADDR_BASE + 'ha;
+  localparam ADDR_PACKETS           = API_ADDR_BASE + 'hc;
+  localparam ADDR_MUX_STATE         = API_ADDR_BASE + 'h20;
+  localparam ADDR_MUX_INDEX         = API_ADDR_BASE + 'h21;
+  localparam ADDR_DEBUG_TX          = API_ADDR_BASE + 'h30;
+  localparam ADDR_ERROR_STARTS      = API_ADDR_BASE + 'h40;
+  localparam ADDR_ERROR_DISCARDS    = API_ADDR_BASE + 'h41;
 
   localparam CORE_NAME    = 64'h4e_54_53_2d_45_58_54_52; //NTS-EXTR
-  localparam CORE_VERSION = 32'h30_2e_30_31; //0.01
+  localparam CORE_VERSION = 32'h30_2e_30_32; //0.02
 
   localparam MUX_SEARCH = 0;
   localparam MUX_REMAIN = 1;
@@ -156,6 +161,15 @@ module nts_extractor #(
   reg [63:0] counter_packets_reg;
   reg        counter_packets_lsb_we;
   reg [31:0] counter_packets_lsb_reg;
+
+  reg [31:0] debug_tx_new;
+  reg [31:0] debug_tx_reg;
+
+  //internal logic errors. Should never occur.
+  reg        error_illegal_discard_inc;
+  reg [31:0] error_illegal_discard_reg;
+  reg        error_illegal_start_inc;
+  reg [31:0] error_illegal_start_reg;
 
   reg engine_packet_read_new;
   reg engine_packet_read_reg;
@@ -265,24 +279,37 @@ module nts_extractor #(
 
   always @*
   begin : extractor_mux
-    reg discard;
-    reg forward_mux;
-    reg start;
+    reg        available;
+    reg        discard;
+    reg [63:0] fifo_data;
+    reg        fifo_empty;
+    reg        fifo_valid;
+    reg        forward_mux;
+    reg  [3:0] lwdv; //last word data valid, value 1..8 (bytes).
+    reg        start;
 
-    discard = engine_packet_read_reg;
+    available   = i_engine_packet_available[mux_in_index_reg];
+    discard     = engine_packet_read_reg;
+    fifo_data   = i_engine_fifo_rd_data[64*mux_in_index_reg+:64];
+    fifo_empty  = i_engine_fifo_empty[mux_in_index_reg];
+    fifo_valid  = i_engine_fifo_rd_valid[mux_in_index_reg];
     forward_mux = 0;
-    start = engine_fifo_rd_start_reg;
+    lwdv        = i_engine_bytes_last_word[4*mux_in_index_reg+:4];
+    start       = engine_fifo_rd_start_reg;
+
+    error_illegal_start_inc = 0;
+    error_illegal_discard_inc = 0;
 
     mux_in_ctrl_we = 0;
     mux_in_ctrl_new = MUX_SEARCH;
     mux_in_index_we = 0;
     mux_in_index_new = 0;
 
-    mux_in_packet_available = i_engine_packet_available[mux_in_index_reg];
-    mux_in_fifo_empty       = i_engine_fifo_empty[mux_in_index_reg];
-    mux_in_fifo_rd_valid    = i_engine_fifo_rd_valid[mux_in_index_reg];
-    mux_in_fifo_rd_data     = i_engine_fifo_rd_data[64*mux_in_index_reg+:64];
-    mux_in_bytes_last_word  = i_engine_bytes_last_word[4*mux_in_index_reg+:4];
+    mux_in_packet_available = 0;
+    mux_in_fifo_empty       = 0;
+    mux_in_fifo_rd_valid    = 0;
+    mux_in_fifo_rd_data     = 0;
+    mux_in_bytes_last_word  = 0;
 
     mux_out_fifo_rd_start = 0;
     mux_out_fifo_rd_start[mux_in_index_reg] = start;
@@ -292,17 +319,28 @@ module nts_extractor #(
 
     case (mux_in_ctrl_reg)
       MUX_REMAIN:
-        if (discard) begin
-          forward_mux = 1;
-          mux_in_ctrl_we = 1;
-          mux_in_ctrl_new = MUX_SEARCH;
+        begin
+          mux_in_fifo_empty       = fifo_empty;
+          mux_in_fifo_rd_data     = fifo_data;
+          mux_in_fifo_rd_valid    = fifo_valid;
+          mux_in_packet_available = available;
+          mux_in_bytes_last_word  = lwdv;
+          if (discard) begin
+            forward_mux = 1;
+            mux_in_ctrl_we = 1;
+            mux_in_ctrl_new = MUX_SEARCH;
+          end
         end
       MUX_SEARCH:
-        if (mux_in_packet_available) begin
-          mux_in_ctrl_we = 1;
-          mux_in_ctrl_new = MUX_REMAIN;
-        end else begin
-          forward_mux = 1;
+        begin
+          if (available) begin
+            mux_in_ctrl_we = 1;
+            mux_in_ctrl_new = MUX_REMAIN;
+          end else begin
+            forward_mux = 1;
+          end
+          if (start) error_illegal_start_inc = 1;
+          if (discard) error_illegal_discard_inc = 1;
         end
       default: ;
     endcase
@@ -365,6 +403,11 @@ module nts_extractor #(
               api_read_data = counter_packets_reg[63:32];
             end
           ADDR_PACKETS + 1: api_read_data = counter_packets_lsb_reg;
+          ADDR_MUX_STATE: api_read_data[0] = mux_in_ctrl_reg;
+          ADDR_MUX_INDEX: api_read_data = mux_in_index_reg;
+          ADDR_DEBUG_TX: api_read_data = debug_tx_reg;
+          ADDR_ERROR_STARTS: api_read_data = error_illegal_start_reg;
+          ADDR_ERROR_DISCARDS: api_read_data = error_illegal_discard_reg;
           default: ;
         endcase
       end
@@ -589,6 +632,11 @@ module nts_extractor #(
      endcase
     end //not async reset
 
+  always @*
+    begin
+      debug_tx_new = { 7'b1000_000, mac_start, 8'h00, mac_data_valid, 5'b0, tx_state };
+    end
+
   //----------------------------------------------------------------
   // MAC Media Access Controller - txmem writer
   //----------------------------------------------------------------
@@ -775,8 +823,11 @@ module nts_extractor #(
       counter_bytes_lsb_reg <= 0;
       counter_packets_reg <= 0;
       counter_packets_lsb_reg <= 0;
+      debug_tx_reg <= 0;
       engine_fifo_rd_start_reg <= 0;
       engine_packet_read_reg <= 0;
+      error_illegal_discard_reg <= 0;
+      error_illegal_start_reg <= 0;
       lwdv_expanded_reg <= 0;
       mux_in_ctrl_reg  <= MUX_SEARCH;
       mux_in_index_reg <= 0;
@@ -812,8 +863,16 @@ module nts_extractor #(
       if (buffer_mac_selected_we)
         buffer_mac_selected_reg <= buffer_mac_selected_new;
 
+      debug_tx_reg <= debug_tx_new;
+
       engine_fifo_rd_start_reg <= engine_fifo_rd_start_new;
       engine_packet_read_reg <= engine_packet_read_new;
+
+      if (error_illegal_discard_inc)
+        error_illegal_discard_reg <= error_illegal_discard_reg + 1;
+
+      if (error_illegal_start_inc)
+        error_illegal_start_reg <= error_illegal_start_reg + 1;
 
       lwdv_expanded_reg <= mac_last_word_data_valid_expander( buffer_lwdv_reg[buffer_mac_selected_reg] );
 

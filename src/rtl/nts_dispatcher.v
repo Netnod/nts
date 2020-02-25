@@ -80,15 +80,15 @@ module nts_dispatcher #(
   localparam ADDR_STATES_INSPECT    = 5;
   localparam ADDR_NTPTIME_MSB       = 6;
   localparam ADDR_NTPTIME_LSB       = 7;
-  localparam ADDR_CTRL              = 8;  //TODO implement
-  localparam ADDR_STATUS            = 9;  //TODO implement
+  localparam ADDR_CTRL              = 8;
+  localparam ADDR_STATUS            = 9;
   localparam ADDR_BYTES_RX_MSB      = 10;
   localparam ADDR_BYTES_RX_LSB      = 11;
-  localparam ADDR_NTS_REC_MSB       = 12; //TODO implement
-  localparam ADDR_NTS_REC_LSB       = 13; //TODO implement
-  localparam ADDR_NTS_DISCARDED_MSB = 14; //TODO implement
-  localparam ADDR_NTS_DISCARDED_LSB = 15; //TODO implement
-  localparam ADDR_NTS_ENGINES_READY = 16; //TODO implement
+  localparam ADDR_NTS_REC_MSB       = 12;
+  localparam ADDR_NTS_REC_LSB       = 13;
+  localparam ADDR_NTS_DISCARDED_MSB = 14;
+  localparam ADDR_NTS_DISCARDED_LSB = 15;
+  localparam ADDR_NTS_ENGINES_READY = 16;
   localparam ADDR_NTS_ENGINES_ALL   = 17;
 
   localparam ADDR_COUNTER_FRAMES_MSB     = 'h20;
@@ -202,6 +202,7 @@ module nts_dispatcher #(
   reg        counter_bad_lsb_we;
   reg [31:0] counter_bad_lsb_reg;
 
+  reg        counter_bytes_rx_rst;
   reg        counter_bytes_rx_we;
   reg [63:0] counter_bytes_rx_new;
   reg [63:0] counter_bytes_rx_reg;
@@ -225,6 +226,25 @@ module nts_dispatcher #(
   reg [63:0] counter_good_reg;
   reg        counter_good_lsb_we;
   reg [31:0] counter_good_lsb_reg;
+
+  reg        counter_packets_discarded_inc;
+  reg        counter_packets_discarded_rst;
+  reg        counter_packets_discarded_we;
+  reg [63:0] counter_packets_discarded_new;
+  reg [63:0] counter_packets_discarded_reg;
+  reg        counter_packets_discarded_lsb_we;
+  reg [31:0] counter_packets_discarded_lsb_reg;
+
+  reg        counter_packets_rx_rst;
+  reg        counter_packets_rx_we;
+  reg [63:0] counter_packets_rx_new;
+  reg [63:0] counter_packets_rx_reg;
+  reg        counter_packets_rx_lsb_we;
+  reg [31:0] counter_packets_rx_lsb_reg;
+
+  reg        dispatcher_enabled_we;
+  reg        dispatcher_enabled_new;
+  reg        dispatcher_enabled_reg;
 
   reg        engine_ctrl_we;
   reg [31:0] engine_ctrl_new;
@@ -422,10 +442,20 @@ module nts_dispatcher #(
     api_dummy_new = 0;
 
     counter_bad_lsb_we = 0;
+
+    counter_bytes_rx_rst = 0;
     counter_bytes_rx_lsb_we = 0;
+
     counter_dispatched_lsb_we = 0;
     counter_error_lsb_we = 0;
     counter_good_lsb_we = 0;
+
+    counter_packets_discarded_rst = 0;
+    counter_packets_discarded_lsb_we = 0;
+
+    counter_packets_rx_rst = 0;
+    counter_packets_rx_lsb_we = 0;
+
     counter_sof_detect_lsb_we = 0;
 
     engine_ctrl_we = 0;
@@ -434,6 +464,9 @@ module nts_dispatcher #(
     engine_status_new = 0;
     engine_data_we = 0;
     engine_data_new = 0;
+
+    dispatcher_enabled_we = 0;
+    dispatcher_enabled_new = 0;
 
     ntp_time_lsb_we = 0;
 
@@ -454,6 +487,14 @@ module nts_dispatcher #(
               api_dummy_we = 1;
               api_dummy_new = i_api_write_data;
             end
+          ADDR_CTRL:
+            begin
+              dispatcher_enabled_we = 1;
+              dispatcher_enabled_new = i_api_write_data[0];
+            end
+          ADDR_BYTES_RX_MSB: counter_bytes_rx_rst = 1;
+          ADDR_NTS_REC_MSB: counter_packets_rx_rst = 1;
+          ADDR_NTS_DISCARDED_MSB: counter_packets_discarded_rst = 1;
           ADDR_BUS_ID_CMD_ADDR:
             begin
               engine_ctrl_we = 1;
@@ -478,6 +519,8 @@ module nts_dispatcher #(
           ADDR_VERSION: api_read_data = CORE_VERSION;
           ADDR_DUMMY: api_read_data = api_dummy_reg;
           ADDR_SYSTICK32: api_read_data = systick32_reg;
+          ADDR_CTRL: api_read_data = { 31'h0, dispatcher_enabled_reg };
+          ADDR_STATUS: api_read_data = (engines_ready_reg == 0) ? 32'h0 : 32'h1;
           ADDR_STATES_INSPECT: api_read_data = { 15'h0, current_mem_reg, 4'h0, mem_state_reg[0], 4'h0, mem_state_reg[1] };
           ADDR_NTPTIME_MSB:
             begin
@@ -493,6 +536,24 @@ module nts_dispatcher #(
           ADDR_BYTES_RX_LSB:
             begin
               api_read_data = counter_bytes_rx_lsb_reg;
+            end
+          ADDR_NTS_REC_MSB:
+            begin
+              api_read_data = counter_packets_rx_reg[63:32];
+              counter_packets_rx_lsb_we = 1;
+            end
+          ADDR_NTS_REC_LSB:
+            begin
+              api_read_data = counter_packets_rx_lsb_reg;
+            end
+          ADDR_NTS_DISCARDED_MSB:
+            begin
+              api_read_data = counter_packets_discarded_reg[63:32];
+              counter_packets_discarded_lsb_we = 1;
+            end
+          ADDR_NTS_DISCARDED_LSB:
+            begin
+              api_read_data = counter_packets_discarded_lsb_reg;
             end
           ADDR_NTS_ENGINES_READY:
             begin
@@ -649,10 +710,16 @@ module nts_dispatcher #(
       counter_error_lsb_reg <= 0;
       counter_good_reg <= 0;
       counter_good_lsb_reg <= 0;
+      counter_packets_discarded_reg <= 0;
+      counter_packets_discarded_lsb_reg <= 0;
+      counter_packets_rx_reg <= 0;
+      counter_packets_rx_lsb_reg <= 0;
       counter_sof_detect_reg <= 0;
       counter_sof_detect_lsb_reg <= 0;
 
       current_mem_reg <= 0;
+
+      dispatcher_enabled_reg <= 0;
 
       engine_ctrl_reg <= 0;
       engine_status_reg <= 0;
@@ -733,6 +800,18 @@ module nts_dispatcher #(
       if (counter_good_lsb_we)
         counter_good_lsb_reg <= counter_good_reg[31:0];
 
+      if (counter_packets_discarded_we)
+       counter_packets_discarded_reg <= counter_packets_discarded_new;
+
+      if (counter_packets_discarded_lsb_we)
+       counter_packets_discarded_lsb_reg <= counter_packets_discarded_reg[31:0];
+
+      if (counter_packets_rx_we)
+       counter_packets_rx_reg <= counter_packets_rx_new;
+
+      if (counter_packets_rx_lsb_we)
+       counter_packets_rx_lsb_reg <= counter_packets_rx_reg[31:0];
+
       if (counter_sof_detect_we)
        counter_sof_detect_reg <= counter_sof_detect_new;
 
@@ -740,6 +819,9 @@ module nts_dispatcher #(
         counter_sof_detect_lsb_reg <= counter_sof_detect_reg[31:0];
 
       current_mem_reg <= current_mem_new;
+
+      if (dispatcher_enabled_we)
+        dispatcher_enabled_reg <= dispatcher_enabled_new;
 
       if (engine_ctrl_we)
         engine_ctrl_reg <= engine_ctrl_new;
@@ -798,6 +880,12 @@ module nts_dispatcher #(
     counter_good_we = 0;
     counter_good_new = 0;
 
+    counter_packets_discarded_we = 0;
+    counter_packets_discarded_new = 0;
+
+    counter_packets_rx_we = 0;
+    counter_packets_rx_new = 0;
+
     counter_sof_detect_we = 0;
     counter_sof_detect_new = 0;
 
@@ -819,6 +907,22 @@ module nts_dispatcher #(
     if (i_rx_good_frame) begin
       counter_good_we = 1;
       counter_good_new = counter_good_reg + 1;
+    end
+
+    if (counter_packets_rx_rst) begin
+      counter_packets_rx_we = 1;
+      counter_packets_rx_new = 0;
+    end else if (i_rx_good_frame) begin
+      counter_packets_rx_we = 1;
+      counter_packets_rx_new = counter_packets_rx_reg + 1;
+    end
+
+    if (counter_packets_discarded_rst) begin
+      counter_packets_discarded_we = 1;
+      counter_packets_discarded_new = 0;
+    end else if (counter_packets_discarded_inc) begin
+      counter_packets_discarded_we = 1;
+      counter_packets_discarded_new = counter_packets_discarded_reg + 1;
     end
 
     if (detect_start_of_frame) begin
@@ -884,7 +988,10 @@ module nts_dispatcher #(
       default: ;
     endcase
 
-    if (bytes != 0) begin
+    if (counter_bytes_rx_rst) begin
+      counter_bytes_rx_we = 1;
+      counter_bytes_rx_new = 0;
+    end else if (bytes != 0) begin
       counter_bytes_rx_we = 1;
       counter_bytes_rx_new = counter_bytes_rx_reg + { 60'h0, bytes };
     end
@@ -1065,6 +1172,8 @@ module nts_dispatcher #(
     rx_counter    = counter_reg[ current_mem_reg ];
     rx_data_valid = data_valid_reg[ current_mem_reg ];
 
+    counter_packets_discarded_inc = 0;
+
     counter_new_rx    = rx_counter;
     current_mem_new   = current_mem_reg;
     data_valid_new_rx = rx_data_valid;
@@ -1084,12 +1193,16 @@ module nts_dispatcher #(
         STATE_EMPTY:
           begin
             if (detect_start_of_frame) begin //i_rx_data_valid is implied by detect start of frame
-              counter_new_rx    = 'b0;
-              data_valid_new_rx = 0;
-              mem_state_rx_new  = STATE_HAS_DATA;
-              ram_write_new_rx  = 1'b1;
-              ram_w_addr_new_rx = 'b0;
-              ram_w_data_new_rx = mac_rx_corrected; // i_rx_data but last word shifted logically correct
+              if (dispatcher_enabled_reg) begin
+                counter_new_rx    = 'b0;
+                data_valid_new_rx = 0;
+                mem_state_rx_new  = STATE_HAS_DATA;
+                ram_write_new_rx  = 1'b1;
+                ram_w_addr_new_rx = 'b0;
+                ram_w_data_new_rx = mac_rx_corrected; // i_rx_data but last word shifted logically correct
+              end else begin
+                counter_packets_discarded_inc = 1;
+              end
             end
           end
         STATE_HAS_DATA:
@@ -1111,11 +1224,20 @@ module nts_dispatcher #(
             end
           end // not buffer overrun
         STATE_PACKET_RECEIVED:
-           if (fifo_state == STATE_EMPTY) begin
-             mem_state_rx_new = STATE_FIFO_OUT_INIT_0;
-             current_mem_new  = ~ current_mem_reg;
-           end
-        default: mem_state_rx_new = STATE_EMPTY;
+          begin
+            if (fifo_state == STATE_EMPTY) begin
+              mem_state_rx_new = STATE_FIFO_OUT_INIT_0;
+              current_mem_new  = ~ current_mem_reg;
+            end
+            if (detect_start_of_frame) begin
+              counter_packets_discarded_inc = 1;
+            end
+          end
+        default: //Default: Error handler
+         begin
+           counter_packets_discarded_inc = 1;
+           mem_state_rx_new = STATE_EMPTY;
+         end
       endcase
     end // not bad frame
   end //always begin

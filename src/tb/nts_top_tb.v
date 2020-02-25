@@ -61,7 +61,11 @@ module nts_top_tb;
   localparam [11:0] API_DISPATCHER_ADDR_DUMMY              = 'h003;
   localparam [11:0] API_DISPATCHER_ADDR_SYSTICK32          = 'h004;
   localparam [11:0] API_DISPATCHER_ADDR_NTPTIME            = 'h006;
+  localparam [11:0] API_DISPATCHER_ADDR_CTRL               = 'h008;
+  localparam [11:0] API_DISPATCHER_ADDR_STATUS             = 'h009;
   localparam [11:0] API_DISPATCHER_ADDR_BYTES_RX           = 'h00a;
+  localparam [11:0] API_DISPATCHER_ADDR_NTS_REC            = 'h00c;
+  localparam [11:0] API_DISPATCHER_ADDR_NTS_DISCARDED      = 'h00e;
   localparam [11:0] API_DISPATCHER_AADR_NTS_ENGINES_READY  = 'h010;
   localparam [11:0] API_DISPATCHER_ADDR_NTS_ENGINES_ALL    = 'h011;
   localparam [11:0] API_DISPATCHER_ADDR_COUNTER_FRAMES     = 'h020;
@@ -341,7 +345,7 @@ module nts_top_tb;
     api_write32( 32'hade7_62a4, engine, API_ADDR_NONCEGEN_CONTEXT3);
     api_write32( 32'h7889_a5a1, engine, API_ADDR_NONCEGEN_CONTEXT4);
     api_write32( 32'hdead_beef, engine, API_ADDR_NONCEGEN_CONTEXT5);
-    api_write32( 32'h0000_0000, engine, API_ADDR_NONCEGEN_LABEL); //TODO: Use 16B engine counter as nonce label
+    api_write32( {20'h000_0, engine}, engine, API_ADDR_NONCEGEN_LABEL);
     api_write32( 32'h0000_0001, engine, API_ADDR_NONCEGEN_CTRL);
   end
   endtask
@@ -349,6 +353,12 @@ module nts_top_tb;
   task enable_engine ( input [11:0] engine );
   begin
     api_write32( 32'h00000_0001, engine, API_ADDR_ENGINE_CTRL);
+  end
+  endtask
+
+  task enable_dispatcher;
+  begin
+    dispatcher_write32( 32'h0000_0001, API_DISPATCHER_ADDR_CTRL);
   end
   endtask
 
@@ -495,6 +505,7 @@ module nts_top_tb;
             8: init_noncegen(engine);
             9: set_current_key(engine, 2);
             10: enable_engine(engine);
+            11: if (engine == 0) enable_dispatcher();
             default: ;
           endcase
         end
@@ -550,11 +561,15 @@ module nts_top_tb;
       reg [31:0] dispatcher_version;
       reg [31:0] dispatcher_systick32;
       reg [63:0] dispatcher_ntp_time;
+      reg [31:0] dispatcher_ctrl;
+      reg [31:0] dispatcher_status;
       reg [63:0] dispatcher_counter_bytes_rx;
       reg [63:0] dispatcher_counter_frames;
       reg [63:0] dispatcher_counter_good;
       reg [63:0] dispatcher_counter_bad;
       reg [63:0] dispatcher_counter_dispatched;
+      reg [63:0] dispatcher_counter_packets_discarded;
+      reg [63:0] dispatcher_counter_packets_recieved;
       reg [63:0] dispatcher_counter_error;
       reg [63:0] extractor_name;
       reg [31:0] extractor_version;
@@ -581,12 +596,16 @@ module nts_top_tb;
       dispatcher_read32(dispatcher_version, API_DISPATCHER_ADDR_VERSION);
       dispatcher_read32(dispatcher_systick32, API_DISPATCHER_ADDR_SYSTICK32);
       dispatcher_read64(dispatcher_ntp_time, API_DISPATCHER_ADDR_NTPTIME);
+      dispatcher_read32(dispatcher_ctrl, API_DISPATCHER_ADDR_CTRL);
+      dispatcher_read32(dispatcher_status, API_DISPATCHER_ADDR_STATUS);
       dispatcher_read64(dispatcher_counter_bytes_rx, API_DISPATCHER_ADDR_BYTES_RX);
       dispatcher_read64(dispatcher_counter_frames, API_DISPATCHER_ADDR_COUNTER_FRAMES);
       dispatcher_read64(dispatcher_counter_good, API_DISPATCHER_ADDR_COUNTER_GOOD);
       dispatcher_read64(dispatcher_counter_bad, API_DISPATCHER_ADDR_COUNTER_BAD);
       dispatcher_read64(dispatcher_counter_dispatched, API_DISPATCHER_ADDR_COUNTER_DISPATCHED);
       dispatcher_read64(dispatcher_counter_error, API_DISPATCHER_ADDR_COUNTER_ERROR);
+      dispatcher_read64(dispatcher_counter_packets_recieved, API_DISPATCHER_ADDR_NTS_REC);
+      dispatcher_read64(dispatcher_counter_packets_discarded, API_DISPATCHER_ADDR_NTS_DISCARDED);
       dispatcher_read64(extractor_name, API_EXTRACTOR_ADDR_NAME);
       dispatcher_read32(extractor_version, API_EXTRACTOR_ADDR_VERSION);
       dispatcher_read64(extractor_bytes, API_EXTRACTOR_ADDR_BYTES);
@@ -594,7 +613,11 @@ module nts_top_tb;
       $display("%s:%0d: *** Dispatcher CORE: %s %s", `__FILE__, `__LINE__, dispatcher_name, dispatcher_version);
       $display("%s:%0d: *** Dispatcher, ntp_time:            %016x", `__FILE__, `__LINE__, dispatcher_ntp_time);
       $display("%s:%0d: *** Dispatcher, systick32:           %0d", `__FILE__, `__LINE__, dispatcher_systick32);
-      $display("%s:%0d: *** Dispatcher, bytes received:      %0d", `__FILE__, `__LINE__, dispatcher_counter_bytes_rx);
+      $display("%s:%0d: *** Dispatcher, ctrl:                %0d", `__FILE__, `__LINE__, dispatcher_ctrl);
+      $display("%s:%0d: *** Dispatcher, status:              %0d", `__FILE__, `__LINE__, dispatcher_status);
+      $display("%s:%0d: *** Dispatcher, received (bytes):    %0d", `__FILE__, `__LINE__, dispatcher_counter_bytes_rx);
+      $display("%s:%0d: *** Dispatcher, received (packets):  %0d", `__FILE__, `__LINE__, dispatcher_counter_packets_recieved);
+      $display("%s:%0d: *** Dispatcher, discarded (packets): %0d", `__FILE__, `__LINE__, dispatcher_counter_packets_discarded);
       $display("%s:%0d: *** Dispatcher, frame start counter: %0d", `__FILE__, `__LINE__, dispatcher_counter_frames);
       $display("%s:%0d: *** Dispatcher, good frame counter:  %0d", `__FILE__, `__LINE__, dispatcher_counter_good);
       $display("%s:%0d: *** Dispatcher, bad frame counter:   %0d", `__FILE__, `__LINE__, dispatcher_counter_bad);

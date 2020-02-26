@@ -39,9 +39,7 @@ module nts_extractor #(
   input  wire                        i_api_cs,
   input  wire                        i_api_we,
   input  wire [API_ADDR_WIDTH - 1:0] i_api_address,
-  /* verilator lint_off UNUSED */
   input  wire                 [31:0] i_api_write_data,
-  /* verilator lint_on UNUSED */
   output wire                 [31:0] o_api_read_data,
 
   input  wire      [ENGINES - 1 : 0] i_engine_packet_available,
@@ -88,6 +86,7 @@ module nts_extractor #(
   localparam ADDR_NAME0             = API_ADDR_BASE + 0;
   localparam ADDR_NAME1             = API_ADDR_BASE + 1;
   localparam ADDR_VERSION           = API_ADDR_BASE + 2;
+  localparam ADDR_DUMMY             = API_ADDR_BASE + 3;
   localparam ADDR_BYTES             = API_ADDR_BASE + 'ha;
   localparam ADDR_PACKETS           = API_ADDR_BASE + 'hc;
   localparam ADDR_MUX_STATE         = API_ADDR_BASE + 'h20;
@@ -150,12 +149,14 @@ module nts_extractor #(
   reg        buffer_mac_state_we;
   reg  [1:0] buffer_mac_state_new;
 
+  reg        counter_bytes_rst;
   reg        counter_bytes_we;
   reg [63:0] counter_bytes_new;
   reg [63:0] counter_bytes_reg;
   reg        counter_bytes_lsb_we;
   reg [31:0] counter_bytes_lsb_reg;
 
+  reg        counter_packets_rst;
   reg        counter_packets_we;
   reg [63:0] counter_packets_new;
   reg [63:0] counter_packets_reg;
@@ -164,6 +165,10 @@ module nts_extractor #(
 
   reg [31:0] debug_tx_new;
   reg [31:0] debug_tx_reg;
+
+  reg        dummy_we;
+  reg [31:0] dummy_new;
+  reg [31:0] dummy_reg;
 
   //internal logic errors. Should never occur.
   reg        error_illegal_discard_inc;
@@ -381,16 +386,31 @@ module nts_extractor #(
   always @*
   begin : api
     api_read_data = 0;
+    counter_bytes_rst = 0;
     counter_bytes_lsb_we = 0;
+    counter_packets_rst = 0;
+    counter_packets_lsb_we = 0;
+    dummy_we = 0;
+    dummy_new = 0;
 
     if (i_api_cs) begin
       if (i_api_we) begin
-        ;
+        case (i_api_address)
+          ADDR_DUMMY:
+            begin
+              dummy_we  = 1;
+              dummy_new = i_api_write_data;
+            end
+          ADDR_BYTES: counter_bytes_rst = 1;
+          ADDR_PACKETS: counter_packets_rst = 1;
+          default: ;
+        endcase
       end else begin
         case (i_api_address)
           ADDR_NAME0: api_read_data = CORE_NAME[63:32];
           ADDR_NAME1: api_read_data = CORE_NAME[31:0];
           ADDR_VERSION: api_read_data = CORE_VERSION;
+          ADDR_DUMMY: api_read_data = dummy_reg;
           ADDR_BYTES:
             begin
               counter_bytes_lsb_we = 1;
@@ -420,25 +440,37 @@ module nts_extractor #(
 
   always @*
   begin : api_counters
-    counter_bytes_we = 1;
+    counter_bytes_we = 0;
     counter_bytes_new = 0;
     counter_packets_we = 0;
     counter_packets_new = 0;
-    case (o_mac_tx_data_valid)
-      default: counter_bytes_we = 0;
-      8'b0000_0001: counter_bytes_new = counter_bytes_reg + 1;
-      8'b0000_0011: counter_bytes_new = counter_bytes_reg + 2;
-      8'b0000_0111: counter_bytes_new = counter_bytes_reg + 3;
-      8'b0000_1111: counter_bytes_new = counter_bytes_reg + 4;
-      8'b0001_1111: counter_bytes_new = counter_bytes_reg + 5;
-      8'b0011_1111: counter_bytes_new = counter_bytes_reg + 6;
-      8'b0111_1111: counter_bytes_new = counter_bytes_reg + 7;
-      8'b1111_1111: counter_bytes_new = counter_bytes_reg + 8;
-    endcase
-    if (mac_start) begin
+
+    if (counter_bytes_rst) begin
+      counter_packets_we = 1;
+      counter_packets_new = 0;
+    end else begin
+      counter_bytes_we = 1;
+      case (o_mac_tx_data_valid)
+        default: counter_bytes_we = 0;
+        8'b0000_0001: counter_bytes_new = counter_bytes_reg + 1;
+        8'b0000_0011: counter_bytes_new = counter_bytes_reg + 2;
+        8'b0000_0111: counter_bytes_new = counter_bytes_reg + 3;
+        8'b0000_1111: counter_bytes_new = counter_bytes_reg + 4;
+        8'b0001_1111: counter_bytes_new = counter_bytes_reg + 5;
+        8'b0011_1111: counter_bytes_new = counter_bytes_reg + 6;
+        8'b0111_1111: counter_bytes_new = counter_bytes_reg + 7;
+        8'b1111_1111: counter_bytes_new = counter_bytes_reg + 8;
+      endcase
+    end
+
+    if (counter_packets_rst) begin
+      counter_packets_we = 1;
+      counter_packets_new = 0;
+    end else if (mac_start) begin
       counter_packets_we = 1;
       counter_packets_new = counter_packets_reg + 1;
     end
+
   end
 
   //----------------------------------------------------------------
@@ -824,6 +856,7 @@ module nts_extractor #(
       counter_packets_reg <= 0;
       counter_packets_lsb_reg <= 0;
       debug_tx_reg <= 0;
+      dummy_reg <= 0;
       engine_fifo_rd_start_reg <= 0;
       engine_packet_read_reg <= 0;
       error_illegal_discard_reg <= 0;
@@ -864,6 +897,9 @@ module nts_extractor #(
         buffer_mac_selected_reg <= buffer_mac_selected_new;
 
       debug_tx_reg <= debug_tx_new;
+
+      if (dummy_we)
+        dummy_reg <= dummy_new;
 
       engine_fifo_rd_start_reg <= engine_fifo_rd_start_new;
       engine_packet_read_reg <= engine_packet_read_new;

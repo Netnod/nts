@@ -66,15 +66,15 @@ module nts_timestamp (
   localparam ADDR_NAME1   = 8'h01;
   localparam ADDR_VERSION = 8'h02;
 
-  localparam ADDR_NTP_CONFIG        = 8'h10;
-  localparam ADDR_NTP_ROOT_DELAY    = 8'h11;
-  localparam ADDR_NTP_ROOT_DISP     = 8'h12;
-  localparam ADDR_NTP_REF_ID        = 8'h13;
-  localparam ADDR_NTP_TX_OFS        = 8'h14;
+  localparam ADDR_NTP_CONFIG        = 8'h0a;
+  localparam ADDR_NTP_ROOT_DELAY    = 8'h0b;
+  localparam ADDR_NTP_ROOT_DISP     = 8'h0c;
+  localparam ADDR_NTP_REF_ID        = 8'h0d;
+  localparam ADDR_NTP_TX_OFS        = 8'h0e;
 
   localparam CORE_NAME0   = 32'h74696d65; //"time"
   localparam CORE_NAME1   = 32'h73746d70; //"stmp"
-  localparam CORE_VERSION = 32'h302e3031; //"0.01"
+  localparam CORE_VERSION = 32'h302e3032; //"0.02"
 
   //----------------------------------------------------------------
   // NTP related locaal constants

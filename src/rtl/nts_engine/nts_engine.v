@@ -469,6 +469,7 @@ module nts_engine #(
           ADDR_NAME1: api_read_data_engine = CORE_NAME1;
           ADDR_VERSION: api_read_data_engine = CORE_VERSION;
           ADDR_CTRL: api_read_data_engine = { 31'h0000_0000, ctrl_reg };
+          ADDR_STATUS: api_read_data_engine = { 31'h0000_0000, (~parser_busy) }; //TODO: Bit31 RNG error. No such signal from noncegen to forward.
           default: ;
         endcase
       end

@@ -446,8 +446,8 @@ module nts_extractor #(
     counter_packets_new = 0;
 
     if (counter_bytes_rst) begin
-      counter_packets_we = 1;
-      counter_packets_new = 0;
+      counter_bytes_we = 1;
+      counter_bytes_new = 0;
     end else begin
       counter_bytes_we = 1;
       case (o_mac_tx_data_valid)

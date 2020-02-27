@@ -219,6 +219,7 @@ module nts_parser_ctrl #(
   localparam [BITS_STATE-1:0] STATE_WRITE_NEW_IP_HEADER_0    = 6'h26;
   localparam [BITS_STATE-1:0] STATE_WRITE_NEW_IP_HEADER_1    = 6'h27;
   localparam [BITS_STATE-1:0] STATE_WRITE_NEW_IP_HEADR_DELAY = 6'h28;
+  localparam [BITS_STATE-1:0] STATE_TRANSFER_PACKET          = 6'h29;
 
   localparam [BITS_STATE-1:0] STATE_ERROR_UNIMPLEMENTED      = 6'h2e;
   localparam [BITS_STATE-1:0] STATE_ERROR_GENERAL            = 6'h2f;
@@ -643,8 +644,8 @@ module nts_parser_ctrl #(
   assign o_keymem_server_id       = keymem_server_id_reg;
 
   assign o_tx_clear     = state_reg == STATE_ERROR_GENERAL;
-  assign o_tx_ipv4_done = detect_ipv4 && state_reg == STATE_ERROR_UNIMPLEMENTED; //TODO implement termination logic
-  assign o_tx_ipv6_done = detect_ipv6 && state_reg == STATE_ERROR_UNIMPLEMENTED; //TODO implement termination logic
+  assign o_tx_ipv4_done = detect_ipv4 && state_reg == STATE_TRANSFER_PACKET;
+  assign o_tx_ipv6_done = detect_ipv6 && state_reg == STATE_TRANSFER_PACKET;
   assign o_tx_addr_internal = tx_address_internal;
   assign o_tx_addr          = tx_address;
   assign o_tx_update_length = tx_update_length;
@@ -2514,7 +2515,12 @@ module nts_parser_ctrl #(
         //between different unaligned burst writes.
         if (i_tx_busy == 'b0) begin
           state_we  = 'b1;
-          state_new = STATE_ERROR_UNIMPLEMENTED;
+          state_new = STATE_TRANSFER_PACKET;
+        end
+      STATE_TRANSFER_PACKET:
+        begin
+          state_we  = 'b1;
+          state_new = STATE_IDLE;
         end
       STATE_ERROR_GENERAL:
         begin

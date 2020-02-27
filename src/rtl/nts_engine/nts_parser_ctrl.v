@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019, The Swedish Post and Telecom Authority (PTS)
+// Copyright (c) 2019-2020, The Swedish Post and Telecom Authority (PTS)
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without

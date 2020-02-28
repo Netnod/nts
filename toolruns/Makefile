@@ -123,36 +123,22 @@ lint_rtl: lint_memory lint_top lint_engine lint_dispatcher lint_top
 lint_memory:
 	$(VLINT) $(VLINT_FLAGS) ../src/rtl/memory/bram.v
 	$(VLINT) $(VLINT_FLAGS) ../src/rtl/memory/bram_dpge.v
-	$(VLINT) $(VLINT_FLAGS) ../src/rtl/memory/memory_ctrl.v src/rtl/memory/bram_dpge.v
+	$(VLINT) $(VLINT_FLAGS) ../src/rtl/memory/memory_ctrl.v ../src/rtl/memory/bram_dpge.v
 
 lint_engine:
 	$(VLINT) $(VLINT_FLAGS) ../src/rtl/nts_engine/nts_api.v
-	-$(VLINT) $(VLINT_FLAGS) ../src/rtl/nts_engine/nts_parser_ctrl.v
+	$(VLINT) $(VLINT_FLAGS) ../src/rtl/nts_engine/nts_parser_ctrl.v
 	$(VLINT) $(VLINT_FLAGS) ../src/rtl/nts_engine/nts_timestamp.v
-	$(VLINT) $(VLINT_FLAGS) ../src/rtl/nts_engine/nts_rx_buffer.v src/rtl/memory/bram.v
-	-$(VLINT) $(VLINT_FLAGS) ../src/rtl/nts_engine/nts_tx_buffer.v src/rtl/memory/memory_ctrl.v src/rtl/memory/bram_dpge.v
+	$(VLINT) $(VLINT_FLAGS) ../src/rtl/nts_engine/nts_rx_buffer.v ../src/rtl/memory/bram.v
+	$(VLINT) $(VLINT_FLAGS) ../src/rtl/nts_engine/nts_tx_buffer.v ../src/rtl/memory/memory_ctrl.v ../src/rtl/memory/bram_dpge.v
 	$(VLINT) $(VLINT_FLAGS) -Wno-UNOPTFLAT ../src/rtl/nts_engine/nts_verify_secure.v ../src/rtl/memory/bram_dp2w.v $(SIV_SRC)
-	-$(VLINT) $(VLINT_FLAGS) \
- ../src/rtl/nts_engine/nts_engine.v \
- ../src/rtl/nts_engine/nts_tx_buffer.v \
- ../src/rtl/nts_engine/nts_verify_secure.v \
- ../src/rtl/nts_engine/nts_rx_buffer.v \
- ../src/rtl/nts_engine/nts_parser_ctrl.v \
- ../src/rtl/nts_engine/nts_api.v \
- ../src/rtl/nts_engine/nts_timestamp.v \
- ../src/rtl/memory/memory_ctrl.v \
- ../src/rtl/memory/bram.v \
- ../src/rtl/memory/bram_dpge.v \
- ../src/rtl/memory/bram_dp2w.v \
- ../sub/keymem/src/rtl/nts_keymem.v \
- $(SRC_KEYMEM) \
- $(SIV_SRC)
+	$(VLINT) $(VLINT_FLAGS) -Wno-UNOPTFLAT $(ENGINE_SRC)
 
 lint_dispatcher:
 	$(VLINT) $(VLINT_FLAGS) ../src/rtl/nts_dispatcher.v ../src/rtl/memory/bram.v
 
 lint_top:
-	$(VLINT) $(VLINT_FLAGS) -Wno-UNOPTFLAT ../src/rtl/nts_top.v ../src/rtl/nts_dispatcher.v $(ENGINE_SRC)
+	$(VLINT) $(VLINT_FLAGS) -Wno-UNOPTFLAT ../src/rtl/nts_top.v ../src/rtl/nts_dispatcher.v ../src/rtl/nts_extractor.v $(ENGINE_SRC)
 
 lint_tb:
 	# Memory testbenches

@@ -86,6 +86,17 @@ module nts_top_tb;
   localparam [11:0] API_ADDR_NONCEGEN_CONTEXT4 = API_ADDR_NONCEGEN_BASE + 'h44;
   localparam [11:0] API_ADDR_NONCEGEN_CONTEXT5 = API_ADDR_NONCEGEN_BASE + 'h45;
 
+  localparam [11:0] API_ADDR_PARSER_BASE         = 12'h200;
+  localparam [11:0] API_ADDR_PARSER_NAME         = API_ADDR_PARSER_BASE +    0;
+  localparam [11:0] API_ADDR_PARSER_VERSION      = API_ADDR_PARSER_BASE +    2;
+  localparam [11:0] API_ADDR_PARSER_DUMMY        = API_ADDR_PARSER_BASE +    3;
+  localparam [11:0] API_ADDR_PARSER_STATE        = API_ADDR_PARSER_BASE + 'h10;
+  localparam [11:0] API_ADDR_PARSER_STATE_CRYPTO = API_ADDR_PARSER_BASE + 'h12;
+  localparam [11:0] API_ADDR_PARSER_ERROR_STATE  = API_ADDR_PARSER_BASE + 'h13;
+  localparam [11:0] API_ADDR_PARSER_ERROR_COUNT  = API_ADDR_PARSER_BASE + 'h14;
+  localparam [11:0] API_ADDR_PARSER_ERROR_CAUSE  = API_ADDR_PARSER_BASE + 'h15;
+  localparam [11:0] API_ADDR_PARSER_ERROR_SIZE   = API_ADDR_PARSER_BASE + 'h16;
+
   localparam [11:0] API_DISPATCHER_ADDR_NAME               = 'h000;
   localparam [11:0] API_DISPATCHER_ADDR_VERSION            = 'h002;
   localparam [11:0] API_DISPATCHER_ADDR_DUMMY              = 'h003;
@@ -605,6 +616,14 @@ module nts_top_tb;
       reg [31:0] extractor_version;
       reg [63:0] extractor_bytes;
       reg [63:0] extractor_packets;
+      reg [63:0] parser_name;
+      reg [31:0] parser_version;
+      reg [31:0] parser_state;
+      reg [31:0] parser_state_crypto;
+      reg [31:0] parser_error_state;
+      reg [31:0] parser_error_cause;
+      reg [31:0] parser_error_count;
+      reg [31:0] parser_error_size;
       reg [11:0] addr;
       reg [31:0] value;
 
@@ -671,18 +690,34 @@ module nts_top_tb;
         api_read64(engine_stats_nts_processed, engine, API_ADDR_DEBUG_NTS_PROCESSED);
         api_read64(crypto_err, engine, API_ADDR_DEBUG_ERR_CRYPTO);
         api_read64(txbuf_err, engine, API_ADDR_DEBUG_ERR_TXBUF);
+        api_read64(parser_name, engine, API_ADDR_PARSER_NAME);
+        api_read32(parser_version, engine, API_ADDR_PARSER_VERSION);
+        api_read32(parser_state, engine, API_ADDR_PARSER_STATE);
+        api_read32(parser_state_crypto, engine, API_ADDR_PARSER_STATE_CRYPTO);
+        api_read32(parser_error_state, engine, API_ADDR_PARSER_ERROR_STATE);
+        api_read32(parser_error_count, engine, API_ADDR_PARSER_ERROR_COUNT);
+        api_read32(parser_error_cause, engine, API_ADDR_PARSER_ERROR_CAUSE);
+        api_read32(parser_error_size, engine, API_ADDR_PARSER_ERROR_SIZE);
+
         $display("%s:%0d: *** Engine %0d (%h)", `__FILE__, `__LINE__, engine, engine);
         $display("%s:%0d: ***   CORE: %s %s", `__FILE__, `__LINE__, engine_name, engine_version);
         $display("%s:%0d: ***   CORE: %s", `__FILE__, `__LINE__, clock_name);
         $display("%s:%0d: ***   CORE: %s", `__FILE__, `__LINE__, debug_name);
+        $display("%s:%0d: ***     - DEBUG, NTS bad auth:   %0d", `__FILE__, `__LINE__, engine_stats_nts_bad_auth);
+        $display("%s:%0d: ***     - DEBUG, NTS bad cookie: %0d", `__FILE__, `__LINE__, engine_stats_nts_bad_cookie);
+        $display("%s:%0d: ***     - DEBUG, NTS bad key id: %0d", `__FILE__, `__LINE__, engine_stats_nts_bad_keyid);
+        $display("%s:%0d: ***     - DEBUG, NTS processed:  %0d", `__FILE__, `__LINE__, engine_stats_nts_processed);
+        $display("%s:%0d: ***     - DEBUG, Errors Crypto:  %0d", `__FILE__, `__LINE__, crypto_err);
+        $display("%s:%0d: ***     - DEBUG, Errors TxBuf:   %0d", `__FILE__, `__LINE__, txbuf_err);
+        $display("%s:%0d: ***     - DEBUG, systick32:      %0d", `__FILE__, `__LINE__, debug_systick32);
         $display("%s:%0d: ***   CORE: %s", `__FILE__, `__LINE__, keymem_name);
-        $display("%s:%0d: ***   DEBUG, systick32:      %0d", `__FILE__, `__LINE__, debug_systick32);
-        $display("%s:%0d: ***   DEBUG, NTS bad auth:   %0d", `__FILE__, `__LINE__, engine_stats_nts_bad_auth);
-        $display("%s:%0d: ***   DEBUG, NTS bad cookie: %0d", `__FILE__, `__LINE__, engine_stats_nts_bad_cookie);
-        $display("%s:%0d: ***   DEBUG, NTS bad key id: %0d", `__FILE__, `__LINE__, engine_stats_nts_bad_keyid);
-        $display("%s:%0d: ***   DEBUG, NTS processed:  %0d", `__FILE__, `__LINE__, engine_stats_nts_processed);
-        $display("%s:%0d: ***   DEBUG, Errors Crypto:  %0d", `__FILE__, `__LINE__, crypto_err);
-        $display("%s:%0d: ***   DEBUG, Errors TxBuf:   %0d", `__FILE__, `__LINE__, txbuf_err);
+        $display("%s:%0d: ***   CORE: %s %s", `__FILE__, `__LINE__, parser_name, parser_version);
+        $display("%s:%0d: ***     - PARSER, state:        %h", `__FILE__, `__LINE__, parser_state);
+        $display("%s:%0d: ***     - PARSER, state_crypto: %h", `__FILE__, `__LINE__, parser_state_crypto);
+        $display("%s:%0d: ***     - PARSER, error_state:  %h", `__FILE__, `__LINE__, parser_error_state);
+        $display("%s:%0d: ***     - PARSER, error count:  %0d (dec)", `__FILE__, `__LINE__, parser_error_count);
+        $display("%s:%0d: ***     - PARSER, error cause:  %h", `__FILE__, `__LINE__, parser_error_cause);
+        $display("%s:%0d: ***     - PARSER, error size:   %0d (dec)", `__FILE__, `__LINE__, parser_error_size);
       end
     end
 

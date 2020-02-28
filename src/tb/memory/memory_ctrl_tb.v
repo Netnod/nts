@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019, The Swedish Post and Telecom Authority (PTS)
+// Copyright (c) 2019-2020, The Swedish Post and Telecom Authority (PTS)
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -282,7 +282,7 @@ module memory_ctrl_tb;
 
     begin : test_from_engine_sims
       reg [ADDR_WIDTH+3-1:0] addr;
-      if (VERBOSE>0) $display("%s:%0d Test aligned write, unaligned write, unaligned read64: %0d", `__FILE__, `__LINE__, offset);
+      if (VERBOSE>0) $display("%s:%0d Test aligned write, unaligned write, unaligned read64: %0d", `__FILE__, `__LINE__, addr);
       addr = 0;
       write_append( addr, 64'h525400cdcd23001c );
       write_append( addr, 64'h7300009908004500 );
@@ -292,6 +292,7 @@ module memory_ctrl_tb;
       write_append( addr, 64'h0000000000000000 );
       `assert( addr == 'h30 );
       addr = 'h2a;
+      if (VERBOSE>0) $display("%s:%0d Test aligned write, unaligned write, unaligned read64: %0d", `__FILE__, `__LINE__, addr);
       write_append( addr, 64'h2401000000000000 ); //NTP
       write_append( addr, 64'h0000000000000000 );
       write_append( addr, 64'h0000000000000000 );
@@ -306,6 +307,7 @@ module memory_ctrl_tb;
       write_append( addr, 64'hbb3edb5900000000 );
       wait_busy();
       addr = 'h7e;
+      if (VERBOSE>0) $display("%s:%0d Test aligned write, unaligned write, unaligned read64: %0d", `__FILE__, `__LINE__, addr);
       write_append( addr, 64'h0204006830a8dce1 ); // This write used to bug out due to:
                                                   // memctrl not supporting 1 single unaligned write
                                                   // (did not jump to STATE_UNALIGNED_WRITE64_LAST as necessary)

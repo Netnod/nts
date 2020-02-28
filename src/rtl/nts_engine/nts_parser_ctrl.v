@@ -2254,11 +2254,13 @@ module nts_parser_ctrl #(
       STATE_IDLE:
         begin
           if (i_process_initial) begin
-            state_we  = 'b1;
-            state_new = STATE_COPY;
+            if (i_tx_full) begin
+              set_error_state( ERROR_CAUSE_TX_FULL );
+            end else begin
+              state_we  = 'b1;
+              state_new = STATE_COPY;
+            end
           end
-          if (i_tx_full)
-            set_error_state( ERROR_CAUSE_TX_FULL );
         end
       STATE_COPY:
         if (i_process_initial == 1'b0) begin

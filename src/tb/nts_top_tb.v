@@ -71,6 +71,19 @@ module nts_top_tb;
   localparam [11:0] API_ADDR_KEYMEM_KEY3_LENGTH = API_ADDR_KEYMEM_BASE + 12'h17;
   localparam [11:0] API_ADDR_KEYMEM_KEY3_START  = API_ADDR_KEYMEM_BASE + 12'h70;
   localparam [11:0] API_ADDR_KEYMEM_KEY3_END    = API_ADDR_KEYMEM_BASE + 12'h7f;
+  localparam [11:0] API_ADDR_KEYMEM_KEY0_COUNTER_MSB  = API_ADDR_KEYMEM_BASE + 'h30;
+  localparam [11:0] API_ADDR_KEYMEM_KEY0_COUNTER_LSB  = API_ADDR_KEYMEM_BASE + 'h31;
+  localparam [11:0] API_ADDR_KEYMEM_KEY1_COUNTER_MSB  = API_ADDR_KEYMEM_BASE + 'h32;
+  localparam [11:0] API_ADDR_KEYMEM_KEY1_COUNTER_LSB  = API_ADDR_KEYMEM_BASE + 'h33;
+  localparam [11:0] API_ADDR_KEYMEM_KEY2_COUNTER_MSB  = API_ADDR_KEYMEM_BASE + 'h34;
+  localparam [11:0] API_ADDR_KEYMEM_KEY2_COUNTER_LSB  = API_ADDR_KEYMEM_BASE + 'h35;
+  localparam [11:0] API_ADDR_KEYMEM_KEY3_COUNTER_MSB  = API_ADDR_KEYMEM_BASE + 'h36;
+  localparam [11:0] API_ADDR_KEYMEM_KEY3_COUNTER_LSB  = API_ADDR_KEYMEM_BASE + 'h37;
+  localparam [11:0] API_ADDR_KEYMEM_ERROR_COUNTER_MSB = API_ADDR_KEYMEM_BASE + 'h38;
+  localparam [11:0] API_ADDR_KEYMEM_ERROR_COUNTER_LSB = API_ADDR_KEYMEM_BASE + 'h39;
+
+  localparam ADDR_KEY0_START    = 8'h40;
+  localparam ADDR_KEY0_END      = 8'h47;
 
   localparam [11:0] API_ADDR_NONCEGEN_BASE     = 12'h020;
   localparam [11:0] API_ADDR_NONCEGEN_CTRL     = API_ADDR_NONCEGEN_BASE + 'h08;
@@ -598,6 +611,11 @@ module nts_top_tb;
       reg [63:0] engine_stats_nts_processed;
       reg [63:0] crypto_err;
       reg [63:0] txbuf_err;
+      reg [63:0] keymem_key0_ctr;
+      reg [63:0] keymem_key1_ctr;
+      reg [63:0] keymem_key2_ctr;
+      reg [63:0] keymem_key3_ctr;
+      reg [63:0] keymem_error_ctr;
       reg [63:0] dispatcher_name;
       reg [31:0] dispatcher_version;
       reg [31:0] dispatcher_systick32;
@@ -683,6 +701,7 @@ module nts_top_tb;
         api_read64(clock_name, engine, API_ADDR_CLOCK_NAME0);
         api_read32(debug_name, engine, API_ADDR_DEBUG_NAME);
         api_read64(keymem_name, engine, API_ADDR_KEYMEM_NAME0);
+
         api_read32(debug_systick32, engine, API_ADDR_DEBUG_SYSTICK32);
         api_read64(engine_stats_nts_bad_auth, engine, API_ADDR_DEBUG_NTS_BAD_AUTH);
         api_read64(engine_stats_nts_bad_cookie, engine, API_ADDR_DEBUG_NTS_BAD_COOKIE);
@@ -690,6 +709,13 @@ module nts_top_tb;
         api_read64(engine_stats_nts_processed, engine, API_ADDR_DEBUG_NTS_PROCESSED);
         api_read64(crypto_err, engine, API_ADDR_DEBUG_ERR_CRYPTO);
         api_read64(txbuf_err, engine, API_ADDR_DEBUG_ERR_TXBUF);
+
+        api_read64(keymem_key0_ctr, engine, API_ADDR_KEYMEM_KEY0_COUNTER_MSB);
+        api_read64(keymem_key1_ctr, engine, API_ADDR_KEYMEM_KEY1_COUNTER_MSB);
+        api_read64(keymem_key2_ctr, engine, API_ADDR_KEYMEM_KEY2_COUNTER_MSB);
+        api_read64(keymem_key3_ctr, engine, API_ADDR_KEYMEM_KEY3_COUNTER_MSB);
+        api_read64(keymem_error_ctr, engine, API_ADDR_KEYMEM_ERROR_COUNTER_MSB);
+
         api_read64(parser_name, engine, API_ADDR_PARSER_NAME);
         api_read32(parser_version, engine, API_ADDR_PARSER_VERSION);
         api_read32(parser_state, engine, API_ADDR_PARSER_STATE);
@@ -710,7 +736,14 @@ module nts_top_tb;
         $display("%s:%0d: ***     - DEBUG, Errors Crypto:  %0d", `__FILE__, `__LINE__, crypto_err);
         $display("%s:%0d: ***     - DEBUG, Errors TxBuf:   %0d", `__FILE__, `__LINE__, txbuf_err);
         $display("%s:%0d: ***     - DEBUG, systick32:      %0d", `__FILE__, `__LINE__, debug_systick32);
+
         $display("%s:%0d: ***   CORE: %s", `__FILE__, `__LINE__, keymem_name);
+        $display("%s:%0d: ***     - KeyMem, Key0 Counter:  %0d (dec)", `__FILE__, `__LINE__, keymem_key0_ctr);
+        $display("%s:%0d: ***     - KeyMem, Key1 Counter:  %0d (dec)", `__FILE__, `__LINE__, keymem_key1_ctr);
+        $display("%s:%0d: ***     - KeyMem, Key2 Counter:  %0d (dec)", `__FILE__, `__LINE__, keymem_key2_ctr);
+        $display("%s:%0d: ***     - KeyMem, Key3 Counter:  %0d (dec)", `__FILE__, `__LINE__, keymem_key3_ctr);
+        $display("%s:%0d: ***     - KeyMem, Error Counter: %0d (dec)", `__FILE__, `__LINE__, keymem_error_ctr);
+
         $display("%s:%0d: ***   CORE: %s %s", `__FILE__, `__LINE__, parser_name, parser_version);
         $display("%s:%0d: ***     - PARSER, state:        %h", `__FILE__, `__LINE__, parser_state);
         $display("%s:%0d: ***     - PARSER, state_crypto: %h", `__FILE__, `__LINE__, parser_state_crypto);

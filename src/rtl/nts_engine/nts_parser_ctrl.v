@@ -458,9 +458,9 @@ module nts_parser_ctrl #(
   reg                          timestamp_version_number_we;
   reg                 [ 2 : 0] timestamp_version_number_new;
   reg                 [ 2 : 0] timestamp_version_number_reg;
-//reg                          timestamp_poll_we;
-//reg                 [ 7 : 0] timestamp_poll_new;
-//reg                 [ 7 : 0] timestamp_poll_reg;
+  reg                          timestamp_poll_we;
+  reg                 [ 7 : 0] timestamp_poll_new;
+  reg                 [ 7 : 0] timestamp_poll_reg;
 
   reg                          ntp_extension_counter_we;
   reg [NTP_EXTENSION_BITS-1:0] ntp_extension_counter_new;
@@ -662,7 +662,7 @@ module nts_parser_ctrl #(
   assign o_timestamp_transmit                 = (state_reg == STATE_TIMESTAMP);
   assign o_timestamp_origin_timestamp         = timestamp_origin_timestamp_reg;
   assign o_timestamp_version_number           = timestamp_version_number_reg;
-  assign o_timestamp_poll                     = 0; //TODO timestamp_poll_reg;
+  assign o_timestamp_poll                     = timestamp_poll_reg;
 
   assign o_crypto_sample_key       = crypto_sample_key;
 
@@ -975,7 +975,7 @@ module nts_parser_ctrl #(
       timestamp_origin_timestamp_reg         <= 'b0;
       timestamp_version_number_reg           <= 'b0;
 
-    //timestamp_poll_reg                     <= 'b0;
+      timestamp_poll_reg                     <= 'b0;
 
       tx_authenticator_length_reg <= 0;
       tx_ciphertext_length_reg <= 0;
@@ -1146,8 +1146,8 @@ module nts_parser_ctrl #(
       if (timestamp_version_number_we)
         timestamp_version_number_reg <= timestamp_version_number_new;
 
-    //if (timestamp_poll_we)
-    //  timestamp_poll_reg <= timestamp_poll_new;
+      if (timestamp_poll_we)
+        timestamp_poll_reg <= timestamp_poll_new;
 
       tx_authenticator_length_reg <= tx_authenticator_length_new;
       tx_ciphertext_length_reg <= tx_ciphertext_length_new;
@@ -2685,6 +2685,8 @@ module nts_parser_ctrl #(
   begin
     timestamp_origin_timestamp_we   = 0;
     timestamp_origin_timestamp_new  = 0; /* RFC 5905 Figure 31: x.org         <--     r.xmt */
+    timestamp_poll_we               = 0;
+    timestamp_poll_new              = 0;
     timestamp_version_number_we     = 0;
     timestamp_version_number_new    = 0;
 
@@ -2695,6 +2697,14 @@ module nts_parser_ctrl #(
     end else if (i_process_initial) begin
       if (detect_ipv4 && detect_ipv4_bad == 'b0) begin
         if (word_counter_reg == 4) begin
+          // 47:46 LI (2bit)
+          // 45:43 VN (3bit)
+          // 42:40 MODE (3bit)
+          // 39:32 Stratum (8bit)
+          // 31:24 Poll (8bit)
+          // 23:16 Precision (8bit)
+          timestamp_poll_we            = 1;
+          timestamp_poll_new           = i_data[31:24];
           timestamp_version_number_we  = 1;
           timestamp_version_number_new = i_data[45:43];
         end else if (word_counter_reg == 9) begin
@@ -2706,8 +2716,15 @@ module nts_parser_ctrl #(
         end
       end if (detect_ipv6) begin
         if (word_counter_reg == 6) begin
+          // 15:14 LI (2bit)
+          // 13:11 VN (3bit)
+          // 10:8 MODE (3bit)
+          // 7:0 Stratum (8bit)
           timestamp_version_number_we  = 1;
           timestamp_version_number_new = i_data[13:11];
+        end else if (word_counter_reg == 7) begin
+          timestamp_poll_we            = 1;
+          timestamp_poll_new           = i_data[63:56];
         end else if (word_counter_reg == 11) begin
           timestamp_origin_timestamp_we  = 1;
           timestamp_origin_timestamp_new = { i_data[15:0], 48'h0 };

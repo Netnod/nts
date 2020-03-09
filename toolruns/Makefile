@@ -33,7 +33,7 @@
  sim-api sim-engine sim-memctrl sim-parser sim-rxbuf sim-txbuf sim-secure sim
 
 AES_SRC_PATH = ../sub/aes/src/rtl
-AES_SRC = $(AES_SRC_PATH)/aes_core.v $(AES_SRC_PATH)/aes_decipher_block.v $(AES_SRC_PATH)/aes_encipher_block.v $(AES_SRC_PATH)/aes_inv_sbox.v $(AES_SRC_PATH)/aes_key_mem.v  $(AES_SRC_PATH)/aes_sbox.v
+AES_SRC = $(AES_SRC_PATH)/aes_core.v $(AES_SRC_PATH)/aes_encipher_block.v $(AES_SRC_PATH)/aes_key_mem.v $(AES_SRC_PATH)/aes_sbox.v
 CMAC_SRC = ../sub/cmac/src/rtl/cmac_core.v $(AES_SRC)
 SIV_SRC = ../sub/aes-siv/src/rtl/aes_siv_core.v $(CMAC_SRC)
 KEYMEM_SRC = ../sub/keymem/src/rtl/nts_keymem.v

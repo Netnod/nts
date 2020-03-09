@@ -169,7 +169,10 @@ module nts_parser_ctrl #(
   localparam ERROR_CAUSE_KEY_COOKIE_FAIL  = 32'h4b_43_6f_6b; //KCok
   localparam ERROR_CAUSE_KEY_CURRENT_FAIL = 32'h4b_43_75_72; //KCur
   localparam ERROR_CAUSE_KEYMEM_BUSY      = 32'h4b_42_73_79; //KBsy
-  localparam ERROR_CAUSE_NTP_OUT_OF_MEM   = 32'h4d_45_52_30; //MER0
+  localparam ERROR_CAUSE_NTP_OUT_OF_MEM   = 32'h4d_45_4d_30; //MEM0
+  localparam ERROR_CAUSE_NTP_MEM_FAILURE  = 32'h4d_45_4d_31; //MEM1
+  localparam ERROR_CAUSE_NTP_EXT_INSANE   = 32'h45_78_74_49; //ExtI
+  localparam ERROR_CAUSE_NTP_EXT_MANY     = 32'h45_78_74_4d; //ExtM
   localparam ERROR_CAUSE_PKT_SHORT        = 32'h4c_50_4b_30; //LPK0
   localparam ERROR_CAUSE_PKT_LONG         = 32'h4c_50_4b_31; //LPK1
   localparam ERROR_CAUSE_PKT_UDP_ALIGN    = 32'h4c_50_4b_32; //LPK2
@@ -2284,14 +2287,12 @@ module nts_parser_ctrl #(
       STATE_EXTRACT_EXT_FROM_RAM:
         if (ntp_extension_copied_reg[ntp_extension_counter_reg] == 'b1) begin
           if (memory_address_failure_reg == 'b1) begin
-            state_we  = 'b1;
-            state_new = STATE_ERROR_GENERAL;
+            set_error_state( ERROR_CAUSE_NTP_MEM_FAILURE );
           end else if (memory_address_lastbyte_read_reg == 1'b1) begin
             state_we  = 'b1;
             state_new = STATE_EXTENSIONS_EXTRACTED;
           end else if (ntp_extension_counter_reg==NTP_EXTENSION_FIELDS-1) begin
-            state_we  = 'b1;
-            state_new = STATE_ERROR_GENERAL;
+            set_error_state( ERROR_CAUSE_NTP_EXT_MANY );
           end
         end
       STATE_EXTENSIONS_EXTRACTED:
@@ -2299,8 +2300,7 @@ module nts_parser_ctrl #(
           state_we  = 'b1;
           state_new = STATE_EXTRACT_COOKIE_FROM_RAM;
         end else begin
-          state_we  = 'b1;
-          state_new = STATE_ERROR_GENERAL;
+          set_error_state( ERROR_CAUSE_NTP_EXT_INSANE );
         end
       STATE_EXTRACT_COOKIE_FROM_RAM:
         if (i_access_port_rd_dv) begin

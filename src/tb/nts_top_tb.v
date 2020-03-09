@@ -31,6 +31,13 @@
 module nts_top_tb;
   localparam ADDR_WIDTH = 10;
 
+  localparam TEST_FUZZ_UI       = 1;
+  localparam TEST_FUZZ_UI_START = 32;
+  localparam TEST_FUZZ_UI_STOP  = 512;
+  localparam TEST_FUZZ_UI_INC   = 4;
+
+  localparam TEST_NORMAL = 1;
+
   localparam [11:0] API_ADDR_ENGINE_BASE        = 12'h000;
   localparam [11:0] API_ADDR_ENGINE_NAME0       = API_ADDR_ENGINE_BASE;
   localparam [11:0] API_ADDR_ENGINE_NAME1       = API_ADDR_ENGINE_BASE + 1;
@@ -517,9 +524,52 @@ module nts_top_tb;
     .o_api_dispatcher_read_data(o_api_dispatcher_read_data)
   );
 
+
   //----------------------------------------------------------------
   // Test bench code
   //----------------------------------------------------------------
+
+  task fuzz_ui;
+  begin : fuzz_ui_
+    integer i;
+    integer j;
+    reg [15:0] udp_length;
+    reg [15:0] tlv_length;
+    reg [65535:0] pkt;
+    reg [11:0] engine;
+    reg [31:0] parser_error_state;
+    reg [31:0] parser_error_cause;
+    reg [31:0] parser_error_count;
+    reg [31:0] parser_error_size;
+
+    for (i = TEST_FUZZ_UI_START; i <= TEST_FUZZ_UI_STOP; i = i + TEST_FUZZ_UI_INC) begin
+      udp_length = 8 + 48 + i[15:0] + 4 + 872;
+      tlv_length = i[15:0] + 16'h0004;
+      $display("%s:%0d: *** Fuzz!!! %0d udp_length: %h", `__FILE__, `__LINE__, i, udp_length);
+      pkt = 65536'h0;
+      pkt[0+:6976] = 6976'h0204_006813fe_78e96cb5_760841e1_a3a834d7_7e7e9db4_cd17406d_633f5019_71ef9e6d_2dd03493_db1bc622_0955ec27_ac035d10_239c9643_aad3ac00_c614f950_11cb251e_50e7dadf_4dd7444e_9f9e001c_72072bdc_2ffc3a10_1611ef05_a693766e_b1a12b9c_72f8d879_4e500304_00680000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000304_00680000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000304_00680000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000304_00680000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000304_00680000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000304_00680000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000304_00680000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000404_00280010_0010893e_de70d1ec_935d08fa_7330354b_45c67497_2b33600c_7b5eb079_e66100f4_b9aa;
+      for (j = 0; j < i; j = j + 1) begin
+        pkt[6976+j*8+:8] = j[7:0];
+        $display("%s:%0d: *** Fuzz pkt[%0d+:8] = %h", `__FILE__, `__LINE__, 6152+j*8, j[7:0]);
+      end
+      pkt[6976+i*8+:32] = { 16'h0104, tlv_length };
+      pkt[6976+i*8+32+:880] = 880'h001c7300_00990000_00000000_86dd6000_000003c4_11400000_00000000_00000000_00000000_00002a01_03f70002_00520000_00000000_00111267_101b03c4_96362300_00200000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_0000d9fb_2822c2ac_dc4d;
+      pkt[6976+i*8+32+880-5*64+:16] = udp_length;
+      pkt[6976+i*8+32+880-10*64-16+:16] = udp_length;
+      send_packet(pkt, 6976 + i*8 + 32 + 880, 0);
+      #20000;
+      for (engine = 0; engine < ENGINES; engine = engine + 1) begin
+        api_read32(parser_error_state, engine, API_ADDR_PARSER_ERROR_STATE);
+        api_read32(parser_error_count, engine, API_ADDR_PARSER_ERROR_COUNT);
+        api_read32(parser_error_cause, engine, API_ADDR_PARSER_ERROR_CAUSE);
+        api_read32(parser_error_size, engine, API_ADDR_PARSER_ERROR_SIZE);
+        if (parser_error_cause != 0) begin
+          $display("%s:%0d: *** ERROR! Engine: %0d Cause: %s (%h), State: %h, Size: %h, Count: %h", `__FILE__, `__LINE__, engine, parser_error_cause, parser_error_cause, parser_error_state, parser_error_size, parser_error_count);
+        end
+      end
+    end
+  end
+  endtask
 
   localparam  [31:0] TRACE_MASTER_KEY_ID = 32'hf001_fefe;
   localparam [255:0] TRACE_MASTER_KEY = { 128'hf001_AAA0_f001_AAA1_f001_AAA2_f001_AAA3,
@@ -563,34 +613,43 @@ module nts_top_tb;
             default: ;
           endcase
         end
-        send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_KEYID}, 2160, 0);
-        send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_KEYID}, 2160, 0);
-        send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_COOKIE}, 2160, 0);
-        send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_AUTH}, 2160, 0);
-        send_packet({63696'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_1}, 1840, 1);
-        send_packet({57552'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_3}, 7984, 0); //same key _2 packets, but 7 placeholders
-        send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160, 0);
-        send_packet({63696'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_1}, 1840, 0);
-        send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160, 0);
-        send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160, 0);
+        if (TEST_NORMAL) begin
+          send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_KEYID}, 2160, 0);
+          send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_KEYID}, 2160, 0);
+          send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_COOKIE}, 2160, 0);
+          send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_AUTH}, 2160, 0);
+          send_packet({63696'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_1}, 1840, 1);
+          send_packet({57552'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_3}, 7984, 0); //same key _2 packets, but 7 placeholders
+          send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160, 0);
+          send_packet({63696'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_1}, 1840, 0);
+          send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160, 0);
+          send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160, 0);
+        end
       end
     end
-    //while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
-    //send_packet({63696'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_1}, 1840, 0);
-    while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
-    #20000;
-    send_packet({57552'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_3}, 7984, 0); //same key _2 packets, but 7 placeholders
-    while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
-    #20000;
-    send_packet({57552'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_3}, 7984, 0); //same key _2 packets, but 7 placeholders
-    while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
-    #20000;
-    send_packet({57392'b0, NTS_TEST_REQUEST_WITH_KEY_IPV6_3}, 8144, 0);
-    while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
-    #20000;
-    #900000;
-    send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_KEYID}, 2160, 0);
-    #900000;
+    if (TEST_NORMAL) begin
+      //while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
+      //send_packet({63696'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_1}, 1840, 0);
+      while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
+      #20000;
+      send_packet({57552'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_3}, 7984, 0); //same key _2 packets, but 7 placeholders
+      while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
+      #20000;
+      send_packet({57552'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_3}, 7984, 0); //same key _2 packets, but 7 placeholders
+      while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
+      #20000;
+      send_packet({57392'b0, NTS_TEST_REQUEST_WITH_KEY_IPV6_3}, 8144, 0);
+      while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
+      #20000;
+    end
+    if (TEST_FUZZ_UI) begin
+      fuzz_ui();
+      #900000;
+    end
+    if (TEST_NORMAL) begin
+      send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_KEYID}, 2160, 0);
+      #900000;
+    end
 
     //----------------------------------------------------------------
     // Human readable Debug

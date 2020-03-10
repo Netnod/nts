@@ -127,6 +127,7 @@ module nts_verify_secure_tb #(
   wire                    o_noncegen_get;
   reg            [63 : 0] i_noncegen_nonce;
   reg                     i_noncegen_ready;
+  reg                     i_noncegen_nonce_valid;
 
   //----------------------------------------------------------------
   // Helpful debug variables
@@ -195,6 +196,7 @@ module nts_verify_secure_tb #(
 
     .o_noncegen_get(o_noncegen_get),
     .i_noncegen_nonce(i_noncegen_nonce),
+    .i_noncegen_nonce_valid(i_noncegen_nonce_valid),
     .i_noncegen_ready(i_noncegen_ready)
   );
 
@@ -1240,9 +1242,11 @@ module nts_verify_secure_tb #(
     if (i_areset) begin
       i_noncegen_nonce <= 64'h0;
       i_noncegen_ready <= 0;
+      i_noncegen_nonce_valid <= 0;
       nonce_delay <= 0;
     end else begin
       i_noncegen_ready <= 0;
+      i_noncegen_nonce_valid <= 0;
       if (nonce_delay == 4'hF) begin
         nonce_delay <= 0;
         if (nonce_set) begin
@@ -1251,6 +1255,7 @@ module nts_verify_secure_tb #(
           i_noncegen_nonce <= i_noncegen_nonce + 1;
         end
         i_noncegen_ready <= 1;
+        i_noncegen_nonce_valid <= 1;
       end else if (nonce_delay > 0) begin
         nonce_delay <= nonce_delay + 1;
       end else if (o_noncegen_get) begin

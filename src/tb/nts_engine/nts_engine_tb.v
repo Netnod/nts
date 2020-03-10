@@ -129,23 +129,23 @@ module nts_engine_tb #( parameter integer verbose_output = 'h3);
 
   reg [63:0]           i_ntp_time;
 
+  wire                 o_dispatch_rx_packet_read_discard;
   reg                  i_dispatch_rx_packet_available;
-  reg [7:0]            i_dispatch_rx_data_last_valid;
+  reg [3:0]            i_dispatch_rx_data_last_valid;
   reg                  i_dispatch_rx_fifo_empty;
   wire                 o_dispatch_rx_fifo_rd_start;
   reg                  i_dispatch_rx_fifo_rd_valid;
   reg [63:0]           i_dispatch_rx_fifo_rd_data;
 
-  reg                  i_dispatch_tx_packet_read;
-  reg                  i_dispatch_tx_fifo_rd_en;
-
   reg                  i_api_cs;
   reg                  i_api_we;
   reg [11:0]           i_api_address;
   reg [31:0]           i_api_write_data;
-
-  reg [63:0]           i_noncegen_data;
-  reg                  i_noncegen_ready;
+  /* verilator lint_off UNUSED */
+  wire                 o_api_busy;
+  wire                 o_api_read_data_valid;
+  /* verilator lint_on UNUSED */
+  wire [31:0]          o_api_read_data;
 
 
   reg          [3 : 0] detect_bits;
@@ -159,18 +159,16 @@ module nts_engine_tb #( parameter integer verbose_output = 'h3);
 
   wire                 o_busy;
 
-  wire [31:0]          o_api_read_data;
-
-  wire                 o_dispatch_rx_packet_read_discard;
+  reg                  i_dispatch_tx_packet_read;
+  reg                  i_dispatch_tx_fifo_rd_start;
 
   wire                 o_dispatch_tx_packet_available;
   wire                 o_dispatch_tx_fifo_empty;
   /* verilator lint_off UNUSED */
+  wire                 o_dispatch_tx_fifo_rd_valid;
   wire [63:0]          o_dispatch_tx_fifo_rd_data;    //TODO implement test support
   wire  [3:0]          o_dispatch_tx_bytes_last_word; //TODO implement test support
   /* verilator lint_on UNUSED */
-
-  wire                 o_noncegen_get;
 
   //----------------------------------------------------------------
   // Test bench macros
@@ -248,14 +246,14 @@ module nts_engine_tb #( parameter integer verbose_output = 'h3);
       //i_dispatch_rx_packet_available = 'b1;
 
       case ((length/8) % 8)
-        0: i_dispatch_rx_data_last_valid  = 8'b11111111; //all bytes valid
-        1: i_dispatch_rx_data_last_valid  = 8'b00000001; //last byte valid
-        2: i_dispatch_rx_data_last_valid  = 8'b00000011;
-        3: i_dispatch_rx_data_last_valid  = 8'b00000111;
-        4: i_dispatch_rx_data_last_valid  = 8'b00001111;
-        5: i_dispatch_rx_data_last_valid  = 8'b00011111;
-        6: i_dispatch_rx_data_last_valid  = 8'b00111111;
-        7: i_dispatch_rx_data_last_valid  = 8'b01111111;
+        0: i_dispatch_rx_data_last_valid  = 8; //all bytes valid
+        1: i_dispatch_rx_data_last_valid  = 1; //last byte valid
+        2: i_dispatch_rx_data_last_valid  = 2;
+        3: i_dispatch_rx_data_last_valid  = 3;
+        4: i_dispatch_rx_data_last_valid  = 4;
+        5: i_dispatch_rx_data_last_valid  = 5;
+        6: i_dispatch_rx_data_last_valid  = 6;
+        7: i_dispatch_rx_data_last_valid  = 7;
         default:
           begin
             $display("length:%0d", length);
@@ -394,8 +392,9 @@ module nts_engine_tb #( parameter integer verbose_output = 'h3);
 
     .o_dispatch_tx_packet_available(o_dispatch_tx_packet_available),
     .i_dispatch_tx_packet_read(i_dispatch_tx_packet_read),
+    .i_dispatch_tx_fifo_rd_start(i_dispatch_tx_fifo_rd_start),
     .o_dispatch_tx_fifo_empty(o_dispatch_tx_fifo_empty),
-    .i_dispatch_tx_fifo_rd_en(i_dispatch_tx_fifo_rd_en),
+    .o_dispatch_tx_fifo_rd_valid(o_dispatch_tx_fifo_rd_valid),
     .o_dispatch_tx_fifo_rd_data(o_dispatch_tx_fifo_rd_data),
     .o_dispatch_tx_bytes_last_word(o_dispatch_tx_bytes_last_word),
 
@@ -404,10 +403,8 @@ module nts_engine_tb #( parameter integer verbose_output = 'h3);
     .i_api_address(i_api_address),
     .i_api_write_data(i_api_write_data),
     .o_api_read_data(o_api_read_data),
-
-    .o_noncegen_get(o_noncegen_get),
-    .i_noncegen_data(i_noncegen_data),
-    .i_noncegen_ready(i_noncegen_ready),
+    .o_api_read_data_valid(o_api_read_data_valid),
+    .o_api_busy(o_api_busy),
 
     .o_detect_unique_identifier(detect_unique_identifier),
     .o_detect_nts_cookie(detect_nts_cookie),
@@ -720,22 +717,21 @@ module nts_engine_tb #( parameter integer verbose_output = 'h3);
   always @(posedge i_clk or posedge i_areset)
   begin
     if (i_areset) begin
-      i_dispatch_tx_packet_read <= 'b0;
-      i_dispatch_tx_fifo_rd_en  <= 'b0;
-      tx_receiving              <= 'b0;
+      i_dispatch_tx_packet_read   <= 'b0;
+      i_dispatch_tx_fifo_rd_start <= 'b0;
+      tx_receiving                <= 'b0;
 
     end else begin
-      i_dispatch_tx_packet_read <= 'b0;
-      i_dispatch_tx_fifo_rd_en  <= 'b0;
+      i_dispatch_tx_packet_read   <= 'b0;
+      i_dispatch_tx_fifo_rd_start <= 'b0;
       if (tx_receiving) begin
         if (o_dispatch_tx_fifo_empty) begin
           i_dispatch_tx_packet_read <= 'b1;
           tx_receiving <= 'b0;
-        end else begin
-          i_dispatch_tx_fifo_rd_en  <= 'b1;
         end
       end else if (o_dispatch_tx_packet_available) begin
         tx_receiving <= 'b1;
+        i_dispatch_tx_fifo_rd_start <= 'b1;
       end
     end
   end
@@ -750,37 +746,6 @@ module nts_engine_tb #( parameter integer verbose_output = 'h3);
       i_ntp_time = 64'h0000_0001_0000_0000;
     end else begin
       i_ntp_time = i_ntp_time + 1;
-    end
-  end
-
-  //----------------------------------------------------------------
-  // Testbench model: Nonce Generator
-  //----------------------------------------------------------------
-
-  reg   [3:0] nonce_delay;
-
-  always @(posedge i_clk or posedge i_areset)
-  begin
-    if (i_areset) begin
-      i_noncegen_data <= 64'h0;
-      i_noncegen_ready <= 0;
-      nonce_delay <= 0;
-    end else begin
-      i_noncegen_ready <= 0;
-      if (nonce_delay == 4'hF) begin
-        nonce_delay <= 0;
-        i_noncegen_ready <= 1;
-        i_noncegen_data <= i_noncegen_data + 1;
-        //if (nonce_set) begin
-        //  i_noncegen_nonce <= (i_noncegen_nonce == nonce_set_a) ? nonce_set_b : nonce_set_a;
-        //end else begin
-        //  i_noncegen_nonce <= i_noncegen_nonce + 1;
-        //end
-      end else if (nonce_delay > 0) begin
-        nonce_delay <= nonce_delay + 1;
-      end else if (o_noncegen_get) begin
-        nonce_delay <= 1;
-      end
     end
   end
 
@@ -831,7 +796,7 @@ module nts_engine_tb #( parameter integer verbose_output = 'h3);
       always @*
         $display("%s:%0d dut.crypto.key_s2c_reg: %h", `__FILE__, `__LINE__, dut.crypto.key_s2c_reg);
       always @*
-        $display("%s:%0d word: %h valid: %h length: %h key: %h", `__FILE__, `__LINE__, dut.keymem_internal_key_word, dut.keymem_internal_key_valid, dut.keymem_internal_key_length, dut.keymem_internal_key_data);
+        $display("%s:%0d word: %h valid: %h key: %h", `__FILE__, `__LINE__, dut.keymem_internal_key_word, dut.keymem_internal_key_valid, dut.keymem_internal_key_data);
       always @(posedge i_clk or posedge i_areset)
         if (i_areset) ;
         else begin

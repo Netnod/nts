@@ -172,6 +172,8 @@ module nts_parser_ctrl #(
   localparam ERROR_CAUSE_NTP_OUT_OF_MEM   = 32'h4d_45_4d_30; //MEM0
   localparam ERROR_CAUSE_NTP_MEM_FAILURE  = 32'h4d_45_4d_31; //MEM1
   localparam ERROR_CAUSE_NTP_EXT_INSANE   = 32'h45_78_74_49; //ExtI
+  localparam ERROR_CAUSE_NTP_EXT_SHORT    = 32'h45_78_74_53; //ExtS
+  localparam ERROR_CAUSE_NTP_EXT_ODD      = 32'h45_78_74_4f; //ExtO
   localparam ERROR_CAUSE_NTP_EXT_MANY     = 32'h45_78_74_4d; //ExtM
   localparam ERROR_CAUSE_PKT_SHORT        = 32'h4c_50_4b_30; //LPK0
   localparam ERROR_CAUSE_PKT_LONG         = 32'h4c_50_4b_31; //LPK1
@@ -278,6 +280,9 @@ module nts_parser_ctrl #(
 
   localparam NTP_EXTENSION_BITS          = 4;
   localparam NTP_EXTENSION_FIELDS        = (1<<NTP_EXTENSION_BITS);
+
+  localparam NTP_EXTENSION_MINIMUM_LENGTH = 16; //rfc7822 7.5
+  localparam NTP_EXTENSION_MAXMIMUM_LENGTH = 65532; //rfc7822 7.5
 
   localparam [15:0] E_TYPE_IPV4 =  16'h08_00;
   localparam [15:0] E_TYPE_IPV6 =  16'h86_DD;
@@ -2286,7 +2291,15 @@ module nts_parser_ctrl #(
         end
       STATE_EXTRACT_EXT_FROM_RAM:
         if (ntp_extension_copied_reg[ntp_extension_counter_reg] == 'b1) begin
-          if (memory_address_failure_reg == 'b1) begin
+          if (ntp_extension_length_reg[ntp_extension_counter_reg] < (4 + NTP_EXTENSION_MINIMUM_LENGTH)) begin
+            //rfc7822 "While the minimum field length containing required fields is four words (16 octets)"
+            // - interpret this as value+padding (field length) must be larger than 16
+            // - actual Length must be largerthan 20, 16 + 2 (Field Type) + 2 (Length).
+            set_error_state( ERROR_CAUSE_NTP_EXT_SHORT );
+          end else if ((ntp_extension_length_reg[ntp_extension_counter_reg] & 16'h3) != 16'h0) begin
+            //rfc7822 All extension fields are zero-padded to a word (four octets) boundary
+            set_error_state( ERROR_CAUSE_NTP_EXT_ODD );
+          end else if (memory_address_failure_reg == 'b1) begin
             set_error_state( ERROR_CAUSE_NTP_MEM_FAILURE );
           end else if (memory_address_lastbyte_read_reg == 1'b1) begin
             state_we  = 'b1;

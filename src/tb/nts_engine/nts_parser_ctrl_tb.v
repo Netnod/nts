@@ -74,7 +74,7 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
 
   reg                          i_clear;
   reg                          i_process_initial;
-  reg                    [7:0] i_last_word_data_valid;
+  reg                    [3:0] i_last_word_data_valid;
   reg                   [63:0] i_data;
   /* verilator lint_off UNUSED */
   wire                  [31:0] o_api_read_data;
@@ -109,6 +109,7 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
   reg  [ACCESS_PORT_WIDTH-1:0] i_access_port_rd_data;
 
   reg                          i_timestamp_busy;
+  wire                         o_timestamp_kiss_of_death;
   wire                         o_timestamp_record_receive_timestamp;
   wire                         o_timestamp_transmit; //parser signal packet transmit OK
   wire                [63 : 0] o_timestamp_origin_timestamp;
@@ -136,6 +137,7 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
   wire                        o_crypto_tx_op_store_nonce_tag;
   wire                        o_crypto_tx_op_store_cookie;
   /* verilator lint_off UNUSED */
+  wire                        o_crypto_sample_key;
   wire                        o_crypto_tx_op_store_cookiebuf;
   wire                        o_crypto_op_cookiebuf_append;
   wire                 [63:0] o_crypto_cookieprefix;
@@ -223,14 +225,14 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
 
       #10
       case ((length/8) % 8)
-        0: i_last_word_data_valid  = 8'b11111111; //all bytes valid
-        1: i_last_word_data_valid  = 8'b00000001; //last byte valid
-        2: i_last_word_data_valid  = 8'b00000011;
-        3: i_last_word_data_valid  = 8'b00000111;
-        4: i_last_word_data_valid  = 8'b00001111;
-        5: i_last_word_data_valid  = 8'b00011111;
-        6: i_last_word_data_valid  = 8'b00111111;
-        7: i_last_word_data_valid  = 8'b01111111;
+        0: i_last_word_data_valid  = 8; //all bytes valid
+        1: i_last_word_data_valid  = 1;
+        2: i_last_word_data_valid  = 2;
+        3: i_last_word_data_valid  = 3;
+        4: i_last_word_data_valid  = 4;
+        5: i_last_word_data_valid  = 5;
+        6: i_last_word_data_valid  = 6;
+        7: i_last_word_data_valid  = 7;
         default:
           begin
             $display("length:%0d", length);
@@ -333,6 +335,7 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
     .i_keymem_ready(i_keymem_ready),
 
     .i_timestamp_busy(i_timestamp_busy),
+    .o_timestamp_kiss_of_death(o_timestamp_kiss_of_death),
     .o_timestamp_record_receive_timestamp(o_timestamp_record_receive_timestamp),
     .o_timestamp_transmit(o_timestamp_transmit), //parser signal packet transmit OK
     .o_timestamp_origin_timestamp(o_timestamp_origin_timestamp),
@@ -340,6 +343,7 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
     .o_timestamp_poll(o_timestamp_poll),
 
     .i_crypto_busy(i_crypto_busy),
+    .o_crypto_sample_key(o_crypto_sample_key),
     .i_crypto_verify_tag_ok(i_crypto_verify_tag_ok),
     .o_crypto_rx_op_copy_ad(o_crypto_rx_op_copy_ad),
     .o_crypto_rx_op_copy_nonce(o_crypto_rx_op_copy_nonce),

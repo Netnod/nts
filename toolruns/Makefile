@@ -153,11 +153,11 @@ lint_tb:
 	$(VLINT) $(VLINT_TESTS_FLAGS) -Wno-STMTDLY \
  ../src/tb/nts_engine/nts_api_tb.v \
  ../src/rtl/nts_engine/nts_api.v
-	-$(VLINT) $(VLINT_TESTS_FLAGS) -Wno-STMTDLY \
+	$(VLINT) $(VLINT_TESTS_FLAGS) -Wno-STMTDLY \
  ../src/tb/nts_engine/nts_rx_buffer_tb.v \
  ../src/rtl/nts_engine/nts_rx_buffer.v \
  ../src/rtl/memory/bram.v
-	-$(VLINT) $(VLINT_TESTS_FLAGS) -Wno-STMTDLY \
+	$(VLINT) $(VLINT_TESTS_FLAGS) -Wno-STMTDLY \
  ../src/tb/nts_engine/nts_tx_buffer_tb.v \
  ../src/rtl/nts_engine/nts_tx_buffer.v \
  ../src/rtl/memory/memory_ctrl.v \

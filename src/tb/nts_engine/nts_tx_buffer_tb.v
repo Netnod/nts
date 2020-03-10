@@ -62,7 +62,8 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
   wire        o_dispatch_tx_packet_available;
   reg         i_dispatch_tx_packet_read;
   wire        o_dispatch_tx_fifo_empty;
-  reg         i_dispatch_tx_fifo_rd_en;
+  reg         i_dispatch_tx_fifo_rd_start;
+  wire        o_dispatch_tx_fifo_rd_valid;
   wire [63:0] o_dispatch_tx_fifo_rd_data;
   wire  [3:0] o_dispatch_tx_bytes_last_word;
 
@@ -364,11 +365,12 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
     .o_busy(o_busy),
     .o_error(o_error),
 
+    .i_dispatch_tx_fifo_rd_start(i_dispatch_tx_fifo_rd_start),
     .o_dispatch_tx_packet_available(o_dispatch_tx_packet_available),
     .i_dispatch_tx_packet_read(i_dispatch_tx_packet_read),
     .o_dispatch_tx_fifo_empty(o_dispatch_tx_fifo_empty),
-    .i_dispatch_tx_fifo_rd_en(i_dispatch_tx_fifo_rd_en),
     .o_dispatch_tx_fifo_rd_data(o_dispatch_tx_fifo_rd_data),
+    .o_dispatch_tx_fifo_rd_valid(o_dispatch_tx_fifo_rd_valid),
     .o_dispatch_tx_bytes_last_word(o_dispatch_tx_bytes_last_word),
 
     .i_parser_clear(i_parser_clear),
@@ -790,9 +792,6 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
     i_areset = 1;
     i_clk    = 0;
 
-    //i_dispatch_tx_packet_read = 0;
-    //i_dispatch_tx_fifo_rd_en  = 0;
-
     i_parser_clear  = 0;
     i_parser_update_length = 0;
     i_read_en    = 0;
@@ -876,7 +875,7 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
   begin : simple_rx
     if (i_areset) begin
       i_dispatch_tx_packet_read = 0;
-      i_dispatch_tx_fifo_rd_en = 0;
+      i_dispatch_tx_fifo_rd_start = 0;
       rx_state = 0;
       rx_buf[6299:64] = 6236'b0;
       rx_buf[63:0] = 64'hXXXX_XXXX_XXXX_XXXX;
@@ -885,7 +884,7 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
         //$display("%s:%0d rx_start=%h rx_state=%h o_dispatch_tx_fifo_empty=%h o_dispatch_tx_fifo_rd_data=%h", `__FILE__, `__LINE__, rx_start, rx_state, o_dispatch_tx_fifo_empty, o_dispatch_tx_fifo_rd_data);
       end
       i_dispatch_tx_packet_read = 0;
-      i_dispatch_tx_fifo_rd_en = 0;
+      i_dispatch_tx_fifo_rd_start = 0;
       case (rx_state)
         0:
           begin
@@ -896,7 +895,7 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
               rx_state = 1;
           end
         1: if (o_dispatch_tx_packet_available && o_dispatch_tx_fifo_empty=='b0) begin
-             i_dispatch_tx_fifo_rd_en = 1;
+             i_dispatch_tx_fifo_rd_start = 1;
              rx_state = 2;
            end
         2:
@@ -904,8 +903,8 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
             if (o_dispatch_tx_fifo_empty) begin
               rx_state                  = 3;
               i_dispatch_tx_packet_read = 1;
-            end else begin
-              i_dispatch_tx_fifo_rd_en  = 1;
+            end
+            if (o_dispatch_tx_fifo_rd_valid) begin
               rx_buf[6299:64] = rx_buf[6235:0];
               rx_buf[63:0]    = o_dispatch_tx_fifo_rd_data;
               rx_count        = rx_count + 1;

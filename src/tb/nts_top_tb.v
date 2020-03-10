@@ -584,13 +584,17 @@ module nts_top_tb;
 
     // Test with bad UI with weird lengths
 
-    for (i = 0; i < 3; i = i + 1) begin
+    for (i = 0; i < 7; i = i + 1) begin
       for (engine = 0; engine < ENGINES; engine = engine + 1) begin
         udp_length = 8 + 48 + 4 + 872;
         case (i)
           0: tlv_length = 0; // 0 : next UI is itself?
           1: tlv_length = 4; // 4 : TLV length is tag+length, empty value
-          2: tlv_length = 16'hfffc; // -4: will overflow arithmetics for sure.
+          2: tlv_length = 16; // 16: Minimum Length is 16+4, illegal.
+          3: tlv_length = 21; // Length is not even 4 octets.
+          4: tlv_length = 22; // Length is not even 4 octets.
+          5: tlv_length = 23; // Length is not even 4 octets.
+          6: tlv_length = 16'hfffc; // -4: will overflow arithmetics for sure.
           default: tlv_length = 0;
         endcase
         $display("%s:%0d: *** Fuzz!!! udp_length: %h Weird tlv_length: %h", `__FILE__, `__LINE__, udp_length, tlv_length);

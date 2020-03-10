@@ -1540,7 +1540,6 @@ module nts_parser_ctrl #(
 
   always @*
   begin : copy_proc
-    reg [ADDR_WIDTH+3-1:0] tmp_bytes;
 
     copy_done = 0;
 
@@ -1550,8 +1549,6 @@ module nts_parser_ctrl #(
 
     copy_tx_addr_we = 0;
     copy_tx_addr_new = 0;
-
-    tmp_bytes = copy_bytes_reg[ADDR_WIDTH+3-1:0];
 
     case (state_reg)
       STATE_TIMESTAMP_WAIT:
@@ -1571,12 +1568,12 @@ module nts_parser_ctrl #(
       STATE_UNIQUE_IDENTIFIER_COPY_1:
         begin
           if (i_access_port_rd_dv) begin
-            if (copy_bytes_reg < 8) begin
+            if (copy_bytes_reg <= 8) begin
               copy_bytes_we    = 1;
               copy_bytes_new   = 0;
               copy_done        = 1;
               copy_tx_addr_we  = 1;
-              copy_tx_addr_new = copy_tx_addr_reg + tmp_bytes;
+              copy_tx_addr_new = copy_tx_addr_reg + copy_bytes_reg[ADDR_WIDTH+3-1:0];
             end else begin
               copy_bytes_we    = 1;
               copy_bytes_new   = copy_bytes_reg - 8;

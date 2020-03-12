@@ -109,7 +109,9 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
   reg  [ACCESS_PORT_WIDTH-1:0] i_access_port_rd_data;
 
   reg                          i_timestamp_busy;
+  /* verilator lint_off UNUSED */
   wire                         o_timestamp_kiss_of_death;
+  /* verilator lint_on UNUSED */
   wire                         o_timestamp_record_receive_timestamp;
   wire                         o_timestamp_transmit; //parser signal packet transmit OK
   wire                [63 : 0] o_timestamp_origin_timestamp;

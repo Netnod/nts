@@ -172,7 +172,7 @@ lint_tb:
 	$(VLINT) $(VLINT_TESTS_FLAGS) -Wno-STMTDLY -Wno-UNOPTFLAT \
  ../src/tb/nts_engine/nts_engine_tb.v $(ENGINE_SRC)
 	#
-	$(VLINT) $(VLINT_TESTS_FLAGS) -Wno-STMTDLY src/tb/nts_dispatcher_tb.v src/rtl/nts_dispatcher.v src/rtl/memory/bram.v
+	$(VLINT) $(VLINT_TESTS_FLAGS) -Wno-STMTDLY ../src/tb/nts_dispatcher_tb.v ../src/rtl/nts_dispatcher.v ../src/rtl/memory/bram.v
 
 lint-submodules:
 	make -C sub/aes/toolruns lint

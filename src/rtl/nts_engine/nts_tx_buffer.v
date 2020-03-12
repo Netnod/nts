@@ -538,7 +538,7 @@ module nts_tx_buffer #(
       d1 = { sum_ctrl[5] ? data[47-:8] : 8'h00, sum_ctrl[4] ? data[39-:8] : 8'h00 };
       d2 = { sum_ctrl[3] ? data[31-:8] : 8'h00, sum_ctrl[2] ? data[23-:8] : 8'h00 };
       d3 = { sum_ctrl[1] ? data[15-:8] : 8'h00, sum_ctrl[0] ? data[7-:8] : 8'h00 };
-      $display("%s:%0d %h - %h %h - %h %h %h %h", `__FILE__, `__LINE__, sum_counter_reg, sum_ctrl, data, d0, d1, d2, d3 );
+      //$display("%s:%0d %h - %h %h - %h %h %h %h", `__FILE__, `__LINE__, sum_counter_reg, sum_ctrl, data, d0, d1, d2, d3 );
       internet_sum_pipelinestage0( d0, d1, d2, d3, sum_delayed_new, carry_delayed_new );
     end
 

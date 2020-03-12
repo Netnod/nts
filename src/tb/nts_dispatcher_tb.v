@@ -36,18 +36,31 @@ module nts_dispatcher_tb;
 
   reg                   i_areset;
   reg                   i_clk;
+
   reg [7:0]             i_rx_data_valid;
   reg [63:0]            i_rx_data;
   reg                   i_rx_bad_frame;
   reg                   i_rx_good_frame;
+
+  reg [63:0]            i_ntp_time;
+
+  //ENGINGES=1. Possible improvement: multiple engines in testbench
+  reg                   i_dispatch_busy;
   wire                  o_dispatch_packet_available;
   reg                   i_dispatch_packet_read_discard;
   wire [ADDR_WIDTH-1:0] o_dispatch_counter;
-  wire [7:0]            o_dispatch_data_valid;
+  wire [3:0]            o_dispatch_data_valid;
   wire                  o_dispatch_fifo_empty;
   reg                   i_dispatch_fifo_rd_start;
   wire                  o_dispatch_fifo_rd_valid;
   wire [63:0]           o_dispatch_fifo_rd_data;
+
+  wire [31:0]           o_api_read_data;
+
+  wire                  o_engine_cs;
+  wire                  o_engine_we;
+  wire [11:0]           o_engine_address;
+  wire [31:0]           o_engine_write_data;
 
   //----------------------------------------------------------------
   // RX MAC helper regs
@@ -76,19 +89,35 @@ module nts_dispatcher_tb;
   nts_dispatcher #(.ADDR_WIDTH(ADDR_WIDTH)) dut (
     .i_areset(i_areset),
     .i_clk(i_clk),
-    .i_rx_data_valid(i_rx_data_valid),
-    .i_rx_data(i_rx_data),
-    .i_rx_bad_frame(i_rx_bad_frame),
-    .i_rx_good_frame(i_rx_good_frame),
-    .o_dispatch_packet_available(o_dispatch_packet_available),
-    .i_dispatch_packet_read_discard(i_dispatch_packet_read_discard),
-    .o_dispatch_counter(o_dispatch_counter),
-    .o_dispatch_data_valid(o_dispatch_data_valid),
-    .o_dispatch_fifo_empty(o_dispatch_fifo_empty),
-    //.i_dispatch_fifo_rd_en(i_dispatch_fifo_rd_en),
-    .i_dispatch_fifo_rd_start(i_dispatch_fifo_rd_start),
-    .o_dispatch_fifo_rd_valid(o_dispatch_fifo_rd_valid),
-    .o_dispatch_fifo_rd_data(o_dispatch_fifo_rd_data)
+
+    .i_ntp_time( i_ntp_time ),
+
+    .i_rx_data_valid ( i_rx_data_valid ),
+    .i_rx_data       ( i_rx_data       ),
+    .i_rx_bad_frame  ( i_rx_bad_frame  ),
+    .i_rx_good_frame ( i_rx_good_frame ),
+
+    .i_dispatch_busy               ( i_dispatch_busy                ),
+    .o_dispatch_packet_available   ( o_dispatch_packet_available    ),
+    .i_dispatch_packet_read_discard( i_dispatch_packet_read_discard ),
+    .o_dispatch_data_valid         ( o_dispatch_data_valid          ),
+    .o_dispatch_fifo_empty         ( o_dispatch_fifo_empty          ),
+    .i_dispatch_fifo_rd_start      ( i_dispatch_fifo_rd_start       ),
+    .o_dispatch_fifo_rd_valid      ( o_dispatch_fifo_rd_valid       ),
+    .o_dispatch_fifo_rd_data       ( o_dispatch_fifo_rd_data        ),
+
+    .i_api_cs                ( 1'b0                ),
+    .i_api_we                ( 1'b0                ),
+    .i_api_address           ( 12'h0               ),
+    .i_api_write_data        ( 32'h0               ),
+    .o_api_read_data         ( o_api_read_data     ),
+    .i_engine_api_busy       ( 1'b0                ),
+    .o_engine_cs             ( o_engine_cs         ),
+    .o_engine_we             ( o_engine_we         ),
+    .o_engine_address        ( o_engine_address    ),
+    .o_engine_write_data     ( o_engine_write_data ),
+    .i_engine_read_data      ( 32'h0               ),
+    .i_engine_read_data_valid( 1'b1                )
   );
 
   //----------------------------------------------------------------
@@ -331,7 +360,7 @@ module nts_dispatcher_tb;
             consumer_reg <= CONSUMER_CLEAR;
           end else begin
             if (o_dispatch_fifo_rd_valid) begin
-              $display("%s:%0d consumer_ptr: %h o_dispatch_fifo_rd_data: %h o_dispatch_counter: %h o_dispatch_data_valid: %h", `__FILE__, `__LINE__, consumer_ptr, o_dispatch_fifo_rd_data, o_dispatch_counter, o_dispatch_data_valid);
+              $display("%s:%0d consumer_ptr: %h o_dispatch_fifo_rd_data: %h o_dispatch_data_valid: %h", `__FILE__, `__LINE__, consumer_ptr, o_dispatch_fifo_rd_data, o_dispatch_data_valid);
               consumer_ptr <= consumer_ptr + 1;
               consumer_packet[consumer_ptr] <= o_dispatch_fifo_rd_data;
             end
@@ -340,6 +369,19 @@ module nts_dispatcher_tb;
             consumer_reg <= CONSUMER_IDLE;
         default: ;
       endcase
+    end
+  end
+
+  //----------------------------------------------------------------
+  // Testbench model: NTP_Time
+  //----------------------------------------------------------------
+
+  always @(posedge i_clk or posedge i_areset)
+  begin
+    if (i_areset) begin
+      i_ntp_time <= 64'h1337_0000_0000_0000;;
+    end else begin
+      i_ntp_time <= i_ntp_time + 1;
     end
   end
 

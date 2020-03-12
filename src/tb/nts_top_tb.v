@@ -65,19 +65,15 @@ module nts_top_tb;
   localparam [11:0] API_ADDR_KEYMEM_NAME1       = API_ADDR_KEYMEM_BASE + 1;
   localparam [11:0] API_ADDR_KEYMEM_ADDR_CTRL   = API_ADDR_KEYMEM_BASE + 12'h08;
   localparam [11:0] API_ADDR_KEYMEM_KEY0_ID     = API_ADDR_KEYMEM_BASE + 12'h10;
-  localparam [11:0] API_ADDR_KEYMEM_KEY0_LENGTH = API_ADDR_KEYMEM_BASE + 12'h11;
   localparam [11:0] API_ADDR_KEYMEM_KEY0_START  = API_ADDR_KEYMEM_BASE + 12'h40;
   localparam [11:0] API_ADDR_KEYMEM_KEY0_END    = API_ADDR_KEYMEM_BASE + 12'h4f;
   localparam [11:0] API_ADDR_KEYMEM_KEY1_ID     = API_ADDR_KEYMEM_BASE + 12'h12;
-  localparam [11:0] API_ADDR_KEYMEM_KEY1_LENGTH = API_ADDR_KEYMEM_BASE + 12'h13;
   localparam [11:0] API_ADDR_KEYMEM_KEY1_START  = API_ADDR_KEYMEM_BASE + 12'h50;
   localparam [11:0] API_ADDR_KEYMEM_KEY1_END    = API_ADDR_KEYMEM_BASE + 12'h5f;
   localparam [11:0] API_ADDR_KEYMEM_KEY2_ID     = API_ADDR_KEYMEM_BASE + 12'h14;
-  localparam [11:0] API_ADDR_KEYMEM_KEY2_LENGTH = API_ADDR_KEYMEM_BASE + 12'h15;
   localparam [11:0] API_ADDR_KEYMEM_KEY2_START  = API_ADDR_KEYMEM_BASE + 12'h60;
   localparam [11:0] API_ADDR_KEYMEM_KEY2_END    = API_ADDR_KEYMEM_BASE + 12'h6f;
   localparam [11:0] API_ADDR_KEYMEM_KEY3_ID     = API_ADDR_KEYMEM_BASE + 12'h16;
-  localparam [11:0] API_ADDR_KEYMEM_KEY3_LENGTH = API_ADDR_KEYMEM_BASE + 12'h17;
   localparam [11:0] API_ADDR_KEYMEM_KEY3_START  = API_ADDR_KEYMEM_BASE + 12'h70;
   localparam [11:0] API_ADDR_KEYMEM_KEY3_END    = API_ADDR_KEYMEM_BASE + 12'h7f;
   localparam [11:0] API_ADDR_KEYMEM_KEY0_COUNTER_MSB  = API_ADDR_KEYMEM_BASE + 'h30;
@@ -341,7 +337,6 @@ module nts_top_tb;
   begin : install_key_256bit
     reg [11:0] addr_key;
     reg [11:0] addr_keyid;
-    reg [11:0] addr_length;
     reg [31:0] tmp;
     reg [3:0] i;
     reg [2:0] index;
@@ -350,25 +345,21 @@ module nts_top_tb;
         begin
           addr_key = API_ADDR_KEYMEM_KEY0_START;
           addr_keyid = API_ADDR_KEYMEM_KEY0_ID;
-          addr_length = API_ADDR_KEYMEM_KEY0_LENGTH;
         end
       1:
         begin
           addr_key = API_ADDR_KEYMEM_KEY1_START;
           addr_keyid = API_ADDR_KEYMEM_KEY1_ID;
-          addr_length = API_ADDR_KEYMEM_KEY1_LENGTH;
         end
       2:
         begin
           addr_key = API_ADDR_KEYMEM_KEY2_START;
           addr_keyid = API_ADDR_KEYMEM_KEY2_ID;
-          addr_length = API_ADDR_KEYMEM_KEY2_LENGTH;
         end
       3:
         begin
           addr_key = API_ADDR_KEYMEM_KEY3_START;
           addr_keyid = API_ADDR_KEYMEM_KEY3_ID;
-          addr_length = API_ADDR_KEYMEM_KEY3_LENGTH;
         end
       default: ;
     endcase
@@ -379,7 +370,6 @@ module nts_top_tb;
 
     api_write32( tmp,   engine, API_ADDR_KEYMEM_ADDR_CTRL );
     api_write32( keyid, engine, addr_keyid );
-    api_write32( 0,     engine, addr_length );
 
     for (i = 0; i < 8; i = i + 1) begin
       index = i[2:0];
@@ -423,7 +413,7 @@ module nts_top_tb;
 
   task enable_engine ( input [11:0] engine );
   begin
-    api_write32( 32'h00000_0001, engine, API_ADDR_ENGINE_CTRL);
+    api_write32( 32'h0000_0001, engine, API_ADDR_ENGINE_CTRL);
   end
   endtask
 

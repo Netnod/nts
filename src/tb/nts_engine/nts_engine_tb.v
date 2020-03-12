@@ -43,6 +43,21 @@ module nts_engine_tb #( parameter integer verbose_output = 'h3);
   localparam [11:0] API_ADDR_ENGINE_NAME0       = API_ADDR_ENGINE_BASE;
   localparam [11:0] API_ADDR_ENGINE_NAME1       = API_ADDR_ENGINE_BASE + 1;
   localparam [11:0] API_ADDR_ENGINE_VERSION     = API_ADDR_ENGINE_BASE + 2;
+  localparam [11:0] API_ADDR_ENGINE_CTRL        = API_ADDR_ENGINE_BASE + 8;
+
+  localparam [11:0] API_ADDR_NONCEGEN_BASE     = 12'h020;
+  localparam [11:0] API_ADDR_NONCEGEN_CTRL     = API_ADDR_NONCEGEN_BASE + 'h08;
+  localparam [11:0] API_ADDR_NONCEGEN_KEY0     = API_ADDR_NONCEGEN_BASE + 'h10;
+  localparam [11:0] API_ADDR_NONCEGEN_KEY1     = API_ADDR_NONCEGEN_BASE + 'h11;
+  localparam [11:0] API_ADDR_NONCEGEN_KEY2     = API_ADDR_NONCEGEN_BASE + 'h12;
+  localparam [11:0] API_ADDR_NONCEGEN_KEY3     = API_ADDR_NONCEGEN_BASE + 'h13;
+  localparam [11:0] API_ADDR_NONCEGEN_LABEL    = API_ADDR_NONCEGEN_BASE + 'h20;
+  localparam [11:0] API_ADDR_NONCEGEN_CONTEXT0 = API_ADDR_NONCEGEN_BASE + 'h40;
+  localparam [11:0] API_ADDR_NONCEGEN_CONTEXT1 = API_ADDR_NONCEGEN_BASE + 'h41;
+  localparam [11:0] API_ADDR_NONCEGEN_CONTEXT2 = API_ADDR_NONCEGEN_BASE + 'h42;
+  localparam [11:0] API_ADDR_NONCEGEN_CONTEXT3 = API_ADDR_NONCEGEN_BASE + 'h43;
+  localparam [11:0] API_ADDR_NONCEGEN_CONTEXT4 = API_ADDR_NONCEGEN_BASE + 'h44;
+  localparam [11:0] API_ADDR_NONCEGEN_CONTEXT5 = API_ADDR_NONCEGEN_BASE + 'h45;
 
   localparam [11:0] API_ADDR_DEBUG_BASE         = 12'h180;
   localparam [11:0] API_ADDR_DEBUG_ERR_CRYPTO   = API_ADDR_DEBUG_BASE + 'h20;
@@ -57,19 +72,15 @@ module nts_engine_tb #( parameter integer verbose_output = 'h3);
   localparam [11:0] API_ADDR_KEYMEM_NAME1       = API_ADDR_KEYMEM_BASE + 1;
   localparam [11:0] API_ADDR_KEYMEM_ADDR_CTRL   = API_ADDR_KEYMEM_BASE + 12'h08;
   localparam [11:0] API_ADDR_KEYMEM_KEY0_ID     = API_ADDR_KEYMEM_BASE + 12'h10;
-  localparam [11:0] API_ADDR_KEYMEM_KEY0_LENGTH = API_ADDR_KEYMEM_BASE + 12'h11;
   localparam [11:0] API_ADDR_KEYMEM_KEY0_START  = API_ADDR_KEYMEM_BASE + 12'h40;
   localparam [11:0] API_ADDR_KEYMEM_KEY0_END    = API_ADDR_KEYMEM_BASE + 12'h4f;
   localparam [11:0] API_ADDR_KEYMEM_KEY1_ID     = API_ADDR_KEYMEM_BASE + 12'h12;
-  localparam [11:0] API_ADDR_KEYMEM_KEY1_LENGTH = API_ADDR_KEYMEM_BASE + 12'h13;
   localparam [11:0] API_ADDR_KEYMEM_KEY1_START  = API_ADDR_KEYMEM_BASE + 12'h50;
   localparam [11:0] API_ADDR_KEYMEM_KEY1_END    = API_ADDR_KEYMEM_BASE + 12'h5f;
   localparam [11:0] API_ADDR_KEYMEM_KEY2_ID     = API_ADDR_KEYMEM_BASE + 12'h14;
-  localparam [11:0] API_ADDR_KEYMEM_KEY2_LENGTH = API_ADDR_KEYMEM_BASE + 12'h15;
   localparam [11:0] API_ADDR_KEYMEM_KEY2_START  = API_ADDR_KEYMEM_BASE + 12'h60;
   localparam [11:0] API_ADDR_KEYMEM_KEY2_END    = API_ADDR_KEYMEM_BASE + 12'h6f;
   localparam [11:0] API_ADDR_KEYMEM_KEY3_ID     = API_ADDR_KEYMEM_BASE + 12'h16;
-  localparam [11:0] API_ADDR_KEYMEM_KEY3_LENGTH = API_ADDR_KEYMEM_BASE + 12'h17;
   localparam [11:0] API_ADDR_KEYMEM_KEY3_START  = API_ADDR_KEYMEM_BASE + 12'h70;
   localparam [11:0] API_ADDR_KEYMEM_KEY3_END    = API_ADDR_KEYMEM_BASE + 12'h7f;
 
@@ -141,10 +152,8 @@ module nts_engine_tb #( parameter integer verbose_output = 'h3);
   reg                  i_api_we;
   reg [11:0]           i_api_address;
   reg [31:0]           i_api_write_data;
-  /* verilator lint_off UNUSED */
   wire                 o_api_busy;
   wire                 o_api_read_data_valid;
-  /* verilator lint_on UNUSED */
   wire [31:0]          o_api_read_data;
 
 
@@ -435,34 +444,44 @@ module nts_engine_tb #( parameter integer verbose_output = 'h3);
   end
   endtask
 
-  function [31:0] api_read32( input [11:0] addr );
+  task api_write32( input [31:0] data, input [11:0] addr );
+  begin : api_read32_
+    while (o_api_busy) #10;
+    api_set(1, 1, addr, data, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+    #10;
+    api_set(0, 0, 0, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+    while (o_api_busy) #10;
+  end
+  endtask
+
+  task api_read32( output [31:0] data, input [11:0] addr );
   begin : api_read32_
     reg [31:0] result;
     result = 0;
+    while (o_api_busy) #10;
     api_set(1, 0, addr, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
     #10;
-    result = o_api_read_data;
     api_set(0, 0, 0, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
-    api_read32 = result;
+    while (o_api_busy) #10;
+    `assert(o_api_read_data_valid);
+    result = o_api_read_data;
+    #10;
+    `assert(o_api_read_data_valid == 0);
+    `assert(o_api_busy == 0);
+    data = result;
   end
-  endfunction
+  endtask
 
-  function [63:0] api_read64( input [11:0] addr );
+  task api_read64( output [63:0] data, input [11:0] addr );
   begin : api_read64_
     reg [63:0] result;
     result = 0;
-    api_set(1, 0, addr, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
-    #20;
     result[63:32] = o_api_read_data;
-    api_set(1, 0, addr + 1, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
-    #10;
-    result[31:0] = o_api_read_data;
-    #10;
-    api_set(0, 0, 0, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
-    #10;
-    api_read64 = result;
+    api_read32( result[63:32], addr );
+    api_read32( result[31:0], addr + 1);
+    data = result;
   end
-  endfunction
+  endtask
 
   //----------------------------------------------------------------
   // Install key
@@ -475,7 +494,6 @@ module nts_engine_tb #( parameter integer verbose_output = 'h3);
   begin : install_key_256bit
     reg [11:0] addr_key;
     reg [11:0] addr_keyid;
-    reg [11:0] addr_length;
     reg [31:0] tmp;
     reg [3:0] i;
     reg [2:0] index;
@@ -484,50 +502,70 @@ module nts_engine_tb #( parameter integer verbose_output = 'h3);
         begin
           addr_key = API_ADDR_KEYMEM_KEY0_START;
           addr_keyid = API_ADDR_KEYMEM_KEY0_ID;
-          addr_length = API_ADDR_KEYMEM_KEY0_LENGTH;
         end
       1:
         begin
           addr_key = API_ADDR_KEYMEM_KEY1_START;
           addr_keyid = API_ADDR_KEYMEM_KEY1_ID;
-          addr_length = API_ADDR_KEYMEM_KEY1_LENGTH;
         end
       2:
         begin
           addr_key = API_ADDR_KEYMEM_KEY2_START;
           addr_keyid = API_ADDR_KEYMEM_KEY2_ID;
-          addr_length = API_ADDR_KEYMEM_KEY2_LENGTH;
         end
       3:
         begin
           addr_key = API_ADDR_KEYMEM_KEY3_START;
           addr_keyid = API_ADDR_KEYMEM_KEY3_ID;
-          addr_length = API_ADDR_KEYMEM_KEY3_LENGTH;
         end
       default: ;
     endcase
-    tmp = api_read32(API_ADDR_KEYMEM_ADDR_CTRL);
+    api_read32(tmp, API_ADDR_KEYMEM_ADDR_CTRL);
     tmp = tmp & ~ (1<<key_index);
-    api_set(1, 1, API_ADDR_KEYMEM_ADDR_CTRL, tmp, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+    api_write32(tmp, API_ADDR_KEYMEM_ADDR_CTRL);
     #10;
-    api_set(1, 1, addr_keyid, keyid, i_api_cs, i_api_we, i_api_address, i_api_write_data);
-    #10;
-    api_set(1, 1, addr_length, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+    api_write32(keyid, addr_keyid);
     #10;
     for (i = 0; i < 8; i = i + 1) begin
       index = i[2:0];
-      api_set(1, 1, addr_key + {8'b00, index}, key[32*index+:32], i_api_cs, i_api_we, i_api_address, i_api_write_data);
-      #10;
-    end
-    for (i = 0; i < 8; i = i + 1) begin
-      index = i[2:0];
-      api_set(1, 1, addr_key + {8'b01, index}, 0, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+      api_write32(key[32*index+:32], addr_key + {8'b00, index});
       #10;
     end
     tmp = tmp | (1<<key_index);
-    api_set(1, 1, API_ADDR_KEYMEM_ADDR_CTRL, tmp, i_api_cs, i_api_we, i_api_address, i_api_write_data);
-    #10;
-    api_set(0, 0, 0, tmp, i_api_cs, i_api_we, i_api_address, i_api_write_data);
+    api_write32(tmp, API_ADDR_KEYMEM_ADDR_CTRL);
+  end
+  endtask
+
+  task enable_engine;
+  begin
+    api_write32( 32'h0000_0001, API_ADDR_ENGINE_CTRL);
+  end
+  endtask
+
+
+  task init_noncegen;
+  begin
+    api_write32( 32'h5eb6_3bbb, API_ADDR_NONCEGEN_KEY0);
+    api_write32( 32'he01e_eed0, API_ADDR_NONCEGEN_KEY1);
+    api_write32( 32'h93cb_22bb, API_ADDR_NONCEGEN_KEY2);
+    api_write32( 32'h8f5a_cdc3, API_ADDR_NONCEGEN_KEY3);
+    api_write32( 32'h6adf_b183, API_ADDR_NONCEGEN_CONTEXT0);
+    api_write32( 32'ha4a2_c94a, API_ADDR_NONCEGEN_CONTEXT1);
+    api_write32( 32'h2f92_dab5, API_ADDR_NONCEGEN_CONTEXT2);
+    api_write32( 32'hade7_62a4, API_ADDR_NONCEGEN_CONTEXT3);
+    api_write32( 32'h7889_a5a1, API_ADDR_NONCEGEN_CONTEXT4);
+    api_write32( 32'hdead_beef, API_ADDR_NONCEGEN_CONTEXT5);
+    api_write32( {20'h000_0, 12'h000}, API_ADDR_NONCEGEN_LABEL);
+    api_write32( 32'h0000_0001, API_ADDR_NONCEGEN_CTRL);
+  end
+  endtask
+
+  task set_current_key( input [1:0] current_key );
+  begin : set_current_key_
+    reg [31:0] tmp;
+    api_read32(tmp, API_ADDR_KEYMEM_ADDR_CTRL);
+    tmp = { tmp[31:18], current_key, tmp[15:0] };
+    api_write32(tmp, API_ADDR_KEYMEM_ADDR_CTRL);
   end
   endtask
 
@@ -557,17 +595,33 @@ module nts_engine_tb #( parameter integer verbose_output = 'h3);
     `assert( o_dispatch_rx_packet_read_discard == 'b0 );
     `assert( o_dispatch_rx_fifo_rd_start == 'b0 );
 
+    begin : engine_sanity_check
+      reg [63:0] name_engine;
+      reg [63:0] name_keymem;
+      reg [63:0] name_timestamp;
+      api_read64(name_engine, API_ADDR_ENGINE_NAME0);
+      api_read64(name_keymem, API_ADDR_KEYMEM_NAME0);
+      api_read64(name_timestamp, API_ADDR_CLOCK_NAME0);
+      $display("%s:%0d Core: engine %h %s", `__FILE__, `__LINE__, name_engine, name_engine);
+      $display("%s:%0d Core: keymem %h %s", `__FILE__, `__LINE__, name_keymem, name_keymem);
+      `assert( name_engine == 64'h4e_54_53_5f_45_4e_47_4e ); // "NTS_ENGN"
+      `assert( name_keymem == 64'h6b_65_79_5f_6d_65_6d_20 ); // "key_mem "
+      `assert( name_timestamp == 64'h74_69_6d_65_73_74_6d_70 );  // "timestmp"
+    end
+
+    install_key_256bit( NTS_TEST_REQUEST_MASTER_KEY_ID_2, NTS_TEST_REQUEST_MASTER_KEY_2, 3 );
+    init_noncegen();
+    set_current_key(3);
+    enable_engine();
+
     #20
+    $display("%s:%0d o_busy=%h", `__FILE__, `__LINE__, o_busy);
+    while (o_busy) #10;
     $display("%s:%0d o_busy=%h", `__FILE__, `__LINE__, o_busy);
     `assert( o_busy == 'b0 );
 
-    #10 ;
-    `assert( api_read64(API_ADDR_ENGINE_NAME0) == 64'h4e_54_53_5f_45_4e_47_4e ); // "NTS_ENGN"
-    `assert( api_read64(API_ADDR_KEYMEM_NAME0) == 64'h6b_65_79_5f_6d_65_6d_20 ); // "key_mem "
-    `assert( api_read64(API_ADDR_CLOCK_NAME0) == 64'h74_69_6d_65_73_74_6d_70 );  // "timestmp"
 
     //install_key_256bit( NTS_TEST_REQUEST_MASTER_KEY_ID_1, NTS_TEST_REQUEST_MASTER_KEY_1, 0 );
-    install_key_256bit( NTS_TEST_REQUEST_MASTER_KEY_ID_2, NTS_TEST_REQUEST_MASTER_KEY_2, 3 );
     //install_key_256bit( NTS_TESTKEY0, 256'h00000000_00000001_00000002_00000003_00000004_00000005_00000006_00000007, 2 );
     //install_key_256bit( NTS_TESTKEY1, 256'hFF000000_FF000001_FF000002_FF000003_FF000004_FF000005_FF000006_FF000007, 3 );
 /*
@@ -700,11 +754,12 @@ module nts_engine_tb #( parameter integer verbose_output = 'h3);
     //----------------------------------------------------------------
 
     #100 ;
-    $display("%s:%0d: *** CORE: %s %s", `__FILE__, `__LINE__, api_read64(API_ADDR_ENGINE_NAME0), api_read32(API_ADDR_ENGINE_VERSION));
-    $display("%s:%0d: *** CORE: %s", `__FILE__, `__LINE__, api_read64(API_ADDR_CLOCK_NAME0));
-    $display("%s:%0d: *** CORE: %s", `__FILE__, `__LINE__, api_read64(API_ADDR_KEYMEM_NAME0));
-    $display("%s:%0d: *** DEBUG, Errors Crypto: %0d", `__FILE__, `__LINE__, api_read64(API_ADDR_DEBUG_ERR_CRYPTO));
-    $display("%s:%0d: *** DEBUG, Errors TxBuf: %0d", `__FILE__, `__LINE__, api_read64(API_ADDR_DEBUG_ERR_TXBUF));
+  //$display("%s:%0d: *** CORE: %s %s", `__FILE__, `__LINE__, api_read64(API_ADDR_ENGINE_NAME0), api_read32(API_ADDR_ENGINE_VERSION));
+  //$display("%s:%0d: *** CORE: %s", `__FILE__, `__LINE__, api_read64(API_ADDR_CLOCK_NAME0));
+  //$display("%s:%0d: *** CORE: %s", `__FILE__, `__LINE__, api_read64(API_ADDR_KEYMEM_NAME0));
+  //$display("%s:%0d: *** DEBUG, Errors Crypto: %0d", `__FILE__, `__LINE__, api_read64(API_ADDR_DEBUG_ERR_CRYPTO));
+  //$display("%s:%0d: *** DEBUG, Errors TxBuf: %0d", `__FILE__, `__LINE__, api_read64(API_ADDR_DEBUG_ERR_TXBUF));
+
 
     $display("Test stop: %s:%0d", `__FILE__, `__LINE__);
     $finish;
@@ -753,8 +808,19 @@ module nts_engine_tb #( parameter integer verbose_output = 'h3);
   // Debug debug debug
   //----------------------------------------------------------------
 
-  generate
-    if (verbose_output > 2) begin
+  reg leaving_reset;
+  always @(posedge i_clk or posedge i_areset)
+  if (i_areset) begin
+    leaving_reset <= 1;
+    if (verbose_output > 2) $display("%s:%0d reset", `__FILE__, `__LINE__);
+  end else if (leaving_reset) begin
+    leaving_reset <= 0;
+    if (verbose_output > 2) $display("%s:%0d reset no more, normal cycles", `__FILE__, `__LINE__);
+  end
+
+  if (verbose_output > 2) begin
+
+
       always @*
         $display("%s:%0d dut.parser_muxctrl_crypto: %h", `__FILE__, `__LINE__, dut.parser_muxctrl_crypto);
       always @*
@@ -821,7 +887,6 @@ module nts_engine_tb #( parameter integer verbose_output = 'h3);
       always @*
         $display("%s:%0d crypto.tag_in: %h", `__FILE__, `__LINE__, dut.crypto.core_tag_in);
     end
-  endgenerate
 
   //----------------------------------------------------------------
   // Testbench model: System Clock

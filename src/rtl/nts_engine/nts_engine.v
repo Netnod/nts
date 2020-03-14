@@ -191,8 +191,7 @@ module nts_engine #(
   wire                         parser_txbuf_sum_en;
   wire      [ADDR_WIDTH+3-1:0] parser_txbuf_sum_bytes;
   wire                         parser_txbuf_update_length;
-  wire                         parser_txbuf_ipv4_done;
-  wire                         parser_txbuf_ipv6_done;
+  wire                         parser_txbuf_transfer;
 
   wire                         txbuf_error;
   wire                         txbuf_busy;
@@ -770,8 +769,7 @@ module nts_engine #(
 
     .i_parser_update_length(parser_txbuf_update_length),
 
-    .i_parser_ipv4_done(parser_txbuf_ipv4_done),
-    .i_parser_ipv6_done(parser_txbuf_ipv6_done),
+    .i_parser_transfer(parser_txbuf_transfer),
 
     .o_parser_current_memory_full(txbuf_parser_full),
     .o_parser_current_empty(txbuf_parser_empty)
@@ -816,8 +814,7 @@ module nts_engine #(
    .o_tx_sum_en(parser_txbuf_sum_en),
    .o_tx_sum_bytes(parser_txbuf_sum_bytes),
    .o_tx_update_length(parser_txbuf_update_length),
-   .o_tx_ipv4_done(parser_txbuf_ipv4_done),
-   .o_tx_ipv6_done(parser_txbuf_ipv6_done),
+   .o_tx_transfer(parser_txbuf_transfer),
 
    .i_access_port_wait(access_port_wait_parser),
    .o_access_port_addr(access_port_addr_parser),

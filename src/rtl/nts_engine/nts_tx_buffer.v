@@ -66,8 +66,7 @@ module nts_tx_buffer #(
 
   input wire         i_parser_update_length,
 
-  input  wire        i_parser_ipv4_done,
-  input  wire        i_parser_ipv6_done,
+  input  wire        i_parser_transfer,
 
   output wire        o_parser_current_memory_full,
   output wire        o_parser_current_empty
@@ -208,7 +207,7 @@ module nts_tx_buffer #(
                    bad_input_reg;
 
   assign bad_input_new = (mem_state_reg[parser] == STATE_EMPTY) && //TODO raise error if multiple command signals risen
-                         (i_read_en || i_sum_en || i_parser_update_length || i_parser_ipv4_done || i_parser_ipv6_done);
+                         (i_read_en || i_sum_en || i_parser_update_length || i_parser_transfer);
 
 
   assign o_dispatch_tx_packet_available  = tx_packet_available_reg;
@@ -697,7 +696,7 @@ module nts_tx_buffer #(
                 bytes_last_word_new[parser] = { 1'b0, i_address_lo };
               end
             end
-            if (i_parser_ipv4_done || i_parser_ipv6_done) begin
+            if (i_parser_transfer) begin
               mem_state_we[parser] = 1;
               mem_state_new[parser] = STATE_FIFO_OUT;
             end

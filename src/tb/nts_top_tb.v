@@ -114,6 +114,20 @@ module nts_top_tb;
   localparam [11:0] API_ADDR_PARSER_ERROR_COUNT  = API_ADDR_PARSER_BASE + 'h14;
   localparam [11:0] API_ADDR_PARSER_ERROR_CAUSE  = API_ADDR_PARSER_BASE + 'h15;
   localparam [11:0] API_ADDR_PARSER_ERROR_SIZE   = API_ADDR_PARSER_BASE + 'h16;
+  localparam [11:0] API_ADDR_PARSER_MAC_CTRL     = API_ADDR_PARSER_BASE + 'h30;
+  localparam [11:0] API_ADDR_PARSER_IPV4_CTRL    = API_ADDR_PARSER_BASE + 'h31;
+  localparam [11:0] API_ADDR_PARSER_MAC_0        = API_ADDR_PARSER_BASE + 'h40;
+  localparam [11:0] API_ADDR_PARSER_MAC_1        = API_ADDR_PARSER_BASE + 'h42;
+  localparam [11:0] API_ADDR_PARSER_MAC_2        = API_ADDR_PARSER_BASE + 'h44;
+  localparam [11:0] API_ADDR_PARSER_MAC_3        = API_ADDR_PARSER_BASE + 'h46;
+  localparam [11:0] API_ADDR_PARSER_IPV4_0       = API_ADDR_PARSER_BASE + 'h050;
+  localparam [11:0] API_ADDR_PARSER_IPV4_1       = API_ADDR_PARSER_BASE + 'h051;
+  localparam [11:0] API_ADDR_PARSER_IPV4_2       = API_ADDR_PARSER_BASE + 'h052;
+  localparam [11:0] API_ADDR_PARSER_IPV4_3       = API_ADDR_PARSER_BASE + 'h053;
+  localparam [11:0] API_ADDR_PARSER_IPV4_4       = API_ADDR_PARSER_BASE + 'h054;
+  localparam [11:0] API_ADDR_PARSER_IPV4_5       = API_ADDR_PARSER_BASE + 'h055;
+  localparam [11:0] API_ADDR_PARSER_IPV4_6       = API_ADDR_PARSER_BASE + 'h056;
+  localparam [11:0] API_ADDR_PARSER_IPV4_7       = API_ADDR_PARSER_BASE + 'h057;
 
   localparam [11:0] API_DISPATCHER_ADDR_NAME               = 'h000;
   localparam [11:0] API_DISPATCHER_ADDR_VERSION            = 'h002;
@@ -182,10 +196,19 @@ module nts_top_tb;
 
   localparam DEBUG           = 1;
   localparam BENCHMARK       = 1;
-  localparam ENGINES         = 4;
+  localparam ENGINES         = 1;
   localparam API_ADDR_WIDTH  = 12;
   localparam API_RW_WIDTH    = 32;
   localparam MAC_DATA_WIDTH  = 64;
+
+  localparam [15:0] E_TYPE_ARP  =  16'h08_06;
+
+  localparam [15:0] ARP_HRD_ETHERNET = 16'h00_01;
+  localparam [15:0] ARP_PRO_IPV4     = 16'h08_00;
+  localparam [15:0] ARP_OP_REQUEST   = 16'h00_01;
+  localparam [15:0] ARP_OP_REPLY     = 16'h00_02;
+  localparam  [7:0] ARP_HLN_ETHERNET = 8'h6;
+  localparam  [7:0] ARP_PLN_IPV4     = 8'h4;
 
   //----------------------------------------------------------------
   // DUT Inputs, Outputs
@@ -325,6 +348,13 @@ module nts_top_tb;
   end
   endtask
 
+  task api_write64( input [63:0] data, input [11:0] engine, input [11:0] addr );
+  begin
+    api_write32( data[63:32], engine, addr );
+    api_write32( data[31:0], engine, addr + 1 );
+  end
+  endtask
+
   //----------------------------------------------------------------
   // Install key
   //----------------------------------------------------------------
@@ -420,6 +450,25 @@ module nts_top_tb;
   task enable_dispatcher;
   begin
     dispatcher_write32( 32'h0000_0001, API_DISPATCHER_ADDR_CTRL);
+  end
+  endtask
+
+  task init_arp ( input [11:0] engine );
+  begin
+    api_write64( {16'h00_00, 48'hFF_FE_FD_FC_FB_FA}, engine, API_ADDR_PARSER_MAC_0 );
+    api_write64( {16'h00_00, 48'hEF_EE_ED_EC_EB_EA}, engine, API_ADDR_PARSER_MAC_1 );
+    api_write64( {16'h00_00, 48'hDF_DE_DD_DC_DB_DA}, engine, API_ADDR_PARSER_MAC_2 );
+    api_write64( {16'h00_00, 48'hCF_CE_CD_CC_CB_CA}, engine, API_ADDR_PARSER_MAC_3 );
+    api_write32( 32'h80_A1_A2_A3, engine, API_ADDR_PARSER_IPV4_0 );
+    api_write32( 32'h90_A1_A2_A3, engine, API_ADDR_PARSER_IPV4_1 );
+    api_write32( 32'hA0_A1_A2_A3, engine, API_ADDR_PARSER_IPV4_2 );
+    api_write32( 32'hB0_A1_A2_A3, engine, API_ADDR_PARSER_IPV4_3 );
+    api_write32( 32'hC0_A1_A2_A3, engine, API_ADDR_PARSER_IPV4_4 );
+    api_write32( 32'hD0_A1_A2_A3, engine, API_ADDR_PARSER_IPV4_5 );
+    api_write32( 32'hE0_A1_A2_A3, engine, API_ADDR_PARSER_IPV4_6 );
+    api_write32( 32'hF0_A1_A2_A3, engine, API_ADDR_PARSER_IPV4_7 );
+    api_write32( 32'h0f, engine, API_ADDR_PARSER_MAC_CTRL );
+    api_write32( 32'hff, engine, API_ADDR_PARSER_IPV4_CTRL );
   end
   endtask
 
@@ -631,6 +680,26 @@ module nts_top_tb;
   end
   endtask
 
+  task arp_request (input [47:0] ethernet_src, input [31:0] ip_src, input [31:0] ip_dst );
+  begin : arp_request_
+    //0000   ff ff ff ff ff ff 98 03 9b 3c 1c 66 08 06 00 01   ÿÿÿÿÿÿ...<.f....
+    //0010   08 00 06 04 00 01 98 03 9b 3c 1c 66 c0 a8 28 01   .........<.fÀ¨(.
+    //0020   00 00 00 00 00 00 c0 a8 28 02                     ......À¨(.
+    reg [42*8-1:0] packet;
+    reg [47:0] ethernet_dst;
+    reg [47:0] arp_dst;
+    arp_dst      = 48'h00_00_00_00_00_00;
+    ethernet_dst = 48'hff_ff_ff_ff_ff_ff;
+    packet       = { ethernet_dst, ethernet_src, E_TYPE_ARP,
+                     ARP_HRD_ETHERNET, ARP_PRO_IPV4,
+                     ARP_HLN_ETHERNET, ARP_PLN_IPV4, ARP_OP_REQUEST,
+                     ethernet_src, ip_src,
+                     arp_dst, ip_dst
+                    };
+    send_packet({65200'h0, packet}, 336, 0);
+  end
+  endtask
+
   localparam  [31:0] TRACE_MASTER_KEY_ID = 32'hf001_fefe;
   localparam [255:0] TRACE_MASTER_KEY = { 128'hf001_AAA0_f001_AAA1_f001_AAA2_f001_AAA3,
                                           128'hf001_BBB0_f001_BBB1_f001_BBB2_f001_BBB3 };
@@ -663,6 +732,7 @@ module nts_top_tb;
       for (i = 0; i < 100; i = i + 1) begin
         for (engine = 0; engine < ENGINES; engine = engine + 1) begin
           case (i)
+            2: init_arp( engine );
             5: install_key_256bit( engine, NTS_TEST_REQUEST_MASTER_KEY_ID_1, NTS_TEST_REQUEST_MASTER_KEY_1, 0 );
             6: install_key_256bit( engine, NTS_TEST_REQUEST_MASTER_KEY_ID_2, NTS_TEST_REQUEST_MASTER_KEY_2, 1 );
             7: install_key_256bit( engine, TRACE_MASTER_KEY_ID, TRACE_MASTER_KEY, 2 );
@@ -674,6 +744,15 @@ module nts_top_tb;
           endcase
         end
         if (TEST_NORMAL) begin
+          arp_request(48'hF0_F1_F2_F3_F4_F5, 32'hE0_E1_E2_E3, 32'hD0_D1_D2_D3);
+          arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'h80_A1_A2_A3);
+          arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'h90_A1_A2_A3);
+          arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'hA0_A1_A2_A3);
+          arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'hB0_A1_A2_A3);
+          arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'hC0_A1_A2_A3);
+          arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'hD0_A1_A2_A3);
+          arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'hE0_A1_A2_A3);
+          arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'hF0_A1_A2_A3);
           send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_KEYID}, 2160, 0);
           send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_KEYID}, 2160, 0);
           send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_COOKIE}, 2160, 0);
@@ -708,12 +787,20 @@ module nts_top_tb;
       fuzz_ui();
       #900000;
     end
-    if (TEST_NORMAL) begin
-      send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_KEYID}, 2160, 0);
-      #900000;
-    end
     if (TEST_UI36 > 0) begin
       test_ui36();
+    end
+    if (TEST_NORMAL) begin
+      send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_KEYID}, 2160, 0);
+      #20000;
+      arp_request(48'hF0_F1_F2_F3_F4_F5, 32'hE0_E1_E2_E3, 32'hD0_D1_D2_D3);
+      #20000;
+      arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'h80_A1_A2_A3);
+      #20000;
+      arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'h90_A1_A2_A3);
+      #20000;
+      arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'hA0_A1_A2_A3);
+      #900000;
     end
 
     //----------------------------------------------------------------
@@ -1076,7 +1163,7 @@ module nts_top_tb;
     reg [63:0] old_tick_counter;
     reg [63:0] old_tick_counter_crypto;
     reg [63:0] old_tick_counter_packet;
-    reg  [5:0] old_parser_state;
+    reg  [6:0] old_parser_state;
     reg  [4:0] old_parser_state_crypto;
 
     always  @(posedge i_clk or posedge i_areset)
@@ -1099,7 +1186,7 @@ module nts_top_tb;
           old_parser_state <= dut.genblk1[0].engine.parser.state_reg;
 
           if (old_parser_state != 0)
-            $display("%s:%0d BENCHMARK: dut.genblk1[0].engine.parser.state_reg(%0d)->(%0d): %0d ticks", `__FILE__, `__LINE__,
+            $display("%s:%0d BENCHMARK: dut.genblk1[0].engine.parser.state_reg(%h)->(%h): %0d ticks", `__FILE__, `__LINE__,
                old_parser_state, dut.genblk1[0].engine.parser.state_reg, tick_counter - old_tick_counter);
           if (dut.genblk1[0].engine.parser.state_reg == 0)
             $display("%s:%0d BENCHMARK: Packet took %0d ticks to process", `__FILE__, `__LINE__, tick_counter - old_tick_counter_packet);

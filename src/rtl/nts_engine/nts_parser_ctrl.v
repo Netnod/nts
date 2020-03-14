@@ -71,8 +71,7 @@ module nts_parser_ctrl #(
   output wire                         o_tx_sum_en,
   output wire      [ADDR_WIDTH+3-1:0] o_tx_sum_bytes,
   output wire                         o_tx_update_length,
-  output wire                         o_tx_ipv4_done,
-  output wire                         o_tx_ipv6_done,
+  output wire                         o_tx_transfer,
 
   input  wire                         i_access_port_wait,
   output wire      [ADDR_WIDTH+3-1:0] o_access_port_addr,
@@ -157,6 +156,27 @@ module nts_parser_ctrl #(
   localparam ADDR_ERROR_CAUSE  = 'h15;
   localparam ADDR_ERROR_SIZE   = 'h16;
 
+  localparam ADDR_MAC_CTRL  = 'h30;
+  localparam ADDR_IPV4_CTRL = 'h31;
+
+  localparam ADDR_MAC_0_MSB = 'h40;
+  localparam ADDR_MAC_0_LSB = 'h41;
+  localparam ADDR_MAC_1_MSB = 'h42;
+  localparam ADDR_MAC_1_LSB = 'h43;
+  localparam ADDR_MAC_2_MSB = 'h44;
+  localparam ADDR_MAC_2_LSB = 'h45;
+  localparam ADDR_MAC_3_MSB = 'h46;
+  localparam ADDR_MAC_3_LSB = 'h47;
+
+  localparam ADDR_IPV4_0 = 'h050;
+  localparam ADDR_IPV4_1 = 'h051;
+  localparam ADDR_IPV4_2 = 'h052;
+  localparam ADDR_IPV4_3 = 'h053;
+  localparam ADDR_IPV4_4 = 'h054;
+  localparam ADDR_IPV4_5 = 'h055;
+  localparam ADDR_IPV4_6 = 'h056;
+  localparam ADDR_IPV4_7 = 'h057;
+
   //----------------------------------------------------------------
   // Error causes observable over API
   //----------------------------------------------------------------
@@ -184,50 +204,58 @@ module nts_parser_ctrl #(
   // Internal constant and parameter definitions.
   //----------------------------------------------------------------
 
-  localparam BITS_STATE = 6;
+  localparam BITS_STATE = 7;
 
-  localparam [BITS_STATE-1:0] STATE_IDLE                     = 6'h00;
-  localparam [BITS_STATE-1:0] STATE_COPY                     = 6'h01; //RX handling states
-  localparam [BITS_STATE-1:0] STATE_LENGTH_CHECKS            = 6'h02;
-  localparam [BITS_STATE-1:0] STATE_EXTRACT_EXT_FROM_RAM     = 6'h03;
-  localparam [BITS_STATE-1:0] STATE_EXTENSIONS_EXTRACTED     = 6'h04;
-  localparam [BITS_STATE-1:0] STATE_EXTRACT_COOKIE_FROM_RAM  = 6'h05;
-  localparam [BITS_STATE-1:0] STATE_VERIFY_KEY_FROM_COOKIE1  = 6'h06;
-  localparam [BITS_STATE-1:0] STATE_VERIFY_KEY_FROM_COOKIE2  = 6'h07;
-  localparam [BITS_STATE-1:0] STATE_RX_AUTH_COOKIE           = 6'h08;
-  localparam [BITS_STATE-1:0] STATE_RX_AUTH_PACKET           = 6'h09;
+  localparam [BITS_STATE-1:0] STATE_IDLE                     = 7'h00;
+  localparam [BITS_STATE-1:0] STATE_COPY                     = 7'h01; //RX handling states
+  localparam [BITS_STATE-1:0] STATE_SELECT_PROTOCOL_HANDLER  = 7'h02;
 
-  localparam [BITS_STATE-1:0] STATE_WRITE_HEADER_IPV4_IPV6   = 6'h0a; //TX handling states
-  localparam [BITS_STATE-1:0] STATE_TIMESTAMP                = 6'h0c;
-  localparam [BITS_STATE-1:0] STATE_TIMESTAMP_WAIT           = 6'h0d;
-  localparam [BITS_STATE-1:0] STATE_UNIQUE_IDENTIFIER_COPY_0 = 6'h0e;
-  localparam [BITS_STATE-1:0] STATE_UNIQUE_IDENTIFIER_COPY_1 = 6'h0f;
-  localparam [BITS_STATE-1:0] STATE_RETRIVE_CURRENT_KEY_0    = 6'h10;
-  localparam [BITS_STATE-1:0] STATE_RETRIVE_CURRENT_KEY_1    = 6'h11;
-  localparam [BITS_STATE-1:0] STATE_RESET_EXTRA_COOKIES      = 6'h15;
-  localparam [BITS_STATE-1:0] STATE_ADDITIONAL_COOKIES_CTRL  = 6'h16;
-  localparam [BITS_STATE-1:0] STATE_GENERATE_EXTRA_COOKIE    = 6'h17;
-  localparam [BITS_STATE-1:0] STATE_RECORD_EXTRA_COOKIE      = 6'h18;
-  localparam [BITS_STATE-1:0] STATE_COPY_PACKET_TO_CRYPTO_AD = 6'h19;
-  localparam [BITS_STATE-1:0] STATE_TX_AUTH_PACKET           = 6'h1a;
-  localparam [BITS_STATE-1:0] STATE_TX_EMIT_TL_NL_CL         = 6'h1b;
-  localparam [BITS_STATE-1:0] STATE_TX_EMIT_NONCE_CIPHERTEXT = 6'h1c;
-  localparam [BITS_STATE-1:0] STATE_TX_UPDATE_LENGTH         = 6'h1d;
-  localparam [BITS_STATE-1:0] STATE_TX_WRITE_UDP_LENGTH      = 6'h1e;
-  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_RESET       = 6'h1f;
-  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_PS_SRCADDR  = 6'h20;
-  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_PS_UDPLLEN  = 6'h21;
-  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_DATAGRAM    = 6'h22;
-  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_WAIT        = 6'h23;
-  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_UDP_CSUM       = 6'h24;
-  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_UDP_CSUM_DELAY = 6'h25;
-  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_IP_HEADER_0    = 6'h26;
-  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_IP_HEADER_1    = 6'h27;
-  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_IP_HEADR_DELAY = 6'h28;
-  localparam [BITS_STATE-1:0] STATE_TRANSFER_PACKET          = 6'h29;
+  localparam [BITS_STATE-1:0] STATE_ARP_INIT                 = 7'h10;
+  localparam [BITS_STATE-1:0] STATE_ARP_RESPOND              = 7'h11;
 
-  localparam [BITS_STATE-1:0] STATE_ERROR_UNIMPLEMENTED      = 6'h2e;
-  localparam [BITS_STATE-1:0] STATE_ERROR_GENERAL            = 6'h2f;
+  localparam [BITS_STATE-1:0] STATE_LENGTH_CHECKS            = 7'h30;
+  localparam [BITS_STATE-1:0] STATE_EXTRACT_EXT_FROM_RAM     = 7'h31;
+  localparam [BITS_STATE-1:0] STATE_EXTENSIONS_EXTRACTED     = 7'h32;
+  localparam [BITS_STATE-1:0] STATE_EXTRACT_COOKIE_FROM_RAM  = 7'h33;
+  localparam [BITS_STATE-1:0] STATE_VERIFY_KEY_FROM_COOKIE1  = 7'h34;
+  localparam [BITS_STATE-1:0] STATE_VERIFY_KEY_FROM_COOKIE2  = 7'h35;
+  localparam [BITS_STATE-1:0] STATE_RX_AUTH_COOKIE           = 7'h36;
+  localparam [BITS_STATE-1:0] STATE_RX_AUTH_PACKET           = 7'h37;
+  localparam [BITS_STATE-1:0] STATE_WRITE_HEADER_IPV4_IPV6   = 7'h38; //TX handling states
+
+  localparam [BITS_STATE-1:0] STATE_TIMESTAMP                = 7'h40;
+  localparam [BITS_STATE-1:0] STATE_TIMESTAMP_WAIT           = 7'h41;
+
+  localparam [BITS_STATE-1:0] STATE_UNIQUE_IDENTIFIER_COPY_0 = 7'h50;
+  localparam [BITS_STATE-1:0] STATE_UNIQUE_IDENTIFIER_COPY_1 = 7'h51;
+  localparam [BITS_STATE-1:0] STATE_RETRIVE_CURRENT_KEY_0    = 7'h52;
+  localparam [BITS_STATE-1:0] STATE_RETRIVE_CURRENT_KEY_1    = 7'h53;
+  localparam [BITS_STATE-1:0] STATE_RESET_EXTRA_COOKIES      = 7'h54;
+  localparam [BITS_STATE-1:0] STATE_ADDITIONAL_COOKIES_CTRL  = 7'h55;
+  localparam [BITS_STATE-1:0] STATE_GENERATE_EXTRA_COOKIE    = 7'h56;
+  localparam [BITS_STATE-1:0] STATE_RECORD_EXTRA_COOKIE      = 7'h57;
+  localparam [BITS_STATE-1:0] STATE_COPY_PACKET_TO_CRYPTO_AD = 7'h58;
+  localparam [BITS_STATE-1:0] STATE_TX_AUTH_PACKET           = 7'h59;
+  localparam [BITS_STATE-1:0] STATE_TX_EMIT_TL_NL_CL         = 7'h5a;
+  localparam [BITS_STATE-1:0] STATE_TX_EMIT_NONCE_CIPHERTEXT = 7'h5b;
+
+  localparam [BITS_STATE-1:0] STATE_TX_UPDATE_LENGTH         = 7'h60;
+  localparam [BITS_STATE-1:0] STATE_TX_WRITE_UDP_LENGTH      = 7'h61;
+  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_RESET       = 7'h62;
+  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_PS_SRCADDR  = 7'h63;
+  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_PS_UDPLLEN  = 7'h64;
+  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_DATAGRAM    = 7'h65;
+  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_WAIT        = 7'h66;
+  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_UDP_CSUM       = 7'h67;
+  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_UDP_CSUM_DELAY = 7'h68;
+  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_IP_HEADER_0    = 7'h69;
+  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_IP_HEADER_1    = 7'h6a;
+  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_IP_HEADR_DELAY = 7'h6b;
+
+  localparam [BITS_STATE-1:0] STATE_TRANSFER_PACKET          = 7'h70;
+
+  localparam [BITS_STATE-1:0] STATE_ERROR_UNIMPLEMENTED      = 7'h7e;
+  localparam [BITS_STATE-1:0] STATE_ERROR_GENERAL            = 7'h7f;
 
   localparam CRYPTO_FSM_IDLE                 = 'h00;
   localparam CRYPTO_FSM_WAIT_THEN_SUCCESS    = 'h01; // wait for complete. Always indicate success.
@@ -284,6 +312,7 @@ module nts_parser_ctrl #(
   localparam NTP_EXTENSION_MINIMUM_LENGTH = 16; //rfc7822 7.5
   localparam NTP_EXTENSION_MAXMIMUM_LENGTH = 65532; //rfc7822 7.5
 
+  localparam [15:0] E_TYPE_ARP  =  16'h08_06;
   localparam [15:0] E_TYPE_IPV4 =  16'h08_00;
   localparam [15:0] E_TYPE_IPV6 =  16'h86_DD;
 
@@ -300,12 +329,20 @@ module nts_parser_ctrl #(
   localparam [19:0] IPV6_FL       = 20'h0;
   localparam  [7:0] IPV6_HOPLIMIT = IPV4_TTL;
 
+  localparam [15:0] ARP_HRD_ETHERNET = 16'h00_01;
+  localparam [15:0] ARP_PRO_IPV4     = 16'h08_00;
+  localparam [15:0] ARP_OP_REQUEST   = 16'h00_01;
+  localparam [15:0] ARP_OP_REPLY     = 16'h00_02;
+  localparam  [7:0] ARP_HLN_ETHERNET = 8'h6;
+  localparam  [7:0] ARP_PLN_IPV4     = 8'h4;
+
   localparam ADDR_IPV4_START_NTP = 5 * 8 + 2;
   localparam ADDR_IPV6_START_NTP = 7 * 8 + 6;
 
   localparam HEADER_LENGTH_ETHERNET = 6+6+2;
   localparam HEADER_LENGTH_IPV4     = 5*4; //IHL=5, word size 4 bytes.
   localparam HEADER_LENGTH_IPV6     = 40;
+  localparam HEADER_LENGTH_ARP      = 28;
 
   localparam OFFSET_ETH_IPV4_SRCADDR    = HEADER_LENGTH_ETHERNET + 12;
   localparam OFFSET_ETH_IPV6_SRCADDR    = HEADER_LENGTH_ETHERNET + 8;
@@ -334,6 +371,56 @@ module nts_parser_ctrl #(
   reg                         access_port_wordsize_we;
   reg                   [2:0] access_port_wordsize_new;
   reg                   [2:0] access_port_wordsize_reg;
+
+  reg          addr_ipv4_ctrl_we;
+  reg    [7:0] addr_ipv4_ctrl_new;
+  reg    [7:0] addr_ipv4_ctrl_reg;
+
+  reg [31 : 0] addr_ipv4_new;
+  reg [31 : 0] addr_ipv4_0_reg;
+  reg          addr_ipv4_0_we;
+  reg [31 : 0] addr_ipv4_1_reg;
+  reg          addr_ipv4_1_we;
+  reg [31 : 0] addr_ipv4_2_reg;
+  reg          addr_ipv4_2_we;
+  reg [31 : 0] addr_ipv4_3_reg;
+  reg          addr_ipv4_3_we;
+  reg [31 : 0] addr_ipv4_4_reg;
+  reg          addr_ipv4_4_we;
+  reg [31 : 0] addr_ipv4_5_reg;
+  reg          addr_ipv4_5_we;
+  reg [31 : 0] addr_ipv4_6_reg;
+  reg          addr_ipv4_6_we;
+  reg [31 : 0] addr_ipv4_7_reg;
+  reg          addr_ipv4_7_we;
+
+  reg          addr_mac_ctrl_we;
+  reg    [3:0] addr_mac_ctrl_new;
+  reg    [3:0] addr_mac_ctrl_reg;
+
+  reg [15 : 0] addr_mac_msb_new;
+  reg [31 : 0] addr_mac_lsb_new;
+  reg [31 : 0] addr_mac0_lsb_reg;
+  reg [15 : 0] addr_mac0_msb_reg;
+  reg          addr_mac0_lsb_we;
+  reg          addr_mac0_msb_we;
+  reg [31 : 0] addr_mac1_lsb_reg;
+  reg [15 : 0] addr_mac1_msb_reg;
+  reg          addr_mac1_lsb_we;
+  reg          addr_mac1_msb_we;
+  reg [31 : 0] addr_mac2_lsb_reg;
+  reg [15 : 0] addr_mac2_msb_reg;
+  reg          addr_mac2_lsb_we;
+  reg          addr_mac2_msb_we;
+  reg [31 : 0] addr_mac3_lsb_reg;
+  reg [15 : 0] addr_mac3_msb_reg;
+  reg          addr_mac3_lsb_we;
+  reg          addr_mac3_msb_we;
+
+  reg          arp_match_new;
+  reg          arp_match_reg;
+  reg [47 : 0] arp_match_mac_new;
+  reg [47 : 0] arp_match_mac_reg;
 
   reg                         cookie_server_id_we;
   reg                  [31:0] cookie_server_id_new;
@@ -399,6 +486,34 @@ module nts_parser_ctrl #(
   reg       [ADDR_WIDTH+3-1:0] memory_address_next_reg;
   reg                          memory_address_failure_reg;
   reg                          memory_address_lastbyte_read_reg;
+
+  reg                          ipdecode_arp_hrd_we;
+  reg                   [15:0] ipdecode_arp_hrd_new;
+  reg                   [15:0] ipdecode_arp_hrd_reg;
+  reg                          ipdecode_arp_pro_we;
+  reg                   [15:0] ipdecode_arp_pro_new;
+  reg                   [15:0] ipdecode_arp_pro_reg;
+  reg                          ipdecode_arp_hln_we;
+  reg                    [7:0] ipdecode_arp_hln_new;
+  reg                    [7:0] ipdecode_arp_hln_reg;
+  reg                          ipdecode_arp_pln_we;
+  reg                    [7:0] ipdecode_arp_pln_new;
+  reg                    [7:0] ipdecode_arp_pln_reg;
+  reg                          ipdecode_arp_op_we;
+  reg                   [15:0] ipdecode_arp_op_new;
+  reg                   [15:0] ipdecode_arp_op_reg;
+  reg                          ipdecode_arp_sha_we;
+  reg                   [47:0] ipdecode_arp_sha_new;
+  reg                   [47:0] ipdecode_arp_sha_reg;
+  reg                          ipdecode_arp_spa_we;
+  reg                   [31:0] ipdecode_arp_spa_new;
+  reg                   [31:0] ipdecode_arp_spa_reg;
+//reg                          ipdecode_arp_tha_we;
+//reg                   [47:0] ipdecode_arp_tha_new;
+//reg                   [47:0] ipdecode_arp_tha_reg;
+  reg                          ipdecode_arp_tpa_we;
+  reg                   [31:0] ipdecode_arp_tpa_new;
+  reg                   [31:0] ipdecode_arp_tpa_reg;
 
   reg                          ipdecode_ethernet_mac_dst_we;
   reg                   [47:0] ipdecode_ethernet_mac_dst_new;
@@ -523,6 +638,10 @@ module nts_parser_ctrl #(
   reg [15:0] tx_ciphertext_length_new;
   reg [15:0] tx_ciphertext_length_reg;
 
+  reg        tx_header_arp_index_we;
+  reg  [2:0] tx_header_arp_index_new;
+  reg  [2:0] tx_header_arp_index_reg;
+
   reg        tx_header_ipv4_index_we;
   reg  [2:0] tx_header_ipv4_index_new;
   reg  [2:0] tx_header_ipv4_index_reg;
@@ -594,6 +713,8 @@ module nts_parser_ctrl #(
   reg                    crypto_tx_op_store_cookiebuf;
   reg                    crypto_tx_op_store_nonce_tag;
 
+  wire detect_arp;
+  wire detect_arp_good;
   wire detect_ipv4;
   wire detect_ipv4_bad;
   wire detect_ipv6;
@@ -612,6 +733,7 @@ module nts_parser_ctrl #(
   wire    [335:0] tx_header_ethernet_ipv4_udp;
   wire    [495:0] tx_header_ethernet_ipv6_udp;
   wire     [63:0] tx_header_udp;
+  wire [42*8-1:0] tx_header_ethernet_arp;
 
   reg                    tx_address_internal;
   reg [ADDR_WIDTH+3-1:0] tx_address;
@@ -628,6 +750,16 @@ module nts_parser_ctrl #(
   //----------------------------------------------------------------
 
   assign cookies_to_emit = 1 + { 1'b0, nts_valid_placeholders_reg };
+
+  assign detect_arp      = ipdecode_ethernet_protocol_reg == E_TYPE_ARP;
+
+  assign detect_arp_good = ipdecode_ethernet_protocol_reg == E_TYPE_ARP &&
+                           ipdecode_arp_hrd_reg == ARP_HRD_ETHERNET &&
+                           ipdecode_arp_pro_reg == ARP_PRO_IPV4 &&
+                           ipdecode_arp_op_reg == ARP_OP_REQUEST &&
+                           ipdecode_arp_hln_reg == ARP_HLN_ETHERNET &&
+                           ipdecode_arp_pln_reg == ARP_PLN_IPV4;
+
 
   assign detect_ipv4     = (ipdecode_ethernet_protocol_reg == E_TYPE_IPV4) && (ipdecode_ip_version_reg == IP_V4);
   assign detect_ipv4_bad = detect_ipv4 && ipdecode_ip4_ihl_reg != 5;
@@ -651,9 +783,8 @@ module nts_parser_ctrl #(
   assign o_keymem_get_key_with_id = keymem_get_key_with_id_reg;
   assign o_keymem_server_id       = keymem_server_id_reg;
 
-  assign o_tx_clear     = state_reg == STATE_ERROR_GENERAL;
-  assign o_tx_ipv4_done = detect_ipv4 && state_reg == STATE_TRANSFER_PACKET;
-  assign o_tx_ipv6_done = detect_ipv6 && state_reg == STATE_TRANSFER_PACKET;
+  assign o_tx_clear         = state_reg == STATE_ERROR_GENERAL;
+  assign o_tx_transfer      = state_reg == STATE_TRANSFER_PACKET;
   assign o_tx_addr_internal = tx_address_internal;
   assign o_tx_addr          = tx_address;
   assign o_tx_update_length = tx_update_length;
@@ -723,6 +854,21 @@ module nts_parser_ctrl #(
                                 ipdecode_ethernet_mac_dst_reg,
                                 tx_ethernet_type
                               };
+
+  assign tx_header_ethernet_arp = {
+                                    ipdecode_ethernet_mac_src_reg,
+                                    arp_match_mac_reg,
+                                    E_TYPE_ARP,
+                                    ARP_HRD_ETHERNET,
+                                    ARP_PRO_IPV4,
+                                    ARP_HLN_ETHERNET,
+                                    ARP_PLN_IPV4,
+                                    ARP_OP_REPLY,
+                                    arp_match_mac_reg,
+                                    ipdecode_arp_tpa_reg,
+                                    ipdecode_arp_sha_reg,
+                                    ipdecode_arp_spa_reg
+                                  };
 
   assign tx_header_ipv4_nocsum0 = {
            IP_V4, 4'h5, IPV4_TOS, tx_ipv4_totlen_reg,  //|Version|  IHL  |Type of Service|          Total Length         |
@@ -796,9 +942,37 @@ module nts_parser_ctrl #(
 
   always @*
   begin
+    addr_ipv4_ctrl_we = 0;
+    addr_ipv4_ctrl_new = 0;
+
+    addr_ipv4_0_we = 0;
+    addr_ipv4_1_we = 0;
+    addr_ipv4_2_we = 0;
+    addr_ipv4_3_we = 0;
+    addr_ipv4_4_we = 0;
+    addr_ipv4_5_we = 0;
+    addr_ipv4_6_we = 0;
+    addr_ipv4_7_we = 0;
+    addr_ipv4_new = i_api_write_data;
+
+    addr_mac_ctrl_we = 0;
+    addr_mac_ctrl_new = 0;
+
+    addr_mac0_lsb_we = 0;
+    addr_mac0_msb_we = 0;
+    addr_mac1_lsb_we = 0;
+    addr_mac1_msb_we = 0;
+    addr_mac2_lsb_we = 0;
+    addr_mac2_msb_we = 0;
+    addr_mac3_lsb_we = 0;
+    addr_mac3_msb_we = 0;
+    addr_mac_msb_new = i_api_write_data[15:0];
+    addr_mac_lsb_new = i_api_write_data;
+
     api_dummy_we = 0;
     api_dummy_new = 0;
     api_read_data = 0;
+
     if (i_api_cs) begin
       if (i_api_we) begin
         case (i_api_address)
@@ -807,6 +981,33 @@ module nts_parser_ctrl #(
               api_dummy_we = 1;
               api_dummy_new = i_api_write_data;
             end
+          ADDR_MAC_CTRL:
+            begin
+              addr_mac_ctrl_we = 1;
+              addr_mac_ctrl_new = i_api_write_data[3:0];
+            end
+          ADDR_IPV4_CTRL:
+            begin
+              addr_ipv4_ctrl_we = 1;
+              addr_ipv4_ctrl_new = i_api_write_data[7:0];
+            end
+          ADDR_MAC_0_MSB: addr_mac0_msb_we = 1;
+          ADDR_MAC_0_LSB: addr_mac0_lsb_we = 1;
+          ADDR_MAC_1_MSB: addr_mac1_msb_we = 1;
+          ADDR_MAC_1_LSB: addr_mac1_lsb_we = 1;
+          ADDR_MAC_2_MSB: addr_mac2_msb_we = 1;
+          ADDR_MAC_2_LSB: addr_mac2_lsb_we = 1;
+          ADDR_MAC_3_MSB: addr_mac3_msb_we = 1;
+          ADDR_MAC_3_LSB: addr_mac3_lsb_we = 1;
+
+          ADDR_IPV4_0: addr_ipv4_0_we = 1;
+          ADDR_IPV4_1: addr_ipv4_1_we = 1;
+          ADDR_IPV4_2: addr_ipv4_2_we = 1;
+          ADDR_IPV4_3: addr_ipv4_3_we = 1;
+          ADDR_IPV4_4: addr_ipv4_4_we = 1;
+          ADDR_IPV4_5: addr_ipv4_5_we = 1;
+          ADDR_IPV4_6: addr_ipv4_6_we = 1;
+          ADDR_IPV4_7: addr_ipv4_7_we = 1;
           default: ;
         endcase
       end else begin
@@ -921,7 +1122,32 @@ module nts_parser_ctrl #(
       access_port_rd_en_reg      <= 'b0;
       access_port_wordsize_reg   <= 'b0;
 
+      addr_ipv4_ctrl_reg <= 0;
+
+      addr_ipv4_0_reg <= 0;
+      addr_ipv4_1_reg <= 0;
+      addr_ipv4_2_reg <= 0;
+      addr_ipv4_3_reg <= 0;
+      addr_ipv4_4_reg <= 0;
+      addr_ipv4_5_reg <= 0;
+      addr_ipv4_6_reg <= 0;
+      addr_ipv4_7_reg <= 0;
+
+      addr_mac_ctrl_reg <= 0;
+
+      addr_mac0_lsb_reg <= 0;
+      addr_mac0_msb_reg <= 0;
+      addr_mac1_lsb_reg <= 0;
+      addr_mac1_msb_reg <= 0;
+      addr_mac2_lsb_reg <= 0;
+      addr_mac2_msb_reg <= 0;
+      addr_mac3_lsb_reg <= 0;
+      addr_mac3_msb_reg <= 0;
+
       api_dummy_reg              <= 32'h64_75_4d_79; //"duMy"
+
+      arp_match_reg              <= 0;
+      arp_match_mac_reg          <= 0;
 
       cookie_server_id_reg       <= 'b0;
       cookies_count_reg          <= 0;
@@ -936,10 +1162,22 @@ module nts_parser_ctrl #(
       error_size_reg             <= 'b0;
       error_state_reg            <= 'b0;
 
+      ipdecode_arp_hrd_reg       <= 'b0;
+      ipdecode_arp_pro_reg       <= 'b0;
+      ipdecode_arp_hln_reg       <= 'b0;
+      ipdecode_arp_pln_reg       <= 'b0;
+      ipdecode_arp_op_reg        <= 'b0;
+      ipdecode_arp_sha_reg       <= 'b0;
+      ipdecode_arp_spa_reg       <= 'b0;
+    //ipdecode_arp_tha_reg       <= 'b0;
+      ipdecode_arp_tpa_reg       <= 'b0;
+
       ipdecode_ethernet_mac_dst_reg  <= 0;
       ipdecode_ethernet_mac_src_reg  <= 0;
       ipdecode_ethernet_protocol_reg <= 0;
+
       ipdecode_ip_version_reg    <= 'b0;
+
       ipdecode_ip4_ihl_reg       <= 'b0;
       ipdecode_ip4_ip_dst_reg    <= 'b0;
       ipdecode_ip4_ip_src_reg    <= 'b0;
@@ -987,8 +1225,9 @@ module nts_parser_ctrl #(
 
       tx_authenticator_length_reg <= 0;
       tx_ciphertext_length_reg <= 0;
+      tx_header_arp_index_reg <= 0;
       tx_header_ipv4_index_reg <= 0;
-      tx_header_ipv4_index_reg <= 0;
+      tx_header_ipv6_index_reg <= 0;
       tx_ipv4_csum_reg <= 0;
       tx_ipv4_totlen_reg <= 0;
       tx_udp_checksum_reg <= 0; //TODO implement
@@ -1019,8 +1258,65 @@ module nts_parser_ctrl #(
       if (access_port_wordsize_we)
         access_port_wordsize_reg <= access_port_wordsize_new;
 
+      if (addr_ipv4_ctrl_we)
+        addr_ipv4_ctrl_reg <= addr_ipv4_ctrl_new;
+
+      if (addr_ipv4_0_we)
+        addr_ipv4_0_reg <= addr_ipv4_new;
+
+      if (addr_ipv4_1_we)
+        addr_ipv4_1_reg <= addr_ipv4_new;
+
+      if (addr_ipv4_2_we)
+        addr_ipv4_2_reg <= addr_ipv4_new;
+
+      if (addr_ipv4_3_we)
+        addr_ipv4_3_reg <= addr_ipv4_new;
+
+      if (addr_ipv4_4_we)
+        addr_ipv4_4_reg <= addr_ipv4_new;
+
+      if (addr_ipv4_5_we)
+        addr_ipv4_5_reg <= addr_ipv4_new;
+
+      if (addr_ipv4_6_we)
+        addr_ipv4_6_reg <= addr_ipv4_new;
+
+      if (addr_ipv4_7_we)
+        addr_ipv4_7_reg <= addr_ipv4_new;
+
+      if (addr_mac_ctrl_we)
+        addr_mac_ctrl_reg <= addr_mac_ctrl_new;
+
+      if (addr_mac0_lsb_we)
+        addr_mac0_lsb_reg <= addr_mac_lsb_new;
+
+      if (addr_mac0_msb_we)
+        addr_mac0_msb_reg <= addr_mac_msb_new;
+
+      if (addr_mac1_lsb_we)
+        addr_mac1_lsb_reg <= addr_mac_lsb_new;
+
+      if (addr_mac1_msb_we)
+        addr_mac1_msb_reg <= addr_mac_msb_new;
+
+      if (addr_mac2_lsb_we)
+        addr_mac2_lsb_reg <= addr_mac_lsb_new;
+
+      if (addr_mac2_msb_we)
+        addr_mac2_msb_reg <= addr_mac_msb_new;
+
+      if (addr_mac3_lsb_we)
+        addr_mac3_lsb_reg <= addr_mac_lsb_new;
+
+      if (addr_mac3_msb_we)
+        addr_mac3_msb_reg <= addr_mac_msb_new;
+
       if (api_dummy_we)
         api_dummy_reg <= api_dummy_new;
+
+      arp_match_reg     <= arp_match_new;
+      arp_match_mac_reg <= arp_match_mac_new;
 
       if (cookie_server_id_we)
         cookie_server_id_reg <= cookie_server_id_new;
@@ -1048,6 +1344,33 @@ module nts_parser_ctrl #(
 
       if (error_state_we)
         error_state_reg <= error_state_new;
+
+      if (ipdecode_arp_hrd_we)
+        ipdecode_arp_hrd_reg <= ipdecode_arp_hrd_new;
+
+      if (ipdecode_arp_pro_we)
+        ipdecode_arp_pro_reg <= ipdecode_arp_pro_new;
+
+      if (ipdecode_arp_hln_we)
+        ipdecode_arp_hln_reg <= ipdecode_arp_hln_new;
+
+      if (ipdecode_arp_pln_we)
+        ipdecode_arp_pln_reg <= ipdecode_arp_pln_new;
+
+      if (ipdecode_arp_op_we)
+        ipdecode_arp_op_reg <= ipdecode_arp_op_new;
+
+      if (ipdecode_arp_sha_we)
+        ipdecode_arp_sha_reg <= ipdecode_arp_sha_new;
+
+      if (ipdecode_arp_spa_we)
+        ipdecode_arp_spa_reg <= ipdecode_arp_spa_new;
+
+    //if (ipdecode_arp_tha_we)
+    //  ipdecode_arp_tha_reg <= ipdecode_arp_tha_new;
+
+      if (ipdecode_arp_tpa_we)
+        ipdecode_arp_tpa_reg <= ipdecode_arp_tpa_new;
 
       if (ipdecode_ethernet_mac_dst_we)
         ipdecode_ethernet_mac_dst_reg <= ipdecode_ethernet_mac_dst_new;
@@ -1159,6 +1482,9 @@ module nts_parser_ctrl #(
 
       tx_authenticator_length_reg <= tx_authenticator_length_new;
       tx_ciphertext_length_reg <= tx_ciphertext_length_new;
+
+      if (tx_header_arp_index_we)
+        tx_header_arp_index_reg <= tx_header_arp_index_new;
 
       if (tx_header_ipv4_index_we)
         tx_header_ipv4_index_reg <= tx_header_ipv4_index_new;
@@ -1800,6 +2126,8 @@ module nts_parser_ctrl #(
     tx_address_internal = 0;
     tx_address = 0;
     tx_ciphertext_length_new = BYTES_AUTH_TAG + LEN_NTS_COOKIE * cookies_to_emit;
+    tx_header_arp_index_we = 0;
+    tx_header_arp_index_new = 0;
     tx_header_ipv4_index_we = 0;
     tx_header_ipv4_index_new = 0;
     tx_header_ipv6_index_we = 0;
@@ -1814,13 +2142,26 @@ module nts_parser_ctrl #(
     case (state_reg)
       STATE_COPY:
         if (i_process_initial && !i_tx_full) begin
-          if (detect_ipv4) begin
+          if (detect_arp) begin
+            tx_header_arp_index_we = 1;
+            tx_header_arp_index_new = 5;
+          end else if (detect_ipv4) begin
             tx_header_ipv4_index_we = 1;
             tx_header_ipv4_index_new = 5;
           end if (detect_ipv6) begin
             tx_header_ipv6_index_we = 1;
             tx_header_ipv6_index_new = 7;
           end
+        end
+      STATE_ARP_RESPOND:
+        begin : emit_arp
+          reg [6*64-1:0] header;
+          tx_header_arp_index_we = 1;
+          tx_header_arp_index_new = tx_header_arp_index_reg - 1;
+          header = { tx_header_ethernet_arp, 48'h0 };
+          tx_address_internal = 1;
+          tx_write_en   = 1;
+          tx_write_data = header [ tx_header_arp_index_reg*64+:64 ];
         end
       STATE_WRITE_HEADER_IPV4_IPV6:
         if (detect_ipv4) begin : emit_ipv4_headers
@@ -2270,7 +2611,37 @@ module nts_parser_ctrl #(
       STATE_COPY:
         if (i_process_initial == 1'b0) begin
           state_we  = 'b1;
+          state_new = STATE_SELECT_PROTOCOL_HANDLER;
+        end
+      STATE_SELECT_PROTOCOL_HANDLER:
+        if (detect_arp) begin
+          state_we  = 'b1;
+          state_new = STATE_ARP_INIT;
+        end else if (detect_ipv4) begin
+          state_we  = 'b1;
           state_new = STATE_LENGTH_CHECKS;
+        end else if (detect_ipv6) begin
+          state_we  = 'b1;
+          state_new = STATE_LENGTH_CHECKS;
+        end else begin
+          //Unknown packet type
+          state_we  = 'b1;
+          state_new = STATE_IDLE;
+        end
+      STATE_ARP_INIT:
+        if (detect_arp_good && arp_match_reg) begin
+          state_we  = 'b1;
+          state_new = STATE_ARP_RESPOND;
+        end else begin
+        //$display("%s:%0d detect_arp_good: %h", `__FILE__, `__LINE__, detect_arp_good);
+        //$display("%s:%0d arp_match_reg: %h", `__FILE__, `__LINE__, arp_match_reg);
+          state_we  = 'b1;
+          state_new = STATE_IDLE;
+        end
+      STATE_ARP_RESPOND:
+        if (tx_header_arp_index_reg == 0) begin
+          state_we  = 'b1;
+          state_new = STATE_TRANSFER_PACKET;
         end
       STATE_LENGTH_CHECKS:
         begin
@@ -2577,6 +2948,25 @@ module nts_parser_ctrl #(
 
   always @*
   begin
+    ipdecode_arp_hrd_we  = 0;
+    ipdecode_arp_hrd_new = 0;
+    ipdecode_arp_pro_we  = 0;
+    ipdecode_arp_pro_new = 0;
+    ipdecode_arp_hln_we  = 0;
+    ipdecode_arp_hln_new = 0;
+    ipdecode_arp_pln_we  = 0;
+    ipdecode_arp_pln_new = 0;
+    ipdecode_arp_op_we   = 0;
+    ipdecode_arp_op_new  = 0;
+    ipdecode_arp_sha_we  = 0;
+    ipdecode_arp_sha_new = 0;
+    ipdecode_arp_spa_we  = 0;
+    ipdecode_arp_spa_new = 0;
+  //ipdecode_arp_tha_we  = 0;
+  //ipdecode_arp_tha_new = 0;
+    ipdecode_arp_tpa_we  = 0;
+    ipdecode_arp_tpa_new = 0;
+
     ipdecode_ethernet_mac_dst_we   = 'b0;
     ipdecode_ethernet_mac_dst_new  = 'b0;
     ipdecode_ethernet_mac_src_we   = 'b0;
@@ -2612,6 +3002,7 @@ module nts_parser_ctrl #(
       ipdecode_ip4_ihl_we            = 'b1;
       ipdecode_udp_length_we         = 'b1;
 
+
     end else if (i_process_initial) begin
       if (state_reg == STATE_IDLE) begin
         ipdecode_ethernet_mac_dst_we   = 'b1;
@@ -2620,6 +3011,8 @@ module nts_parser_ctrl #(
         ipdecode_ethernet_mac_src_new  = { i_data[15:0], 32'h0 };
 
       end else if (word_counter_reg == 0) begin
+        ipdecode_arp_hrd_we            = 'b1;
+        ipdecode_arp_hrd_new           = i_data[15:0];
         ipdecode_ethernet_mac_src_we   = 'b1;
         ipdecode_ethernet_mac_src_new  = { ipdecode_ethernet_mac_src_reg[47:32], i_data[63:32] };
         ipdecode_ethernet_protocol_we  = 'b1;
@@ -2629,6 +3022,38 @@ module nts_parser_ctrl #(
         ipdecode_ip4_ihl_we            = 'b1;
         ipdecode_ip4_ihl_new           = i_data[11:8];
 
+      end else if (detect_arp) begin
+        case (word_counter_reg)
+          1: begin
+               ipdecode_arp_pro_we  = 'b1;
+               ipdecode_arp_pro_new = i_data[63:48];
+               ipdecode_arp_hln_we  = 'b1;
+               ipdecode_arp_hln_new = i_data[47:40];
+               ipdecode_arp_pln_we  = 'b1;
+               ipdecode_arp_pln_new = i_data[39:32];
+               ipdecode_arp_op_we   = 'b1;
+               ipdecode_arp_op_new  = i_data[31:16];
+               ipdecode_arp_sha_we  = 'b1;
+               ipdecode_arp_sha_new = { i_data[15:0], 32'h0 };
+             end
+          2: begin
+               ipdecode_arp_sha_we  = 'b1;
+               ipdecode_arp_sha_new = { ipdecode_arp_sha_reg[47:32], i_data[63:32] };
+               ipdecode_arp_spa_we  = 'b1;
+               ipdecode_arp_spa_new = i_data[31:0];
+             end
+          3: begin
+             //ipdecode_arp_tha_we  = 'b1;
+             //ipdecode_arp_tha_new = i_data[63:16];
+               ipdecode_arp_tpa_we  = 'b1;
+               ipdecode_arp_tpa_new = { i_data[15:0], 16'h0 };
+             end
+          4: begin
+               ipdecode_arp_tpa_we  = 'b1;
+               ipdecode_arp_tpa_new = { ipdecode_arp_tpa_reg[31:16], i_data[63:48] };
+             end
+          default: ;
+        endcase
       end else if (detect_ipv4 && ipdecode_ip4_ihl_reg == 5) begin
         case (word_counter_reg)
           2: begin
@@ -2841,6 +3266,47 @@ module nts_parser_ctrl #(
 
         if (ntp_extension_tag_reg[i]==TAG_NTS_AUTHENTICATOR)
           detect_nts_authenticator_reg      = 'b1;
+      end
+    end
+  end
+
+  //----------------------------------------------------------------
+  // ARP matcher
+  //----------------------------------------------------------------
+
+  always @*
+  begin : arp_matcher
+    integer i;
+    reg  [1:0]j;
+    reg [47:0] hw [0:3];
+    reg [31:0] v4 [0:7];
+    arp_match_new = 0;
+    arp_match_mac_new = 0;
+    hw[0] = { addr_mac0_msb_reg, addr_mac0_lsb_reg };
+    hw[1] = { addr_mac1_msb_reg, addr_mac1_lsb_reg };
+    hw[2] = { addr_mac2_msb_reg, addr_mac2_lsb_reg };
+    hw[3] = { addr_mac3_msb_reg, addr_mac3_lsb_reg };
+    v4[0] = addr_ipv4_0_reg;
+    v4[1] = addr_ipv4_1_reg;
+    v4[2] = addr_ipv4_2_reg;
+    v4[3] = addr_ipv4_3_reg;
+    v4[4] = addr_ipv4_4_reg;
+    v4[5] = addr_ipv4_5_reg;
+    v4[6] = addr_ipv4_6_reg;
+    v4[7] = addr_ipv4_7_reg;
+    for (i = 0; i < 8; i = i + 1) begin
+      j = i[1:0];
+    //if (detect_arp) begin
+    //  $display("%s:%0d i: %h j: %h", `__FILE__, `__LINE__, i, j);
+    //  $display("%s:%0d addr_ipv4_ctrl_reg[i]: %h", `__FILE__, `__LINE__, addr_ipv4_ctrl_reg[i]);
+    //  $display("%s:%0d addr_mac_ctrl_reg[j]: %h", `__FILE__, `__LINE__, addr_mac_ctrl_reg[j]);
+    //  $display("%s:%0d %h (arp packet) == %h (config)", `__FILE__, `__LINE__, ipdecode_arp_tpa_reg, v4[i]);
+    //end
+      if (addr_ipv4_ctrl_reg[i] && addr_mac_ctrl_reg[j]) begin
+        if (ipdecode_arp_tpa_reg == v4[i]) begin
+          arp_match_new = 1;
+          arp_match_mac_new = hw[j];
+        end
       end
     end
   end

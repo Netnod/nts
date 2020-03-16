@@ -158,6 +158,7 @@ module nts_parser_ctrl #(
 
   localparam ADDR_MAC_CTRL  = 'h30;
   localparam ADDR_IPV4_CTRL = 'h31;
+  localparam ADDR_IPV6_CTRL = 'h32;
 
   localparam ADDR_MAC_0_MSB = 'h40;
   localparam ADDR_MAC_0_LSB = 'h41;
@@ -176,6 +177,16 @@ module nts_parser_ctrl #(
   localparam ADDR_IPV4_5 = 'h055;
   localparam ADDR_IPV4_6 = 'h056;
   localparam ADDR_IPV4_7 = 'h057;
+
+  localparam ADDR_IPV6_0   = 'h060;
+  localparam ADDR_IPV6_1   = 'h064;
+  localparam ADDR_IPV6_2   = 'h068;
+  localparam ADDR_IPV6_3   = 'h06C;
+  localparam ADDR_IPV6_4   = 'h070;
+  localparam ADDR_IPV6_5   = 'h074;
+  localparam ADDR_IPV6_6   = 'h078;
+  localparam ADDR_IPV6_7   = 'h07C;
+  localparam ADDR_IPV6_END = 'h07F;
 
   //----------------------------------------------------------------
   // Error causes observable over API
@@ -209,9 +220,21 @@ module nts_parser_ctrl #(
   localparam [BITS_STATE-1:0] STATE_IDLE                     = 7'h00;
   localparam [BITS_STATE-1:0] STATE_COPY                     = 7'h01; //RX handling states
   localparam [BITS_STATE-1:0] STATE_SELECT_PROTOCOL_HANDLER  = 7'h02;
+  localparam [BITS_STATE-1:0] STATE_SELECT_IPV4_HANDLER      = 7'h03;
+  localparam [BITS_STATE-1:0] STATE_SELECT_IPV6_HANDLER      = 7'h04;
 
   localparam [BITS_STATE-1:0] STATE_ARP_INIT                 = 7'h10;
   localparam [BITS_STATE-1:0] STATE_ARP_RESPOND              = 7'h11;
+
+  localparam [BITS_STATE-1:0] STATE_ICMPV6_ND_INIT           = 7'h12;
+  localparam [BITS_STATE-1:0] STATE_IMCPV6_ND_RESPOND        = 7'h13;
+  localparam [BITS_STATE-1:0] STATE_ICMPV6_ND_UPDATE_LENGTH  = 7'h14;
+  localparam [BITS_STATE-1:0] STATE_IMCPV6_ND_CSUM_RESET     = 7'h15;
+  localparam [BITS_STATE-1:0] STATE_ICMPV6_ND_CSUM_CALC      = 7'h16;
+  localparam [BITS_STATE-1:0] STATE_ICMPV6_ND_CSUM_WAIT      = 7'h17;
+  localparam [BITS_STATE-1:0] STATE_ICMPV6_ND_CSUM_UPDATE    = 7'h18;
+  localparam [BITS_STATE-1:0] STATE_ICMPV6_ND_CSUM_UPDATE_D  = 7'h19;
+  
 
   localparam [BITS_STATE-1:0] STATE_LENGTH_CHECKS            = 7'h30;
   localparam [BITS_STATE-1:0] STATE_EXTRACT_EXT_FROM_RAM     = 7'h31;
@@ -319,11 +342,27 @@ module nts_parser_ctrl #(
   localparam [3:0] IP_V4        =  4'h4;
   localparam [3:0] IP_V6        =  4'h6;
 
+  localparam  [15:0] IP_V6_ADDRESS_PREFIX_MULTICAST_P_LL = { 8'hFF, //Multicast
+                                                             4'h0,  //Permanent
+                                                             4'h2   //Link-Local
+                                                           };
+  localparam [103:0] IP_V6_ADDRESS_MULTICAST_SOLICITED_NODE = { //FF02:0:0:0:0:1:FFXX:XXXX
+                                                                IP_V6_ADDRESS_PREFIX_MULTICAST_P_LL,
+                                                                88'h01FF
+                                                              };
+  localparam [127:0] IP_V6_ADDRESS_MULTICAST_ALL = {16'hFF02, 96'h0, 16'h0001};
+
+  localparam [7:0] ICMP_TYPE_NEIGHBOR_SOLICITATION = 135;
+  localparam [7:0] ICMP_TYPE_NEIGHBOR_ADVERTISEMENT = 136;
+
   localparam  [7:0] IPV4_TOS     = 0;
   localparam  [2:0] IPV4_FLAGS   = 3'b010; // Reserved=0, must be zero. DF=1 (don't fragment). MF=0 (Last Fragment)
   localparam [12:0] IPV4_FRAGMENT_OFFSET = 0;
   localparam  [7:0] IPV4_TTL     = 8'hff;
-  localparam  [7:0] IP_UDP_PROTO = 8'h11; //17
+
+  localparam  [7:0] IP_PROTO_UDP    = 8'h11; //17
+  localparam  [7:0] IP_PROTO_ICMPV4 = 8'h01;
+  localparam  [7:0] IP_PROTO_ICMPV6 = 8'h3a; //58
 
   localparam  [7:0] IPV6_TC       =  8'h0;
   localparam [19:0] IPV6_FL       = 20'h0;
@@ -394,6 +433,22 @@ module nts_parser_ctrl #(
   reg [31 : 0] addr_ipv4_7_reg;
   reg          addr_ipv4_7_we;
 
+  reg          addr_ipv6_ctrl_we;
+  reg    [7:0] addr_ipv6_ctrl_new;
+  reg    [7:0] addr_ipv6_ctrl_reg;
+
+  reg    [7:0] addr_ipv6_we;
+  reg   [31:0] addr_ipv6_new;
+  reg    [2:0] addr_ipv6_index;
+  reg  [127:0] addr_ipv6_0_reg;
+  reg  [127:0] addr_ipv6_1_reg;
+  reg  [127:0] addr_ipv6_2_reg;
+  reg  [127:0] addr_ipv6_3_reg;
+  reg  [127:0] addr_ipv6_4_reg;
+  reg  [127:0] addr_ipv6_5_reg;
+  reg  [127:0] addr_ipv6_6_reg;
+  reg  [127:0] addr_ipv6_7_reg;
+
   reg          addr_mac_ctrl_we;
   reg    [3:0] addr_mac_ctrl_new;
   reg    [3:0] addr_mac_ctrl_reg;
@@ -417,10 +472,15 @@ module nts_parser_ctrl #(
   reg          addr_mac3_lsb_we;
   reg          addr_mac3_msb_we;
 
-  reg          arp_match_new;
-  reg          arp_match_reg;
-  reg [47 : 0] arp_match_mac_new;
-  reg [47 : 0] arp_match_mac_reg;
+  reg          addr_match_icmpv6ns_new;
+  reg          addr_match_icmpv6ns_reg;
+  reg [47 : 0] addr_match_icmpv6ns_mac_new;
+  reg [47 : 0] addr_match_icmpv6ns_mac_reg;
+
+  reg          addr_match_arp_new;
+  reg          addr_match_arp_reg;
+  reg [47 : 0] addr_match_arp_mac_new;
+  reg [47 : 0] addr_match_arp_mac_reg;
 
   reg                         cookie_server_id_we;
   reg                  [31:0] cookie_server_id_new;
@@ -539,12 +599,29 @@ module nts_parser_ctrl #(
   reg                   [31:0] ipdecode_ip4_ip_src_new;
   reg                   [31:0] ipdecode_ip4_ip_src_reg;
 
+  reg                          ipdecode_ip6_next_we;
+  reg                    [7:0] ipdecode_ip6_next_new;
+  reg                    [7:0] ipdecode_ip6_next_reg;
   reg                          ipdecode_ip6_ip_dst_we;
   reg                  [127:0] ipdecode_ip6_ip_dst_new;
   reg                  [127:0] ipdecode_ip6_ip_dst_reg;
   reg                          ipdecode_ip6_ip_src_we;
   reg                  [127:0] ipdecode_ip6_ip_src_new;
   reg                  [127:0] ipdecode_ip6_ip_src_reg;
+
+  reg                          ipdecode_icmp_type_we;
+  reg                    [7:0] ipdecode_icmp_type_new;
+  reg                    [7:0] ipdecode_icmp_type_reg;
+  reg                          ipdecode_icmp_code_we;
+  reg                    [7:0] ipdecode_icmp_code_new;
+  reg                    [7:0] ipdecode_icmp_code_reg;
+//reg                          ipdecode_icmp_checksum_we
+//reg                   [15:0] ipdecode_icmp_checksum_new;
+//reg                   [15:0] ipdecode_icmp_checksum_reg;
+//reg                   [31:0] ipdecode_icmp_reserved_reg;
+  reg                          ipdecode_icmp_ta_we;
+  reg                  [127:0] ipdecode_icmp_ta_new;
+  reg                  [127:0] ipdecode_icmp_ta_reg;
 
   reg                          ipdecode_udp_length_we;
   reg                   [15:0] ipdecode_udp_length_new;
@@ -555,6 +632,7 @@ module nts_parser_ctrl #(
   reg                          ipdecode_udp_port_src_we;
   reg                   [15:0] ipdecode_udp_port_src_new;
   reg                   [15:0] ipdecode_udp_port_src_reg;
+
 
   reg                          keymem_get_current_key_new;
   reg                          keymem_get_current_key_reg;
@@ -616,6 +694,9 @@ module nts_parser_ctrl #(
   reg       [ADDR_WIDTH+3-1:0] nts_cookie_start_addr_new;
   reg       [ADDR_WIDTH+3-1:0] nts_cookie_start_addr_reg;
 
+  reg                          protocol_detect_ip6ns_new;
+  reg                          protocol_detect_ip6ns_reg;
+
   reg                          detect_unique_identifier_reg;
   reg                          detect_nts_cookie_reg;
   reg                          detect_nts_cookie_placeholder_reg;
@@ -645,6 +726,10 @@ module nts_parser_ctrl #(
   reg        tx_header_ipv4_index_we;
   reg  [2:0] tx_header_ipv4_index_new;
   reg  [2:0] tx_header_ipv4_index_reg;
+
+  reg        tx_header_icmpv6ns_index_we;
+  reg  [3:0] tx_header_icmpv6ns_index_new;
+  reg  [3:0] tx_header_icmpv6ns_index_reg;
 
   reg [15:0] tx_ipv4_csum_new;
   reg [15:0] tx_ipv4_csum_reg;
@@ -724,16 +809,23 @@ module nts_parser_ctrl #(
   reg  muxctrl_crypto;
 
   wire     [15:0] tx_ethernet_type;
-  wire    [111:0] tx_header_ethernet;
   wire [16*5-1:0] tx_header_ipv4_nocsum0;
   wire [16*4-1:0] tx_header_ipv4_nocsum1;
   wire [32*5-1:0] tx_header_ipv4;
   wire [40*8-1:0] tx_header_ipv6;
   wire     [15:0] tx_header_ipv6_payload_length;
+  wire     [63:0] tx_header_udp;
+  wire    [111:0] tx_header_ethernet;
+  wire [42*8-1:0] tx_header_ethernet_arp;
   wire    [335:0] tx_header_ethernet_ipv4_udp;
   wire    [495:0] tx_header_ethernet_ipv6_udp;
-  wire     [63:0] tx_header_udp;
-  wire [42*8-1:0] tx_header_ethernet_arp;
+
+  //ICMPv6 Neighbor Advertisement (rfc4861)
+  wire [14*8-1:0] tx_header_ethernet_na;
+  wire [40*8-1:0] tx_header_ipv6_na;
+  wire [32*8-1:0] tx_header_icmp_na;
+  wire [86*8-1:0] tx_header_ethernet_ipv6_icmp_na;
+
 
   reg                    tx_address_internal;
   reg [ADDR_WIDTH+3-1:0] tx_address;
@@ -857,14 +949,14 @@ module nts_parser_ctrl #(
 
   assign tx_header_ethernet_arp = {
                                     ipdecode_ethernet_mac_src_reg,
-                                    arp_match_mac_reg,
+                                    addr_match_arp_mac_reg,
                                     E_TYPE_ARP,
                                     ARP_HRD_ETHERNET,
                                     ARP_PRO_IPV4,
                                     ARP_HLN_ETHERNET,
                                     ARP_PLN_IPV4,
                                     ARP_OP_REPLY,
-                                    arp_match_mac_reg,
+                                    addr_match_arp_mac_reg,
                                     ipdecode_arp_tpa_reg,
                                     ipdecode_arp_sha_reg,
                                     ipdecode_arp_spa_reg
@@ -873,18 +965,40 @@ module nts_parser_ctrl #(
   assign tx_header_ipv4_nocsum0 = {
            IP_V4, 4'h5, IPV4_TOS, tx_ipv4_totlen_reg,  //|Version|  IHL  |Type of Service|          Total Length         |
            16'h0000, IPV4_FLAGS, IPV4_FRAGMENT_OFFSET, //|         Identification        |Flags|      Fragment Offset    |
-           IPV4_TTL, IP_UDP_PROTO };                   //|  Time to Live |    Protocol   |         Header Checksum       |
+           IPV4_TTL, IP_PROTO_UDP };                   //|  Time to Live |    Protocol   |         Header Checksum       |
   assign tx_header_ipv4_nocsum1 = {
            ipdecode_ip4_ip_dst_reg,                    //|                       Source Address                          |
            ipdecode_ip4_ip_src_reg };                  //|                    Destination Address                        |
   assign tx_header_ipv4 = { tx_header_ipv4_nocsum0, tx_ipv4_csum_reg, tx_header_ipv4_nocsum1 };
 
   assign tx_header_ipv6_payload_length = tx_udp_length_reg;
-  assign tx_header_ipv6 = { IP_V6, IPV6_TC, IPV6_FL, tx_header_ipv6_payload_length, IP_UDP_PROTO, IPV6_HOPLIMIT, ipdecode_ip6_ip_dst_reg, ipdecode_ip6_ip_src_reg };
+  assign tx_header_ipv6 = { IP_V6, IPV6_TC, IPV6_FL, tx_header_ipv6_payload_length, IP_PROTO_UDP, IPV6_HOPLIMIT, ipdecode_ip6_ip_dst_reg, ipdecode_ip6_ip_src_reg };
 
   assign tx_header_udp = { ipdecode_udp_port_dst_reg, ipdecode_udp_port_src_reg, tx_udp_length_reg, tx_udp_checksum_reg };
   assign tx_header_ethernet_ipv4_udp = { tx_header_ethernet, tx_header_ipv4, tx_header_udp };
   assign tx_header_ethernet_ipv6_udp = { tx_header_ethernet, tx_header_ipv6, tx_header_udp };
+
+  //----------------------------------------------------------------
+  // ICMPv6 Neighbor Advertisement (rfc4861)
+  //----------------------------------------------------------------
+
+  assign tx_header_ethernet_na = { addr_match_icmpv6ns_mac_reg, ipdecode_ethernet_mac_dst_reg, E_TYPE_IPV6 };
+  assign tx_header_ipv6_na = { IP_V6, IPV6_TC, IPV6_FL,
+                               16'h20, //Payload length is 32
+                               IP_PROTO_ICMPV6,
+                               8'hff, //Hop Limit is 255 (rfc4861)
+                               ipdecode_icmp_ta_reg, ipdecode_ip6_ip_src_reg
+                             };
+  assign tx_header_icmp_na = { ICMP_TYPE_NEIGHBOR_ADVERTISEMENT,
+                               8'h0, //code
+                               16'h0000, //Zero checksum
+                               32'h60_00_00_00, //Solicited, Override
+                               ipdecode_icmp_ta_reg,
+                               8'h2, //OPTION: Target Link-Layer Address
+                               8'h1, //rfc4861; 1 => 8 octets option length
+                               addr_match_icmpv6ns_mac_reg
+                             };
+  assign tx_header_ethernet_ipv6_icmp_na = { tx_header_ethernet_na, tx_header_ipv6_na, tx_header_icmp_na };
 
   //----------------------------------------------------------------
   // Functions and Tasks
@@ -955,6 +1069,13 @@ module nts_parser_ctrl #(
     addr_ipv4_7_we = 0;
     addr_ipv4_new = i_api_write_data;
 
+    addr_ipv6_we    = 0;
+    addr_ipv6_new   = 0;
+    addr_ipv6_index = 0;
+
+    addr_ipv6_ctrl_we = 0;
+    addr_ipv6_ctrl_new = 0;
+
     addr_mac_ctrl_we = 0;
     addr_mac_ctrl_new = 0;
 
@@ -991,6 +1112,11 @@ module nts_parser_ctrl #(
               addr_ipv4_ctrl_we = 1;
               addr_ipv4_ctrl_new = i_api_write_data[7:0];
             end
+          ADDR_IPV6_CTRL:
+            begin
+              addr_ipv6_ctrl_we = 1;
+              addr_ipv6_ctrl_new = i_api_write_data[7:0];
+            end
           ADDR_MAC_0_MSB: addr_mac0_msb_we = 1;
           ADDR_MAC_0_LSB: addr_mac0_lsb_we = 1;
           ADDR_MAC_1_MSB: addr_mac1_msb_we = 1;
@@ -1010,6 +1136,21 @@ module nts_parser_ctrl #(
           ADDR_IPV4_7: addr_ipv4_7_we = 1;
           default: ;
         endcase
+        if (i_api_address >= ADDR_IPV6_0 && i_api_address <= ADDR_IPV6_END) begin
+           addr_ipv6_new   = i_api_write_data;
+           addr_ipv6_index = 2'h3 - i_api_address[1:0];
+           case (i_api_address[4:2])
+             3'h0: addr_ipv6_we = 8'b0000_0001;
+             3'h1: addr_ipv6_we = 8'b0000_0010;
+             3'h2: addr_ipv6_we = 8'b0000_0100;
+             3'h3: addr_ipv6_we = 8'b0000_1000;
+             3'h4: addr_ipv6_we = 8'b0001_0000;
+             3'h5: addr_ipv6_we = 8'b0010_0000;
+             3'h6: addr_ipv6_we = 8'b0100_0000;
+             3'h7: addr_ipv6_we = 8'b1000_0000;
+            default: ;
+          endcase
+        end
       end else begin
         if (i_api_address < 128) begin
           case (i_api_address)
@@ -1133,6 +1274,17 @@ module nts_parser_ctrl #(
       addr_ipv4_6_reg <= 0;
       addr_ipv4_7_reg <= 0;
 
+      addr_ipv6_ctrl_reg <= 0;
+
+      addr_ipv6_0_reg <= 0;
+      addr_ipv6_1_reg <= 0;
+      addr_ipv6_2_reg <= 0;
+      addr_ipv6_3_reg <= 0;
+      addr_ipv6_4_reg <= 0;
+      addr_ipv6_5_reg <= 0;
+      addr_ipv6_6_reg <= 0;
+      addr_ipv6_7_reg <= 0;
+
       addr_mac_ctrl_reg <= 0;
 
       addr_mac0_lsb_reg <= 0;
@@ -1144,10 +1296,13 @@ module nts_parser_ctrl #(
       addr_mac3_lsb_reg <= 0;
       addr_mac3_msb_reg <= 0;
 
-      api_dummy_reg              <= 32'h64_75_4d_79; //"duMy"
+      addr_match_arp_reg          <= 0;
+      addr_match_arp_mac_reg      <= 0;
 
-      arp_match_reg              <= 0;
-      arp_match_mac_reg          <= 0;
+      addr_match_icmpv6ns_reg     <= 0;
+      addr_match_icmpv6ns_mac_reg <= 0;
+
+      api_dummy_reg              <= 32'h64_75_4d_79; //"duMy"
 
       cookie_server_id_reg       <= 'b0;
       cookies_count_reg          <= 0;
@@ -1182,8 +1337,13 @@ module nts_parser_ctrl #(
       ipdecode_ip4_ip_dst_reg    <= 'b0;
       ipdecode_ip4_ip_src_reg    <= 'b0;
 
+      ipdecode_ip6_next_reg      <= 'b0;
       ipdecode_ip6_ip_dst_reg    <= 'b0;
       ipdecode_ip6_ip_src_reg    <= 'b0;
+
+      ipdecode_icmp_type_reg     <= 'b0;
+      ipdecode_icmp_code_reg     <= 'b0;
+      ipdecode_icmp_ta_reg       <= 'b0;
 
       ipdecode_udp_length_reg    <= 'b0;
       ipdecode_udp_port_dst_reg  <= 'b0;
@@ -1225,9 +1385,12 @@ module nts_parser_ctrl #(
 
       tx_authenticator_length_reg <= 0;
       tx_ciphertext_length_reg <= 0;
+
       tx_header_arp_index_reg <= 0;
+      tx_header_icmpv6ns_index_reg <= 0;
       tx_header_ipv4_index_reg <= 0;
       tx_header_ipv6_index_reg <= 0;
+
       tx_ipv4_csum_reg <= 0;
       tx_ipv4_totlen_reg <= 0;
       tx_udp_checksum_reg <= 0; //TODO implement
@@ -1285,6 +1448,33 @@ module nts_parser_ctrl #(
       if (addr_ipv4_7_we)
         addr_ipv4_7_reg <= addr_ipv4_new;
 
+      if (addr_ipv6_ctrl_we)
+        addr_ipv6_ctrl_reg <= addr_ipv6_ctrl_new;
+
+      if (addr_ipv6_we[0])
+        addr_ipv6_0_reg[addr_ipv6_index*32+:32] <= addr_ipv6_new;
+
+      if (addr_ipv6_we[1])
+        addr_ipv6_1_reg[addr_ipv6_index*32+:32] <= addr_ipv6_new;
+
+      if (addr_ipv6_we[2])
+        addr_ipv6_2_reg[addr_ipv6_index*32+:32] <= addr_ipv6_new;
+
+      if (addr_ipv6_we[3])
+        addr_ipv6_3_reg[addr_ipv6_index*32+:32] <= addr_ipv6_new;
+
+      if (addr_ipv6_we[4])
+        addr_ipv6_4_reg[addr_ipv6_index*32+:32] <= addr_ipv6_new;
+
+      if (addr_ipv6_we[5])
+        addr_ipv6_5_reg[addr_ipv6_index*32+:32] <= addr_ipv6_new;
+
+      if (addr_ipv6_we[6])
+        addr_ipv6_6_reg[addr_ipv6_index*32+:32] <= addr_ipv6_new;
+
+      if (addr_ipv6_we[7])
+        addr_ipv6_7_reg[addr_ipv6_index*32+:32] <= addr_ipv6_new;
+
       if (addr_mac_ctrl_we)
         addr_mac_ctrl_reg <= addr_mac_ctrl_new;
 
@@ -1312,11 +1502,14 @@ module nts_parser_ctrl #(
       if (addr_mac3_msb_we)
         addr_mac3_msb_reg <= addr_mac_msb_new;
 
+      addr_match_arp_reg     <= addr_match_arp_new;
+      addr_match_arp_mac_reg <= addr_match_arp_mac_new;
+
+      addr_match_icmpv6ns_reg     <= addr_match_icmpv6ns_new;
+      addr_match_icmpv6ns_mac_reg <= addr_match_icmpv6ns_mac_new;
+
       if (api_dummy_we)
         api_dummy_reg <= api_dummy_new;
-
-      arp_match_reg     <= arp_match_new;
-      arp_match_mac_reg <= arp_match_mac_new;
 
       if (cookie_server_id_we)
         cookie_server_id_reg <= cookie_server_id_new;
@@ -1390,6 +1583,9 @@ module nts_parser_ctrl #(
       if (ipdecode_ip4_ip_dst_we)
         ipdecode_ip4_ip_dst_reg <= ipdecode_ip4_ip_dst_new;
 
+      if (ipdecode_ip6_next_we)
+        ipdecode_ip6_next_reg <= ipdecode_ip6_next_new;
+
       if (ipdecode_ip4_ip_src_we)
         ipdecode_ip4_ip_src_reg <= ipdecode_ip4_ip_src_new;
 
@@ -1398,6 +1594,16 @@ module nts_parser_ctrl #(
 
       if (ipdecode_ip6_ip_src_we)
         ipdecode_ip6_ip_src_reg <= ipdecode_ip6_ip_src_new;
+
+      if (ipdecode_icmp_type_we)
+        ipdecode_icmp_type_reg <= ipdecode_icmp_type_new;
+
+      if (ipdecode_icmp_code_we)
+        ipdecode_icmp_code_reg <= ipdecode_icmp_code_new;
+
+      if (ipdecode_icmp_ta_we)
+        ipdecode_icmp_ta_reg <= ipdecode_icmp_ta_new;
+
 
       if (ipdecode_udp_length_we)
         ipdecode_udp_length_reg <= ipdecode_udp_length_new;
@@ -1458,6 +1664,8 @@ module nts_parser_ctrl #(
       nts_unique_identifier_length_reg     <= nts_unique_identifier_length_new;
       nts_valid_placeholders_reg           <= nts_valid_placeholders_new;
 
+      protocol_detect_ip6ns_reg <= protocol_detect_ip6ns_new;
+
       if (state_we) begin
         state_reg <= state_new;
         state_previous_reg <= state_reg;
@@ -1485,6 +1693,9 @@ module nts_parser_ctrl #(
 
       if (tx_header_arp_index_we)
         tx_header_arp_index_reg <= tx_header_arp_index_new;
+
+      if (tx_header_icmpv6ns_index_we)
+        tx_header_icmpv6ns_index_reg <= tx_header_icmpv6ns_index_new;
 
       if (tx_header_ipv4_index_we)
         tx_header_ipv4_index_reg <= tx_header_ipv4_index_new;
@@ -2128,6 +2339,8 @@ module nts_parser_ctrl #(
     tx_ciphertext_length_new = BYTES_AUTH_TAG + LEN_NTS_COOKIE * cookies_to_emit;
     tx_header_arp_index_we = 0;
     tx_header_arp_index_new = 0;
+    tx_header_icmpv6ns_index_we = 0;
+    tx_header_icmpv6ns_index_new = 0;
     tx_header_ipv4_index_we = 0;
     tx_header_ipv4_index_new = 0;
     tx_header_ipv6_index_we = 0;
@@ -2140,18 +2353,16 @@ module nts_parser_ctrl #(
     tx_write_en = 0;
     tx_write_data = 0;
     case (state_reg)
-      STATE_COPY:
-        if (i_process_initial && !i_tx_full) begin
-          if (detect_arp) begin
-            tx_header_arp_index_we = 1;
-            tx_header_arp_index_new = 5;
-          end else if (detect_ipv4) begin
-            tx_header_ipv4_index_we = 1;
-            tx_header_ipv4_index_new = 5;
-          end if (detect_ipv6) begin
-            tx_header_ipv6_index_we = 1;
-            tx_header_ipv6_index_new = 7;
-          end
+      STATE_SELECT_PROTOCOL_HANDLER:
+        begin
+          tx_header_arp_index_we = 1;
+          tx_header_arp_index_new = 5;
+          tx_header_icmpv6ns_index_we = 1;
+          tx_header_icmpv6ns_index_new = 10;
+          tx_header_ipv4_index_we = 1;
+          tx_header_ipv4_index_new = 5;
+          tx_header_ipv6_index_we = 1;
+          tx_header_ipv6_index_new = 7;
         end
       STATE_ARP_RESPOND:
         begin : emit_arp
@@ -2162,6 +2373,38 @@ module nts_parser_ctrl #(
           tx_address_internal = 1;
           tx_write_en   = 1;
           tx_write_data = header [ tx_header_arp_index_reg*64+:64 ];
+        end
+      STATE_IMCPV6_ND_RESPOND:
+        begin : emit_icmp_na
+          reg [11*64-1:0] header;
+          tx_header_icmpv6ns_index_we = 1;
+          tx_header_icmpv6ns_index_new = tx_header_icmpv6ns_index_reg - 1;
+          header = { tx_header_ethernet_ipv6_icmp_na, 16'h0000 };
+          tx_address_internal = 1;
+          tx_write_en   = 1;
+          tx_write_data = header[ tx_header_icmpv6ns_index_reg*64+:64 ];
+        end
+      STATE_ICMPV6_ND_UPDATE_LENGTH:
+        begin
+          tx_address       = 86; //14 byte ethernet, 40 byte IPv6, 32 byte ICMPv6
+          tx_update_length = 1;
+        end
+      STATE_IMCPV6_ND_CSUM_RESET:
+        begin
+          tx_sum_reset = 1;
+          tx_sum_reset_value = {8'h00, IP_PROTO_ICMPV6 } + 32; //32 bytes payload
+        end
+      STATE_ICMPV6_ND_CSUM_CALC:
+        begin
+          tx_address = 14 + 8;
+          tx_sum_en = 1;
+          tx_sum_bytes = 16 + 16 + 32; //2 ipv6 addresses, 32 bytes payload
+        end
+      STATE_ICMPV6_ND_CSUM_UPDATE:
+        begin
+          tx_address = 'h38;
+          tx_write_en = 1;
+          tx_write_data = { i_tx_sum, 32'h60_00_00_00, ipdecode_icmp_ta_reg[127-:16] };
         end
       STATE_WRITE_HEADER_IPV4_IPV6:
         if (detect_ipv4) begin : emit_ipv4_headers
@@ -2619,27 +2862,85 @@ module nts_parser_ctrl #(
           state_new = STATE_ARP_INIT;
         end else if (detect_ipv4) begin
           state_we  = 'b1;
-          state_new = STATE_LENGTH_CHECKS;
+          state_new = STATE_SELECT_IPV4_HANDLER;
         end else if (detect_ipv6) begin
           state_we  = 'b1;
+          state_new = STATE_SELECT_IPV6_HANDLER;
+        end else begin
+          //Unknown packet type
+          state_we  = 'b1;
+          state_new = STATE_IDLE;
+        end
+      STATE_SELECT_IPV4_HANDLER:
+        begin
+          state_we  = 'b1;
           state_new = STATE_LENGTH_CHECKS;
+        end
+      STATE_SELECT_IPV6_HANDLER:
+        if (ipdecode_ip6_next_reg == IP_PROTO_UDP) begin
+          state_we  = 'b1;
+          state_new = STATE_LENGTH_CHECKS;
+        end else if (protocol_detect_ip6ns_reg) begin
+          state_we  = 'b1;
+          state_new = STATE_ICMPV6_ND_INIT;
         end else begin
           //Unknown packet type
           state_we  = 'b1;
           state_new = STATE_IDLE;
         end
       STATE_ARP_INIT:
-        if (detect_arp_good && arp_match_reg) begin
+        if (detect_arp_good && addr_match_arp_reg) begin
           state_we  = 'b1;
           state_new = STATE_ARP_RESPOND;
         end else begin
-        //$display("%s:%0d detect_arp_good: %h", `__FILE__, `__LINE__, detect_arp_good);
-        //$display("%s:%0d arp_match_reg: %h", `__FILE__, `__LINE__, arp_match_reg);
           state_we  = 'b1;
           state_new = STATE_IDLE;
         end
       STATE_ARP_RESPOND:
         if (tx_header_arp_index_reg == 0) begin
+          state_we  = 'b1;
+          state_new = STATE_TRANSFER_PACKET;
+        end
+      STATE_ICMPV6_ND_INIT:
+        if (addr_match_icmpv6ns_reg) begin
+          state_we  = 'b1;
+          state_new = STATE_IMCPV6_ND_RESPOND;
+        end else begin
+          state_we  = 'b1;
+          state_new = STATE_IDLE;
+        end
+      STATE_IMCPV6_ND_RESPOND:
+        if (tx_header_icmpv6ns_index_reg == 0) begin
+          state_we  = 'b1;
+          state_new = STATE_ICMPV6_ND_UPDATE_LENGTH;
+        end
+      STATE_ICMPV6_ND_UPDATE_LENGTH:
+        begin
+          state_we  = 'b1;
+          state_new = STATE_IMCPV6_ND_CSUM_RESET;
+        end
+      STATE_IMCPV6_ND_CSUM_RESET:
+        begin
+          state_we  = 'b1;
+          state_new = STATE_ICMPV6_ND_CSUM_CALC;
+        end
+      STATE_ICMPV6_ND_CSUM_CALC:
+        begin
+          state_we  = 'b1;
+          state_new = STATE_ICMPV6_ND_CSUM_WAIT;
+        end
+      STATE_ICMPV6_ND_CSUM_WAIT:
+        if (i_tx_sum_done) begin
+          state_we  = 'b1;
+          state_new = STATE_ICMPV6_ND_CSUM_UPDATE;
+        end
+      STATE_ICMPV6_ND_CSUM_UPDATE:
+        begin
+          state_we  = 'b1;
+          state_new = STATE_ICMPV6_ND_CSUM_UPDATE_D;
+        end
+      STATE_ICMPV6_ND_CSUM_UPDATE_D:
+        begin
           state_we  = 'b1;
           state_new = STATE_TRANSFER_PACKET;
         end
@@ -2989,6 +3290,16 @@ module nts_parser_ctrl #(
     ipdecode_ip6_ip_src_we         = 'b0;
     ipdecode_ip6_ip_src_new        = 'b0;
 
+    ipdecode_icmp_type_we          = 'b0;
+    ipdecode_icmp_type_new         = 'b0;
+    ipdecode_icmp_code_we          = 'b0;
+    ipdecode_icmp_code_new         = 'b0;
+  //ipdecode_icmp_checksum_we      = 'b0;
+  //ipdecode_icmp_checksum_new     = 'b0;
+    ipdecode_icmp_ta_we            = 'b0;
+    ipdecode_icmp_ta_new           = 'b0;
+
+
     ipdecode_udp_length_we         = 'b0;
     ipdecode_udp_length_new        = 'b0;
     ipdecode_udp_port_dst_we       = 'b0;
@@ -3001,7 +3312,6 @@ module nts_parser_ctrl #(
       ipdecode_ip_version_we         = 'b1;
       ipdecode_ip4_ihl_we            = 'b1;
       ipdecode_udp_length_we         = 'b1;
-
 
     end else if (i_process_initial) begin
       if (state_reg == STATE_IDLE) begin
@@ -3077,8 +3387,12 @@ module nts_parser_ctrl #(
       end else if (detect_ipv6) begin
         case (word_counter_reg)
           1: begin
-               ipdecode_ip6_ip_src_we  = 'b1;
-               ipdecode_ip6_ip_src_new = { i_data[15:0], 112'h0 };
+               ipdecode_ip6_next_we      = 'b1;
+               ipdecode_ip6_next_new     = i_data[31:24];
+             //ipdecode_ip6_hoplimit_new = 'b1;
+             //ipdecode_ip6_hoplimit_new = i_data[23:16];
+               ipdecode_ip6_ip_src_we    = 'b1;
+               ipdecode_ip6_ip_src_new   = { i_data[15:0], 112'h0 };
              end
           2: begin
                ipdecode_ip6_ip_src_we  = 'b1;
@@ -3097,17 +3411,56 @@ module nts_parser_ctrl #(
           5: begin
                ipdecode_ip6_ip_dst_we  = 'b1;
                ipdecode_ip6_ip_dst_new = { ipdecode_ip6_ip_dst_reg[127:48], i_data[63:16] };
+               ipdecode_icmp_type_we     = 'b1;
+               ipdecode_icmp_type_new    = i_data[15:8];
+               ipdecode_icmp_code_we     = 'b1;
+               ipdecode_icmp_code_new    = i_data[7:0];
                ipdecode_udp_port_src_we  = 'b1;
                ipdecode_udp_port_src_new = i_data[15:0];
              end
           6: begin
-               ipdecode_udp_port_dst_we  = 'b1;
-               ipdecode_udp_port_dst_new = i_data[63:48];
-               ipdecode_udp_length_we    = 'b1;
-               ipdecode_udp_length_new   = i_data[47:32];
+             //ipdecode_icmp_checksum_we  = 'b1;
+             //ipdecode_icmp_checksum_new = i_data[63:48];
+             //ipdecode_icmp_reserved_we  = 'b1;
+             //ipdecode_icmp_reserved_new = i_data[47:16];
+               ipdecode_icmp_ta_we        = 'b1;
+               ipdecode_icmp_ta_new       = { i_data[15:0], 112'b0 };
+               ipdecode_udp_port_dst_we   = 'b1;
+               ipdecode_udp_port_dst_new  = i_data[63:48];
+               ipdecode_udp_length_we     = 'b1;
+               ipdecode_udp_length_new    = i_data[47:32];
+             end
+          7: begin
+               ipdecode_icmp_ta_we        = 'b1;
+               ipdecode_icmp_ta_new       = { ipdecode_icmp_ta_reg[127-:16], i_data, 48'b0 };
+             end
+          8: begin
+               ipdecode_icmp_ta_we        = 'b1;
+               ipdecode_icmp_ta_new       = { ipdecode_icmp_ta_reg[127-:80], i_data[63-:48] };
              end
           default: ;
         endcase
+      end
+    end
+  end
+
+  //----------------------------------------------------------------
+  // Protocol Detection logic
+  //----------------------------------------------------------------
+
+  always @*
+  begin
+    protocol_detect_ip6ns_new = 0;
+
+    if (detect_ipv6) begin
+      if (ipdecode_ip6_ip_dst_reg[127-:104] == IP_V6_ADDRESS_MULTICAST_SOLICITED_NODE) begin
+        if (ipdecode_ip6_next_reg == IP_PROTO_ICMPV6) begin
+          if (ipdecode_icmp_type_reg == ICMP_TYPE_NEIGHBOR_SOLICITATION) begin
+            if (ipdecode_icmp_code_reg == 0) begin
+              protocol_detect_ip6ns_new = 1;
+            end
+          end
+        end
       end
     end
   end
@@ -3280,8 +3633,8 @@ module nts_parser_ctrl #(
     reg  [1:0]j;
     reg [47:0] hw [0:3];
     reg [31:0] v4 [0:7];
-    arp_match_new = 0;
-    arp_match_mac_new = 0;
+    addr_match_arp_new = 0;
+    addr_match_arp_mac_new = 0;
     hw[0] = { addr_mac0_msb_reg, addr_mac0_lsb_reg };
     hw[1] = { addr_mac1_msb_reg, addr_mac1_lsb_reg };
     hw[2] = { addr_mac2_msb_reg, addr_mac2_lsb_reg };
@@ -3304,8 +3657,43 @@ module nts_parser_ctrl #(
     //end
       if (addr_ipv4_ctrl_reg[i] && addr_mac_ctrl_reg[j]) begin
         if (ipdecode_arp_tpa_reg == v4[i]) begin
-          arp_match_new = 1;
-          arp_match_mac_new = hw[j];
+          addr_match_arp_new = 1;
+          addr_match_arp_mac_new = hw[j];
+        end
+      end
+    end
+  end
+
+  //----------------------------------------------------------------
+  // ICMP v6 Neighbour Solicitation matcher
+  //----------------------------------------------------------------
+
+  always @*
+  begin : icmpv6_ns_matcher
+    integer i;
+    reg   [1:0] j;
+    reg  [47:0] hw [0:3];
+    reg [127:0] v6 [0:7];
+    addr_match_icmpv6ns_new = 0;
+    addr_match_icmpv6ns_mac_new = 0;
+    hw[0] = { addr_mac0_msb_reg, addr_mac0_lsb_reg };
+    hw[1] = { addr_mac1_msb_reg, addr_mac1_lsb_reg };
+    hw[2] = { addr_mac2_msb_reg, addr_mac2_lsb_reg };
+    hw[3] = { addr_mac3_msb_reg, addr_mac3_lsb_reg };
+    v6[0] = addr_ipv6_0_reg;
+    v6[1] = addr_ipv6_1_reg;
+    v6[2] = addr_ipv6_2_reg;
+    v6[3] = addr_ipv6_3_reg;
+    v6[4] = addr_ipv6_4_reg;
+    v6[5] = addr_ipv6_5_reg;
+    v6[6] = addr_ipv6_6_reg;
+    v6[7] = addr_ipv6_7_reg;
+    for (i = 0; i < 8; i = i + 1) begin
+      j = i[1:0];
+      if (addr_ipv6_ctrl_reg[i] && addr_mac_ctrl_reg[j]) begin
+        if (ipdecode_icmp_ta_reg == v6[i]) begin
+          addr_match_icmpv6ns_new = 1;
+          addr_match_icmpv6ns_mac_new = hw[j];
         end
       end
     end

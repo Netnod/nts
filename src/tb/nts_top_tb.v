@@ -116,18 +116,27 @@ module nts_top_tb;
   localparam [11:0] API_ADDR_PARSER_ERROR_SIZE   = API_ADDR_PARSER_BASE + 'h16;
   localparam [11:0] API_ADDR_PARSER_MAC_CTRL     = API_ADDR_PARSER_BASE + 'h30;
   localparam [11:0] API_ADDR_PARSER_IPV4_CTRL    = API_ADDR_PARSER_BASE + 'h31;
+  localparam [11:0] API_ADDR_PARSER_IPV6_CTRL    = API_ADDR_PARSER_BASE + 'h32;
   localparam [11:0] API_ADDR_PARSER_MAC_0        = API_ADDR_PARSER_BASE + 'h40;
   localparam [11:0] API_ADDR_PARSER_MAC_1        = API_ADDR_PARSER_BASE + 'h42;
   localparam [11:0] API_ADDR_PARSER_MAC_2        = API_ADDR_PARSER_BASE + 'h44;
   localparam [11:0] API_ADDR_PARSER_MAC_3        = API_ADDR_PARSER_BASE + 'h46;
-  localparam [11:0] API_ADDR_PARSER_IPV4_0       = API_ADDR_PARSER_BASE + 'h050;
-  localparam [11:0] API_ADDR_PARSER_IPV4_1       = API_ADDR_PARSER_BASE + 'h051;
-  localparam [11:0] API_ADDR_PARSER_IPV4_2       = API_ADDR_PARSER_BASE + 'h052;
-  localparam [11:0] API_ADDR_PARSER_IPV4_3       = API_ADDR_PARSER_BASE + 'h053;
-  localparam [11:0] API_ADDR_PARSER_IPV4_4       = API_ADDR_PARSER_BASE + 'h054;
-  localparam [11:0] API_ADDR_PARSER_IPV4_5       = API_ADDR_PARSER_BASE + 'h055;
-  localparam [11:0] API_ADDR_PARSER_IPV4_6       = API_ADDR_PARSER_BASE + 'h056;
-  localparam [11:0] API_ADDR_PARSER_IPV4_7       = API_ADDR_PARSER_BASE + 'h057;
+  localparam [11:0] API_ADDR_PARSER_IPV4_0       = API_ADDR_PARSER_BASE + 'h50;
+  localparam [11:0] API_ADDR_PARSER_IPV4_1       = API_ADDR_PARSER_BASE + 'h51;
+  localparam [11:0] API_ADDR_PARSER_IPV4_2       = API_ADDR_PARSER_BASE + 'h52;
+  localparam [11:0] API_ADDR_PARSER_IPV4_3       = API_ADDR_PARSER_BASE + 'h53;
+  localparam [11:0] API_ADDR_PARSER_IPV4_4       = API_ADDR_PARSER_BASE + 'h54;
+  localparam [11:0] API_ADDR_PARSER_IPV4_5       = API_ADDR_PARSER_BASE + 'h55;
+  localparam [11:0] API_ADDR_PARSER_IPV4_6       = API_ADDR_PARSER_BASE + 'h56;
+  localparam [11:0] API_ADDR_PARSER_IPV4_7       = API_ADDR_PARSER_BASE + 'h57;
+  localparam [11:0] API_ADDR_PARSER_IPV6_0       = API_ADDR_PARSER_BASE + 'h60;
+  localparam [11:0] API_ADDR_PARSER_IPV6_1       = API_ADDR_PARSER_BASE + 'h64;
+  localparam [11:0] API_ADDR_PARSER_IPV6_2       = API_ADDR_PARSER_BASE + 'h68;
+  localparam [11:0] API_ADDR_PARSER_IPV6_3       = API_ADDR_PARSER_BASE + 'h6C;
+  localparam [11:0] API_ADDR_PARSER_IPV6_4       = API_ADDR_PARSER_BASE + 'h70;
+  localparam [11:0] API_ADDR_PARSER_IPV6_5       = API_ADDR_PARSER_BASE + 'h74;
+  localparam [11:0] API_ADDR_PARSER_IPV6_6       = API_ADDR_PARSER_BASE + 'h78;
+  localparam [11:0] API_ADDR_PARSER_IPV6_7       = API_ADDR_PARSER_BASE + 'h7C;
 
   localparam [11:0] API_DISPATCHER_ADDR_NAME               = 'h000;
   localparam [11:0] API_DISPATCHER_ADDR_VERSION            = 'h002;
@@ -193,6 +202,15 @@ module nts_top_tb;
   localparam  [255:0] NTS_TEST_REQUEST_UI36_S2C_KEY=256'h28278f92_0a93410f_5f576fb6_c4fa7cdf_2a98399a_5f1440bc_db6e0c46_483deb92;
   localparam [2191:0] NTS_TEST_REQUEST_UI36_WITH_KEY_IPV4=2192'h001c7300_00995254_00cdcd23_08004500_01040001_00004011_bc134d48_e37ec23a_cad31267_101b00f0_e55b2300_00200000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_000000eb_f7dd50ad_03b20104_00287207_182ab676_cebf1961_d3e3091a_3c8ced0a_a8d676c8_132488a1_2042b163_ab147449_29da0204_0068c946_55d14245_7b552a95_f7ae6ead_d24ec51a_18304a6c_a2fd2e2e_924f4c8d_3ff95725_2faf9aa4_0149998a_797acde5_7e7cf20a_7b28bcd0_360c52e6_b60d7948_b1d8cf02_b254aff5_640fc6b6_20b4b1d9_5644b40d_38bc6a6d_acc2c49e_f708d298_20295948_60cf0404_00280010_00108e46_4e8aa224_908ca7ad_7b7ad4aa_f704cf47_c856b2ed_d5d76df5_921d9ce7_9f78;
   localparam [2351:0] NTS_TEST_REQUEST_UI36_WITH_KEY_IPV6=2352'h001c7300_00995254_00cdcd23_86dd6000_000000f0_11402a01_03f00001_00085063_d01c72c6_ab922a01_03f70002_00520000_00000000_00111267_101b00f0_08012300_00200000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_000000eb_f7dd50ad_03b20104_00287207_182ab676_cebf1961_d3e3091a_3c8ced0a_a8d676c8_132488a1_2042b163_ab147449_29da0204_0068c946_55d14245_7b552a95_f7ae6ead_d24ec51a_18304a6c_a2fd2e2e_924f4c8d_3ff95725_2faf9aa4_0149998a_797acde5_7e7cf20a_7b28bcd0_360c52e6_b60d7948_b1d8cf02_b254aff5_640fc6b6_20b4b1d9_5644b40d_38bc6a6d_acc2c49e_f708d298_20295948_60cf0404_00280010_00108e46_4e8aa224_908ca7ad_7b7ad4aa_f704cf47_c856b2ed_d5d76df5_921d9ce7_9f78;
+
+  localparam [127:0] IPV6_ADDR_FD75_02 = 128'hfd_75_50_2f_e2_21_dd_cf_00_00_00_00_00_00_00_02;
+  localparam [687:0] PACKET_NEIGHBOR_SOLICITATION = {
+       128'h33_33_ff_00_00_02_98_03_9b_3c_1c_66_86_dd_60_00, // 33ÿ......<.f.Ý`.
+       128'h00_00_00_20_3a_ff_fd_75_50_2f_e2_21_dd_cf_00_00, // ... :ÿýuP/â!ÝÏ..
+       128'h00_00_00_00_00_01_ff_02_00_00_00_00_00_00_00_00, // ......ÿ.........
+       128'h00_01_ff_00_00_02_87_00_0e_c6_00_00_00_00_fd_75, // ..ÿ......Æ....ýu
+       128'h50_2f_e2_21_dd_cf_00_00_00_00_00_00_00_02_01_01, // P/â!ÝÏ..........
+        48'h98_03_9b_3c_1c_66 };                             //  ...<.f
 
   localparam DEBUG           = 1;
   localparam BENCHMARK       = 1;
@@ -453,8 +471,9 @@ module nts_top_tb;
   end
   endtask
 
-  task init_arp ( input [11:0] engine );
-  begin
+  task init_address_resolution( input [11:0] engine );
+  begin : address_resoltion
+    integer i;
     api_write64( {16'h00_00, 48'hFF_FE_FD_FC_FB_FA}, engine, API_ADDR_PARSER_MAC_0 );
     api_write64( {16'h00_00, 48'hEF_EE_ED_EC_EB_EA}, engine, API_ADDR_PARSER_MAC_1 );
     api_write64( {16'h00_00, 48'hDF_DE_DD_DC_DB_DA}, engine, API_ADDR_PARSER_MAC_2 );
@@ -467,8 +486,12 @@ module nts_top_tb;
     api_write32( 32'hD0_A1_A2_A3, engine, API_ADDR_PARSER_IPV4_5 );
     api_write32( 32'hE0_A1_A2_A3, engine, API_ADDR_PARSER_IPV4_6 );
     api_write32( 32'hF0_A1_A2_A3, engine, API_ADDR_PARSER_IPV4_7 );
+    for (i = 0; i < 4; i = i + 1) begin
+      api_write32( IPV6_ADDR_FD75_02[127-i*32-:32], engine, API_ADDR_PARSER_IPV6_0 + i[11:0]);
+    end
     api_write32( 32'h0f, engine, API_ADDR_PARSER_MAC_CTRL );
     api_write32( 32'hff, engine, API_ADDR_PARSER_IPV4_CTRL );
+    api_write32( 32'h01, engine, API_ADDR_PARSER_IPV6_CTRL );
   end
   endtask
 
@@ -732,7 +755,7 @@ module nts_top_tb;
       for (i = 0; i < 100; i = i + 1) begin
         for (engine = 0; engine < ENGINES; engine = engine + 1) begin
           case (i)
-            2: init_arp( engine );
+            2: init_address_resolution( engine );
             5: install_key_256bit( engine, NTS_TEST_REQUEST_MASTER_KEY_ID_1, NTS_TEST_REQUEST_MASTER_KEY_1, 0 );
             6: install_key_256bit( engine, NTS_TEST_REQUEST_MASTER_KEY_ID_2, NTS_TEST_REQUEST_MASTER_KEY_2, 1 );
             7: install_key_256bit( engine, TRACE_MASTER_KEY_ID, TRACE_MASTER_KEY, 2 );
@@ -744,6 +767,7 @@ module nts_top_tb;
           endcase
         end
         if (TEST_NORMAL) begin
+          send_packet({64848'h0, PACKET_NEIGHBOR_SOLICITATION}, 688, 0);
           arp_request(48'hF0_F1_F2_F3_F4_F5, 32'hE0_E1_E2_E3, 32'hD0_D1_D2_D3);
           arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'h80_A1_A2_A3);
           arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'h90_A1_A2_A3);
@@ -800,6 +824,8 @@ module nts_top_tb;
       arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'h90_A1_A2_A3);
       #20000;
       arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'hA0_A1_A2_A3);
+      #20000;
+      send_packet({64848'h0, PACKET_NEIGHBOR_SOLICITATION}, 688, 0);
       #900000;
     end
 

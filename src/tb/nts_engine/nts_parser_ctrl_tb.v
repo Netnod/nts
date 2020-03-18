@@ -85,8 +85,7 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
   wire                         o_tx_clear;
   wire                         o_tx_w_en;
   wire                  [63:0] o_tx_w_data;
-  wire                         o_tx_ipv4_done;
-  wire                         o_tx_ipv6_done;
+  wire                         o_tx_transfer;
 
   /* verilator lint_off UNUSED */
   wire                   [9:0] o_tx_addr;
@@ -309,8 +308,7 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
     .o_tx_clear(o_tx_clear),
     .o_tx_w_en(o_tx_w_en),
     .o_tx_w_data(o_tx_w_data),
-    .o_tx_ipv4_done(o_tx_ipv4_done),
-    .o_tx_ipv6_done(o_tx_ipv6_done),
+    .o_tx_transfer(o_tx_transfer),
     .o_tx_addr(o_tx_addr),
     .i_tx_sum(16'h0),
     .i_tx_sum_done(1'h0),
@@ -363,16 +361,17 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
     .o_crypto_op_cookie_rencrypt(o_crypto_op_cookie_rencrypt),
     .o_crypto_op_c2s_verify_auth(o_crypto_op_c2s_verify_auth),
     .o_crypto_op_s2c_generate_auth(o_crypto_op_s2c_generate_auth),
+    .o_crypto_cookieprefix(o_crypto_cookieprefix),
+    .o_crypto_tx_op_store_cookiebuf(o_crypto_tx_op_store_cookiebuf),
+    .o_crypto_op_cookiebuf_append(o_crypto_op_cookiebuf_append),
+    .o_crypto_op_cookiebuf_reset(o_crypto_op_cookiebuf_reset),
+
 
     .o_muxctrl_timestamp_ipv4(o_muxctrl_timestamp_ipv4),
     .o_muxctrl_timestamp_ipv6(o_muxctrl_timestamp_ipv6),
 
     .o_muxctrl_crypto(o_muxctrl_crypto),
 
-    .o_crypto_cookieprefix(o_crypto_cookieprefix),
-    .o_crypto_tx_op_store_cookiebuf(o_crypto_tx_op_store_cookiebuf),
-    .o_crypto_op_cookiebuf_append(o_crypto_op_cookiebuf_append),
-    .o_crypto_op_cookiebuf_reset(o_crypto_op_cookiebuf_reset),
     .o_statistics_nts_processed(o_statistics_nts_processed),
     .o_statistics_nts_bad_cookie(o_statistics_nts_bad_cookie),
     .o_statistics_nts_bad_auth(o_statistics_nts_bad_auth),
@@ -554,9 +553,7 @@ module nts_parser_ctrl_tb #( parameter integer verbose_output = 'h0);
         $display("%s:%0d TX_CLEAR", `__FILE__, `__LINE__);
       end else if (o_tx_w_en) begin
         $display("%s:%0d TX_WRITE: %h", `__FILE__, `__LINE__, o_tx_w_data);
-      end else if (o_tx_ipv4_done) begin
-        $display("%s:%0d TX_TRANSMIT IPv4", `__FILE__, `__LINE__);
-      end else if (o_tx_ipv6_done) begin
+      end else if (o_tx_transfer) begin
         $display("%s:%0d TX_TRANSMIT IPv6", `__FILE__, `__LINE__);
       end
     end

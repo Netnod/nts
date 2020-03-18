@@ -697,6 +697,7 @@ module nts_extractor #(
     txmem_wren         = 0;
     txmem_addr         = 0;
     tx_start           = 0;
+    tx_start_last      = 0;
     tx_start_lwdv      = 0;
     buffer_read_stop   = 0;
 

@@ -204,6 +204,7 @@ module nts_top_tb;
   localparam [2351:0] NTS_TEST_REQUEST_UI36_WITH_KEY_IPV6=2352'h001c7300_00995254_00cdcd23_86dd6000_000000f0_11402a01_03f00001_00085063_d01c72c6_ab922a01_03f70002_00520000_00000000_00111267_101b00f0_08012300_00200000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_000000eb_f7dd50ad_03b20104_00287207_182ab676_cebf1961_d3e3091a_3c8ced0a_a8d676c8_132488a1_2042b163_ab147449_29da0204_0068c946_55d14245_7b552a95_f7ae6ead_d24ec51a_18304a6c_a2fd2e2e_924f4c8d_3ff95725_2faf9aa4_0149998a_797acde5_7e7cf20a_7b28bcd0_360c52e6_b60d7948_b1d8cf02_b254aff5_640fc6b6_20b4b1d9_5644b40d_38bc6a6d_acc2c49e_f708d298_20295948_60cf0404_00280010_00108e46_4e8aa224_908ca7ad_7b7ad4aa_f704cf47_c856b2ed_d5d76df5_921d9ce7_9f78;
 
   localparam [127:0] IPV6_ADDR_FD75_02 = 128'hfd_75_50_2f_e2_21_dd_cf_00_00_00_00_00_00_00_02;
+  localparam [127:0] IPV6_ADDR_FD75_10 = 128'hfd_75_50_2f_e2_21_dd_cf_00_00_00_00_00_00_00_10;
   localparam [687:0] PACKET_NEIGHBOR_SOLICITATION = {
        128'h33_33_ff_00_00_02_98_03_9b_3c_1c_66_86_dd_60_00, // 33ÿ......<.f.Ý`.
        128'h00_00_00_20_3a_ff_fd_75_50_2f_e2_21_dd_cf_00_00, // ... :ÿýuP/â!ÝÏ..
@@ -211,6 +212,28 @@ module nts_top_tb;
        128'h00_01_ff_00_00_02_87_00_0e_c6_00_00_00_00_fd_75, // ..ÿ......Æ....ýu
        128'h50_2f_e2_21_dd_cf_00_00_00_00_00_00_00_02_01_01, // P/â!ÝÏ..........
         48'h98_03_9b_3c_1c_66 };                             //  ...<.f
+
+  //12:29:39.724886 IP6 fd75:502f:e221:ddcf::1 > fd75:502f:e221:ddcf::10: ICMP6, echo request, seq 3, length 64
+  localparam [943:0] PACKET_PING6 = {
+     128'hfffe_fdfc_fbfa_9803_9b3c_1c66_86dd_6009,
+     128'hf7e6_0040_3a40_fd75_502f_e221_ddcf_0000,
+     128'h0000_0000_0001_fd75_502f_e221_ddcf_0000,
+     128'h0000_0000_0010_8000_37b7_68a2_0003_23a9,
+     128'h745e_0000_0000_620f_0b00_0000_0000_1011,
+     128'h1213_1415_1617_1819_1a1b_1c1d_1e1f_2021,
+     128'h2223_2425_2627_2829_2a2b_2c2d_2e2f_3031,
+      48'h3233_3435_3637
+  };
+
+  //IP6 fd75:502f:e221:ddcf::1.45876 > fd75:502f:e221:ddcf::2.33434: UDP, length 32
+  localparam [751:0] PACKET_IP6_UDP_TRACEROUTE = {
+	128'h525a_2c18_2e80_9803_9b3c_1c66_86dd_6003,
+	128'h0cc0_0028_1101_fd75_502f_e221_ddcf_0000,
+	128'h0000_0000_0001_fd75_502f_e221_ddcf_0000,
+	128'h0000_0000_0002_b334_829a_0028_1b6a_4041,
+	128'h4243_4445_4647_4849_4a4b_4c4d_4e4f_5051,
+	112'h5253_5455_5657_5859_5a5b_5c5d_5e5f
+  };
 
   localparam DEBUG           = 1;
   localparam BENCHMARK       = 1;
@@ -488,10 +511,11 @@ module nts_top_tb;
     api_write32( 32'hF0_A1_A2_A3, engine, API_ADDR_PARSER_IPV4_7 );
     for (i = 0; i < 4; i = i + 1) begin
       api_write32( IPV6_ADDR_FD75_02[127-i*32-:32], engine, API_ADDR_PARSER_IPV6_0 + i[11:0]);
+      api_write32( IPV6_ADDR_FD75_10[127-i*32-:32], engine, API_ADDR_PARSER_IPV6_1 + i[11:0]);
     end
     api_write32( 32'h0f, engine, API_ADDR_PARSER_MAC_CTRL );
     api_write32( 32'hff, engine, API_ADDR_PARSER_IPV4_CTRL );
-    api_write32( 32'h01, engine, API_ADDR_PARSER_IPV6_CTRL );
+    api_write32( 32'h03, engine, API_ADDR_PARSER_IPV6_CTRL );
   end
   endtask
 
@@ -777,6 +801,8 @@ module nts_top_tb;
           arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'hD0_A1_A2_A3);
           arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'hE0_A1_A2_A3);
           arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'hF0_A1_A2_A3);
+          send_packet({64592'b0, PACKET_PING6}, 944, 0);
+          send_packet({64784'b0, PACKET_IP6_UDP_TRACEROUTE}, 752, 0);
           send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_KEYID}, 2160, 0);
           send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_KEYID}, 2160, 0);
           send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_COOKIE}, 2160, 0);
@@ -826,6 +852,10 @@ module nts_top_tb;
       arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'hA0_A1_A2_A3);
       #20000;
       send_packet({64848'h0, PACKET_NEIGHBOR_SOLICITATION}, 688, 0);
+      #20000;
+      send_packet({64592'h0, PACKET_PING6}, 944, 0);
+      #20000;
+      send_packet({64784'b0, PACKET_IP6_UDP_TRACEROUTE}, 752, 0);
       #900000;
     end
 

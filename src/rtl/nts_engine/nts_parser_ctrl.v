@@ -235,6 +235,7 @@ module nts_parser_ctrl #(
   localparam [BITS_STATE-1:0] STATE_ICMPV6_ECHO_RESPOND      = 7'h15;
   localparam [BITS_STATE-1:0] STATE_ICMPV6_ECHO_COPY         = 7'h16;
   localparam [BITS_STATE-1:0] STATE_ICMPV6_ECHO_COPY_D       = 7'h17;
+  localparam [BITS_STATE-1:0] STATE_ICMPV6_ECHO_COPY_D2      = 7'h18;
 
   localparam [BITS_STATE-1:0] STATE_ICMPV6_UPDATE_LENGTH     = 7'h1a;
   localparam [BITS_STATE-1:0] STATE_ICMPV6_CSUM_RESET        = 7'h1b;
@@ -904,9 +905,9 @@ module nts_parser_ctrl #(
   wire [86*8-1:0] tx_header_ethernet_ipv6_icmp_na;
 
   //ICMPv6 Echo Reply (ping)
-  wire [ 2*8-1:0] tx_header_icmp_echo;
+  wire [ 4*8-1:0] tx_header_icmp_echo;
   wire [40*8-1:0] tx_header_ipv6_echo;
-  wire [56*8-1:0] tx_header_ethernet_ipv6_icmp_echo;
+  wire [58*8-1:0] tx_header_ethernet_ipv6_icmp_echo;
 
   reg                    tx_address_internal;
   reg [ADDR_WIDTH+3-1:0] tx_address;
@@ -1079,13 +1080,17 @@ module nts_parser_ctrl #(
                              };
   assign tx_header_ethernet_ipv6_icmp_na = { tx_header_ethernet_na, tx_header_ipv6_na, tx_header_icmp_na };
 
+  //----------------------------------------------------------------
+  // ICMPv6 Echo Reply
+  //----------------------------------------------------------------
+
   assign tx_header_ipv6_echo = { IP_V6, IPV6_TC, IPV6_FL,
                                  ipdecode_ip6_payload_length_reg,
                                  IP_PROTO_ICMPV6,
                                  IPV6_HOPLIMIT,
                                  ipdecode_ip6_ip_dst_reg, ipdecode_ip6_ip_src_reg
                                };
-  assign tx_header_icmp_echo = { ICMP_TYPE_ECHO_REPLY, 8'h0 /* code */ };
+  assign tx_header_icmp_echo = { ICMP_TYPE_ECHO_REPLY, 8'h0 /* code */, 16'h0000 };
   assign tx_header_ethernet_ipv6_icmp_echo = { tx_header_ethernet, tx_header_ipv6_echo, tx_header_icmp_echo };
 
 
@@ -2590,7 +2595,7 @@ module nts_parser_ctrl #(
           tx_header_arp_index_we = 1;
           tx_header_arp_index_new = 5;
           tx_header_icmpv6_echo_index_we = 1;
-          tx_header_icmpv6_echo_index_new = 6;
+          tx_header_icmpv6_echo_index_new = 7;
           tx_header_icmpv6ns_index_we = 1;
           tx_header_icmpv6ns_index_new = 10;
           tx_header_ipv4_index_we = 1;
@@ -2644,12 +2649,14 @@ module nts_parser_ctrl #(
           tx_icmp_tmpblock_new       = { 16'h0000, ipdecode_icmp_echo_id_reg, ipdecode_icmp_echo_seq_reg, ipdecode_icmp_echo_d0_reg };
         end
       STATE_ICMPV6_ECHO_RESPOND:
-        begin
+        begin : emit_echo_response
+          reg [8*64-1:0] header;
           tx_header_icmpv6_echo_index_we = 1;
           tx_header_icmpv6_echo_index_new = tx_header_icmpv6_echo_index_reg - 1;
           tx_address_internal = 1;
+          header = { tx_header_ethernet_ipv6_icmp_echo, 48'h0000_0000_0000 };
           tx_write_en = 1;
-          tx_write_data = tx_header_ethernet_ipv6_icmp_echo[ tx_header_icmpv6_echo_index_reg*64+:64 ];
+          tx_write_data = header[ tx_header_icmpv6_echo_index_reg*64+:64 ];
         end
       STATE_ICMPV6_ECHO_COPY_D:
         begin
@@ -2669,17 +2676,20 @@ module nts_parser_ctrl #(
           len[ADDR_WIDTH+3-1:0] = tx_icmp_payload_length_reg;
           tx_sum_reset = 1;
           tx_sum_reset_value = {8'h00, IP_PROTO_ICMPV6 } + len;
+        //$display("%s:%0d: csum_reset: %h len %h (%0d)", `__FILE__, `__LINE__, tx_sum_reset_value, len, len);
         end
       STATE_ICMPV6_CSUM_CALC:
         begin
           tx_address = 14 + 8;
           tx_sum_en = 1;
           tx_sum_bytes = tx_icmp_csum_bytes_reg;
+        //$display("%s:%0d: csum bytes %h (%0d)", `__FILE__, `__LINE__, tx_sum_bytes, tx_sum_bytes);
         end
       STATE_ICMPV6_CSUM_WAIT:
         if (i_tx_sum_done) begin
           tx_icmp_tmpblock_we = 1;
           tx_icmp_tmpblock_new = { (~i_tx_sum), tx_icmp_tmpblock_reg[47:0] };
+        //$display("%s:%0d: csum: %h before not: %h", `__FILE__, `__LINE__, (~i_tx_sum), i_tx_sum);
         end
       STATE_ICMPV6_CSUM_UPDATE:
         begin
@@ -3222,6 +3232,13 @@ module nts_parser_ctrl #(
         end
       STATE_ICMPV6_ECHO_COPY_D:
         if (copy_done) begin
+          state_we  = 'b1;
+          state_new = STATE_ICMPV6_ECHO_COPY_D2;
+        end
+      STATE_ICMPV6_ECHO_COPY_D2:
+        //TXBUF memory controller require wait cycles delay
+        //between different unaligned burst writes.
+        if (i_tx_busy == 'b0) begin
           state_we  = 'b1;
           state_new = STATE_ICMPV6_UPDATE_LENGTH;
         end

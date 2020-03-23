@@ -801,7 +801,7 @@ module nts_top_tb;
           arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'hD0_A1_A2_A3);
           arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'hE0_A1_A2_A3);
           arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'hF0_A1_A2_A3);
-          send_packet({64592'b0, PACKET_PING6}, 944, 0);
+        //send_packet({64592'b0, PACKET_PING6}, 944, 0);
           send_packet({64784'b0, PACKET_IP6_UDP_TRACEROUTE}, 752, 0);
           send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_KEYID}, 2160, 0);
           send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_KEYID}, 2160, 0);
@@ -853,9 +853,15 @@ module nts_top_tb;
       #20000;
       send_packet({64848'h0, PACKET_NEIGHBOR_SOLICITATION}, 688, 0);
       #20000;
-      send_packet({64592'h0, PACKET_PING6}, 944, 0);
-      #20000;
       send_packet({64784'b0, PACKET_IP6_UDP_TRACEROUTE}, 752, 0);
+      #20000;
+      begin : ping
+        integer i;
+        for (i = 0; i < 10; i = i + 1) begin
+          send_packet({64592'h0, PACKET_PING6}, 944, 0);
+          #200;
+        end
+      end
       #900000;
     end
 
@@ -1085,16 +1091,149 @@ module nts_top_tb;
   end
   endfunction
 
+  reg                      tx_rec_new;
+  /* verilator lint_off UNUSED */
+  integer                  tx_rec_bytes;
+  /* verilator lint_on UNUSED */
+  reg     [ADDR_WIDTH-1:0] tx_rec_addr;
+  reg               [63:0] tx_rec_data [0:(1<<ADDR_WIDTH)-1];
+
+  function [63:0] swap(input [63:0] in);
+  begin
+     swap[8*0+:8] = in[8*7+:8];
+     swap[8*1+:8] = in[8*6+:8];
+     swap[8*2+:8] = in[8*5+:8];
+     swap[8*3+:8] = in[8*4+:8];
+     swap[8*4+:8] = in[8*3+:8];
+     swap[8*5+:8] = in[8*2+:8];
+     swap[8*6+:8] = in[8*1+:8];
+     swap[8*7+:8] = in[8*0+:8];
+  end
+  endfunction
+
+  function [7:0] tx_read_byte(input integer i);
+  begin : tx_read_byte_
+    reg  [2:0] index;
+    reg [63:0] tmp;
+
+    tmp = swap( tx_rec_data[ i[ADDR_WIDTH+3-1:3] ] );
+    //$display("%s:%0d * TX * tmp=%h", `__FILE__, `__LINE__, tmp);
+    if (i >= tx_rec_bytes) begin
+      tx_read_byte = 8'h00;
+      //$display("%s:%0d * TX * tx_read_byte error, tx_rec_bytes: (%0d) i: (%0d)", `__FILE__, `__LINE__, tx_rec_bytes, i);
+    end else begin
+      index = i[2:0];
+      case (index)
+        0: tx_read_byte = tmp[63-:8];
+        1: tx_read_byte = tmp[55-:8];
+        2: tx_read_byte = tmp[47-:8];
+        3: tx_read_byte = tmp[39-:8];
+        4: tx_read_byte = tmp[31-:8];
+        5: tx_read_byte = tmp[23-:8];
+        6: tx_read_byte = tmp[15-:8];
+        7: tx_read_byte = tmp[7-:8];
+        default:
+          begin
+            tx_read_byte = 0;
+            //$display("%s:%0d * TX * tx_read_byte error, index: (%0d) i: (%0d)", `__FILE__, `__LINE__, index, i);
+          end
+      endcase
+    end
+    //$display("%s:%0d * TX * tx_read_byte(%0d)=%h", `__FILE__, `__LINE__, i, tx_read_byte);
+  end
+  endfunction
+
+  function [15:0] tx_read_word16(input integer i);
+  begin
+    tx_read_word16[15:8] = tx_read_byte( i );
+    tx_read_word16[7:0] = tx_read_byte( i + 1 );
+  end
+  endfunction
+
+  function [15:0] internet_checksum(input  [15:0] init,
+                                    input integer start,
+                                    input integer length);
+  begin : internet_checksum_
+    integer    index;
+    integer    remain;
+    reg        carry;
+    reg [15:0] sum;
+    carry = 0;
+    index = start;
+    remain = length;
+    sum = init;
+    while (remain > 0) begin : internet_checksum__
+      reg [15:0] word;
+      if (remain > 1) begin
+        word = tx_read_word16(index);
+        index = index + 2;
+        remain = remain - 2;
+      end else begin
+        word = { tx_read_byte(index), 8'h00 };
+        index = index + 1;
+        remain = remain - 1;
+      end
+      $display("%s:%0d * TX * csum = %h + %h", `__FILE__, `__LINE__, sum, word);
+
+      { carry, sum } = { 1'b0, sum } + { 1'b0, word };
+      if (carry) begin
+        sum = sum + 1;
+        $display("%s:%0d * TX * csum = %h (carry corrected)", `__FILE__, `__LINE__, sum);
+      end
+    end
+    internet_checksum = sum;
+  end
+  endfunction
+
+  task check_icmp_v6;
+  begin : check_icmp_v6_
+    reg [15:0] csum;
+    reg [15:0] ethernet_protocol;
+    reg [15:0] payload_length;
+    reg  [7:0] next;
+    ethernet_protocol = tx_read_word16( 12 );
+    payload_length = tx_read_word16(14 + 4);
+    next = tx_read_byte(14 + 4 + 2);
+    //$display("%s:%0d * TX * Ethernet Protocol %h", `__FILE__, `__LINE__, ethernet_protocol);
+    if (ethernet_protocol == 16'h86DD) begin
+      //$display("%s:%0d * TX * IPv6 Payload Length %h (%0d)", `__FILE__, `__LINE__, payload_length, payload_length);
+      //$display("%s:%0d * TX * IPv6 Next %h (%0d)", `__FILE__, `__LINE__, next, next);
+      if (next == 58) begin
+        csum = { 8'h00, next } + payload_length;
+        csum = internet_checksum(csum,
+                                 14 + 8,
+                                 32 + {16'h0, payload_length }
+                                 );
+        $display("%s:%0d * TX * ICMPv6 CHECK: %h (%s)", `__FILE__, `__LINE__, csum, (csum==16'hffff)?"PASS":"FAIL");
+      end
+    end
+
+  end
+  endtask
+
+  always @(posedge i_clk or posedge i_areset)
+  begin : tx_checks
+    if (i_areset) begin
+    end else if (tx_rec_new) begin
+      $display("%s:%0d * TX * tx_rec_bytes: %h (%0d)", `__FILE__, `__LINE__, tx_rec_bytes, tx_rec_bytes);
+      check_icmp_v6();
+    end
+  end
+
   always @(posedge i_clk or posedge i_areset)
   begin : tx_model
     reg [9:0] tmp_ipg;
     if (i_areset) begin
       i_mac_tx_ack <= 0;
       tx_ipg <= 0;
+      tx_rec_new <= 0;
+      tx_rec_bytes <= 0;
+      tx_rec_addr <= 0;
       tx_seed <= 0;
       tx_state <= TX_IDLE;
     end else begin
       i_mac_tx_ack <= 0;
+      tx_rec_new <= 0;
       case (tx_state)
         TX_IDLE:
           begin
@@ -1112,28 +1251,37 @@ module nts_top_tb;
             if (o_mac_tx_data_valid != 8'h00) $display("%s:%0d TX TX_IPG illegal data: %h - %h", `__FILE__, `__LINE__, o_mac_tx_data_valid, o_mac_tx_data);
             if (tx_ipg == 0) begin
               $display("%s:%0d TX MAC issues transmit send ack", `__FILE__, `__LINE__);
+              `assert(o_mac_tx_data_valid == 8'hff);
               i_mac_tx_ack <= 1;
-              tx_state <= TX_AWAIT_DATA;
+              tx_rec_addr <= 0;
+              tx_rec_bytes <= 0;
+              tx_state <= TX_RECEIVING;
             end else begin
               tx_ipg <= tx_ipg - 1;
             end
           end
-        TX_AWAIT_DATA:
-          begin
-            case (o_mac_tx_data_valid)
-              8'h00: ;
-              8'hff: tx_state <= TX_RECEIVING;
-              default: ;
-            endcase
-            if (o_mac_tx_data_valid != 8'h00)
-              $display("%s:%0d TX Transmit to MAC, DV: %h Data: %h", `__FILE__, `__LINE__, o_mac_tx_data_valid, o_mac_tx_data);
-          end
         TX_RECEIVING:
           begin
-            if (o_mac_tx_data_valid != 8'hff)
+            if (o_mac_tx_data_valid != 8'hff) begin
               tx_state <= TX_IDLE;
-            if (o_mac_tx_data_valid != 8'h00)
+              tx_rec_new <= 1;
+            end
+            if (o_mac_tx_data_valid != 8'h00) begin
               $display("%s:%0d TX Transmit to MAC, DV: %h Data: %h", `__FILE__, `__LINE__, o_mac_tx_data_valid, o_mac_tx_data);
+              tx_rec_data[tx_rec_addr] <= o_mac_tx_data;
+              tx_rec_addr <= tx_rec_addr + 1;
+            end
+            case (o_mac_tx_data_valid)
+              8'b0000_0001: tx_rec_bytes <= tx_rec_bytes + 1;
+              8'b0000_0011: tx_rec_bytes <= tx_rec_bytes + 2;
+              8'b0000_0111: tx_rec_bytes <= tx_rec_bytes + 3;
+              8'b0000_1111: tx_rec_bytes <= tx_rec_bytes + 4;
+              8'b0001_1111: tx_rec_bytes <= tx_rec_bytes + 5;
+              8'b0011_1111: tx_rec_bytes <= tx_rec_bytes + 6;
+              8'b0111_1111: tx_rec_bytes <= tx_rec_bytes + 7;
+              8'b1111_1111: tx_rec_bytes <= tx_rec_bytes + 8;
+              default: ;
+            endcase
           end
       endcase
 

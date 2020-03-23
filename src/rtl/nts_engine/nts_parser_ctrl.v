@@ -1846,7 +1846,7 @@ module nts_parser_ctrl #(
         tx_icmp_csum_bytes_reg <= tx_icmp_csum_bytes_new;
 
       if (tx_icmp_payload_length_we)
-        tx_icmp_payload_length_reg <= tx_icmp_payload_length_reg;
+        tx_icmp_payload_length_reg <= tx_icmp_payload_length_new;
 
       if (tx_icmp_total_length_we)
         tx_icmp_total_length_reg <= tx_icmp_total_length_new;

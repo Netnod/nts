@@ -2561,6 +2561,8 @@ module nts_parser_ctrl #(
     nonce_length = BYTES_AUTH_NONCE; //typecast from length undefined to 16bit
 
     tx_authenticator_length_new = BYTES_AUTH_OVERHEAD /*TL, NL, CL */ + BYTES_AUTH_NONCE + tx_ciphertext_length_reg;
+    tx_ciphertext_length_new = BYTES_AUTH_TAG + LEN_NTS_COOKIE * cookies_to_emit;
+
     tx_address_internal = 0;
     tx_address = 0;
     tx_icmp_total_length_we = 0;
@@ -2571,7 +2573,6 @@ module nts_parser_ctrl #(
     tx_icmp_payload_length_new = 0;
     tx_icmp_tmpblock_we = 0;
     tx_icmp_tmpblock_new = 0;
-    tx_ciphertext_length_new = 0;
     tx_header_arp_index_we = 0;
     tx_header_arp_index_new = 0;
     tx_header_icmpv6_echo_index_we = 0;

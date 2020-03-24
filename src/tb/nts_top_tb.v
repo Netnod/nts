@@ -859,7 +859,7 @@ module nts_top_tb;
         integer i;
         for (i = 0; i < 10; i = i + 1) begin
           send_packet({64592'h0, PACKET_PING6}, 944, 0);
-          #200;
+          #800;
         end
       end
       #900000;
@@ -1207,7 +1207,93 @@ module nts_top_tb;
         $display("%s:%0d * TX * ICMPv6 CHECK: %h (%s)", `__FILE__, `__LINE__, csum, (csum==16'hffff)?"PASS":"FAIL");
       end
     end
+  end
+  endtask
 
+  task check_nts;
+  begin : check_nts_
+    reg        garbage;
+    reg [15:0] ethernet_protocol;
+    reg [15:0] srcport;
+    reg [15:0] payload_length;
+    reg  [7:0] next;
+    integer    extension_offset;
+    integer    i;
+    reg [15:0] ext_tag;
+    reg [15:0] ext_length;
+    garbage = 0;
+
+    ethernet_protocol = tx_read_word16( 12 );
+    case (ethernet_protocol)
+      16'h86DD:
+        begin
+          payload_length = tx_read_word16(14 + 4);
+          next = tx_read_byte(14 + 4 + 2);
+          srcport = tx_read_word16( 14 + 40 );
+          extension_offset = 14 + 40 + 8 + 6*8;
+        end
+      16'h0800:
+        begin
+          payload_length = tx_read_word16(14 + 2);
+          if (payload_length > 20) begin
+            payload_length = payload_length - 20;
+          end else begin
+            garbage = 1;
+          end
+          next = tx_read_byte(14 + 9);
+          srcport = tx_read_word16( 14 + 20 );
+          extension_offset = 14 + 20 + 8 + 6*8;
+        end
+      default: garbage = 1;
+    endcase
+
+    if (!garbage) begin
+      $display("%s:%0d * TX * next: %0d", `__FILE__, `__LINE__, next);
+      if (next == 17) begin
+        $display("%s:%0d * TX * UDP SRC port: %0d", `__FILE__, `__LINE__, srcport);
+        if (srcport == 123 || srcport == 4123) begin
+          //Great, it is NTP!
+        end else begin
+          garbage = 1;
+        end
+      end else garbage = 1;
+    end
+    if (!garbage) begin
+      if (payload_length < 8+6*8) begin
+        $display("%s:%0d * TX * NTP Payload Length: (%0d) (%0d) - ERROR SHORT", `__FILE__, `__LINE__, payload_length, payload_length-8);
+         garbage = 1;
+      end else if (payload_length == 8+6*8) begin
+        $display("%s:%0d * TX * NTP Payload Length: (%0d) (%0d) - NTP only, no auth", `__FILE__, `__LINE__, payload_length, payload_length-8);
+       garbage = 1;
+      end else if (payload_length > 8+6*8+32+10) begin
+        $display("%s:%0d * TX * NTP Payload Length: (%0d) (%0d) - Probably NTS", `__FILE__, `__LINE__, payload_length, payload_length-8);
+      end
+    end
+    if (!garbage) begin : ext_proc
+      reg [15:0] skip_bytes;
+      skip_bytes = 0;
+      i = extension_offset;
+      while (i < tx_rec_bytes) begin
+        if (skip_bytes > 0) begin
+          skip_bytes = skip_bytes-1;
+          i = i + 1;
+        end else begin
+          ext_tag = tx_read_word16( i );
+          ext_length = tx_read_word16( i + 2 );
+          $display("%s:%0d * TX * NTP Extension: Tag: %h Length: %h", `__FILE__, `__LINE__, ext_tag, ext_length);
+          if (ext_tag == 16'h0104 && ext_length < 4+32) begin
+            $display("%s:%0d * TX * NTP Extension: NTS Warning short UniqIdEF!!", `__FILE__, `__LINE__);
+          end
+          `assert(ext_length % 4 == 0);
+          if (ext_tag == 16'h0404 && ext_length < 4+2+2+4+32) begin
+            $display("%s:%0d * TX * NTP Extension: NTS Warning short Enc&AuthEF!!", `__FILE__, `__LINE__);
+          end
+          `assert(ext_length % 4 == 0);
+          `assert(ext_length > 16);
+          skip_bytes = ext_length;
+        end
+      end
+    end
   end
   endtask
 
@@ -1217,6 +1303,7 @@ module nts_top_tb;
     end else if (tx_rec_new) begin
       $display("%s:%0d * TX * tx_rec_bytes: %h (%0d)", `__FILE__, `__LINE__, tx_rec_bytes, tx_rec_bytes);
       check_icmp_v6();
+      check_nts();
     end
   end
 
@@ -1330,6 +1417,8 @@ module nts_top_tb;
   //----------------------------------------------------------------
 
   if (DEBUG>0) begin
+    always @*
+     $display("%s:%0d dut.genblk1[0].engine.parser.cookies_count_reg: %h", `__FILE__, `__LINE__, dut.genblk1[0].engine.parser.cookies_count_reg);
     always @*
       $display("%s:%0d dut.dispatcher.engines_ready_reg: %h", `__FILE__, `__LINE__,  dut.dispatcher.engines_ready_reg);
     always @*

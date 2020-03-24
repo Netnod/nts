@@ -217,77 +217,79 @@ module nts_parser_ctrl #(
   // Internal constant and parameter definitions.
   //----------------------------------------------------------------
 
-  localparam BITS_STATE = 7;
+  localparam BITS_ICMP_STATE = 5;
 
-  localparam [BITS_STATE-1:0] STATE_IDLE                     = 7'h00;
-  localparam [BITS_STATE-1:0] STATE_COPY                     = 7'h01; //RX handling states
-  localparam [BITS_STATE-1:0] STATE_SELECT_PROTOCOL_HANDLER  = 7'h02;
-  localparam [BITS_STATE-1:0] STATE_SELECT_IPV4_HANDLER      = 7'h03;
-  localparam [BITS_STATE-1:0] STATE_SELECT_IPV6_HANDLER      = 7'h04;
+  localparam [BITS_ICMP_STATE-1:0] ICMP_S_IDLE             = 5'h00;
+  localparam [BITS_ICMP_STATE-1:0] ICMP_S_V6_ND_INIT       = 5'h01;
+  localparam [BITS_ICMP_STATE-1:0] ICMP_S_V6_ND_RESPOND    = 5'h02;
+  localparam [BITS_ICMP_STATE-1:0] ICMP_S_V6_ECHO_INIT     = 5'h03;
+  localparam [BITS_ICMP_STATE-1:0] ICMP_S_V6_ECHO_RESPOND  = 5'h04;
+  localparam [BITS_ICMP_STATE-1:0] ICMP_S_V6_ECHO_COPY     = 5'h05;
+  localparam [BITS_ICMP_STATE-1:0] ICMP_S_V6_ECHO_COPY_D   = 5'h06;
+  localparam [BITS_ICMP_STATE-1:0] ICMP_S_V6_ECHO_COPY_D2  = 5'h07;
+  localparam [BITS_ICMP_STATE-1:0] ICMP_S_V6_UPDATE_LENGTH = 5'h10;
+  localparam [BITS_ICMP_STATE-1:0] ICMP_S_V6_CSUM_RESET    = 5'h11;
+  localparam [BITS_ICMP_STATE-1:0] ICMP_S_V6_CSUM_CALC     = 5'h12;
+  localparam [BITS_ICMP_STATE-1:0] ICMP_S_V6_CSUM_WAIT     = 5'h13;
+  localparam [BITS_ICMP_STATE-1:0] ICMP_S_V6_CSUM_UPDATE   = 5'h14;
+  localparam [BITS_ICMP_STATE-1:0] ICMP_S_V6_CSUM_UPDATE_D = 5'h15;
+  localparam [BITS_ICMP_STATE-1:0] ICMP_S_DROP_PACKET      = 5'h1e;
+  localparam [BITS_ICMP_STATE-1:0] ICMP_S_TRANSMIT_PACKET  = 5'h1f;
 
-  localparam [BITS_STATE-1:0] STATE_ARP_INIT                 = 7'h10;
-  localparam [BITS_STATE-1:0] STATE_ARP_RESPOND              = 7'h11;
+  localparam BITS_STATE = 6;
 
-  localparam [BITS_STATE-1:0] STATE_ICMPV6_ND_INIT           = 7'h12;
-  localparam [BITS_STATE-1:0] STATE_ICMPV6_ND_RESPOND        = 7'h13;
+  localparam [BITS_STATE-1:0] STATE_IDLE                     = 6'h00;
+  localparam [BITS_STATE-1:0] STATE_COPY                     = 6'h01; //RX handling states
+  localparam [BITS_STATE-1:0] STATE_SELECT_PROTOCOL_HANDLER  = 6'h02;
+  localparam [BITS_STATE-1:0] STATE_SELECT_IPV4_HANDLER      = 6'h03;
+  localparam [BITS_STATE-1:0] STATE_SELECT_IPV6_HANDLER      = 6'h04;
+  localparam [BITS_STATE-1:0] STATE_PROCESS_ICMP             = 6'h05;
 
-  localparam [BITS_STATE-1:0] STATE_ICMPV6_ECHO_INIT         = 7'h14;
-  localparam [BITS_STATE-1:0] STATE_ICMPV6_ECHO_RESPOND      = 7'h15;
-  localparam [BITS_STATE-1:0] STATE_ICMPV6_ECHO_COPY         = 7'h16;
-  localparam [BITS_STATE-1:0] STATE_ICMPV6_ECHO_COPY_D       = 7'h17;
-  localparam [BITS_STATE-1:0] STATE_ICMPV6_ECHO_COPY_D2      = 7'h18;
+  localparam [BITS_STATE-1:0] STATE_ARP_INIT                 = 6'h06;
+  localparam [BITS_STATE-1:0] STATE_ARP_RESPOND              = 6'h07;
 
-  localparam [BITS_STATE-1:0] STATE_ICMPV6_UPDATE_LENGTH     = 7'h1a;
-  localparam [BITS_STATE-1:0] STATE_ICMPV6_CSUM_RESET        = 7'h1b;
-  localparam [BITS_STATE-1:0] STATE_ICMPV6_CSUM_CALC         = 7'h1c;
-  localparam [BITS_STATE-1:0] STATE_ICMPV6_CSUM_WAIT         = 7'h1d;
-  localparam [BITS_STATE-1:0] STATE_ICMPV6_CSUM_UPDATE       = 7'h1e;
-  localparam [BITS_STATE-1:0] STATE_ICMPV6_CSUM_UPDATE_D     = 7'h1f;
+  localparam [BITS_STATE-1:0] STATE_LENGTH_CHECKS            = 6'h10;
+  localparam [BITS_STATE-1:0] STATE_EXTRACT_EXT_FROM_RAM     = 6'h11;
+  localparam [BITS_STATE-1:0] STATE_EXTENSIONS_EXTRACTED     = 6'h12;
+  localparam [BITS_STATE-1:0] STATE_EXTRACT_COOKIE_FROM_RAM  = 6'h13;
+  localparam [BITS_STATE-1:0] STATE_VERIFY_KEY_FROM_COOKIE1  = 6'h14;
+  localparam [BITS_STATE-1:0] STATE_VERIFY_KEY_FROM_COOKIE2  = 6'h15;
+  localparam [BITS_STATE-1:0] STATE_RX_AUTH_COOKIE           = 6'h16;
+  localparam [BITS_STATE-1:0] STATE_RX_AUTH_PACKET           = 6'h17;
+  localparam [BITS_STATE-1:0] STATE_WRITE_HEADER_IPV4_IPV6   = 6'h18; //TX handling states
 
-  localparam [BITS_STATE-1:0] STATE_LENGTH_CHECKS            = 7'h30;
-  localparam [BITS_STATE-1:0] STATE_EXTRACT_EXT_FROM_RAM     = 7'h31;
-  localparam [BITS_STATE-1:0] STATE_EXTENSIONS_EXTRACTED     = 7'h32;
-  localparam [BITS_STATE-1:0] STATE_EXTRACT_COOKIE_FROM_RAM  = 7'h33;
-  localparam [BITS_STATE-1:0] STATE_VERIFY_KEY_FROM_COOKIE1  = 7'h34;
-  localparam [BITS_STATE-1:0] STATE_VERIFY_KEY_FROM_COOKIE2  = 7'h35;
-  localparam [BITS_STATE-1:0] STATE_RX_AUTH_COOKIE           = 7'h36;
-  localparam [BITS_STATE-1:0] STATE_RX_AUTH_PACKET           = 7'h37;
-  localparam [BITS_STATE-1:0] STATE_WRITE_HEADER_IPV4_IPV6   = 7'h38; //TX handling states
+  localparam [BITS_STATE-1:0] STATE_TIMESTAMP                = 6'h19;
+  localparam [BITS_STATE-1:0] STATE_TIMESTAMP_WAIT           = 6'h1a;
 
-  localparam [BITS_STATE-1:0] STATE_TIMESTAMP                = 7'h40;
-  localparam [BITS_STATE-1:0] STATE_TIMESTAMP_WAIT           = 7'h41;
+  localparam [BITS_STATE-1:0] STATE_UNIQUE_IDENTIFIER_COPY_0 = 6'h1b;
+  localparam [BITS_STATE-1:0] STATE_UNIQUE_IDENTIFIER_COPY_1 = 6'h1c;
+  localparam [BITS_STATE-1:0] STATE_RETRIVE_CURRENT_KEY_0    = 6'h1d;
+  localparam [BITS_STATE-1:0] STATE_RETRIVE_CURRENT_KEY_1    = 6'h1e;
+  localparam [BITS_STATE-1:0] STATE_RESET_EXTRA_COOKIES      = 6'h1f;
+  localparam [BITS_STATE-1:0] STATE_ADDITIONAL_COOKIES_CTRL  = 6'h20;
+  localparam [BITS_STATE-1:0] STATE_GENERATE_EXTRA_COOKIE    = 6'h21;
+  localparam [BITS_STATE-1:0] STATE_RECORD_EXTRA_COOKIE      = 6'h22;
+  localparam [BITS_STATE-1:0] STATE_COPY_PACKET_TO_CRYPTO_AD = 6'h23;
+  localparam [BITS_STATE-1:0] STATE_TX_AUTH_PACKET           = 6'h24;
+  localparam [BITS_STATE-1:0] STATE_TX_EMIT_TL_NL_CL         = 6'h25;
+  localparam [BITS_STATE-1:0] STATE_TX_EMIT_NONCE_CIPHERTEXT = 6'h26;
 
-  localparam [BITS_STATE-1:0] STATE_UNIQUE_IDENTIFIER_COPY_0 = 7'h50;
-  localparam [BITS_STATE-1:0] STATE_UNIQUE_IDENTIFIER_COPY_1 = 7'h51;
-  localparam [BITS_STATE-1:0] STATE_RETRIVE_CURRENT_KEY_0    = 7'h52;
-  localparam [BITS_STATE-1:0] STATE_RETRIVE_CURRENT_KEY_1    = 7'h53;
-  localparam [BITS_STATE-1:0] STATE_RESET_EXTRA_COOKIES      = 7'h54;
-  localparam [BITS_STATE-1:0] STATE_ADDITIONAL_COOKIES_CTRL  = 7'h55;
-  localparam [BITS_STATE-1:0] STATE_GENERATE_EXTRA_COOKIE    = 7'h56;
-  localparam [BITS_STATE-1:0] STATE_RECORD_EXTRA_COOKIE      = 7'h57;
-  localparam [BITS_STATE-1:0] STATE_COPY_PACKET_TO_CRYPTO_AD = 7'h58;
-  localparam [BITS_STATE-1:0] STATE_TX_AUTH_PACKET           = 7'h59;
-  localparam [BITS_STATE-1:0] STATE_TX_EMIT_TL_NL_CL         = 7'h5a;
-  localparam [BITS_STATE-1:0] STATE_TX_EMIT_NONCE_CIPHERTEXT = 7'h5b;
+  localparam [BITS_STATE-1:0] STATE_TX_UPDATE_LENGTH         = 6'h27;
+  localparam [BITS_STATE-1:0] STATE_TX_WRITE_UDP_LENGTH      = 6'h28;
+  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_RESET       = 6'h29;
+  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_PS_SRCADDR  = 6'h2a;
+  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_PS_UDPLLEN  = 6'h2b;
+  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_DATAGRAM    = 6'h2c;
+  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_WAIT        = 6'h2d;
+  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_UDP_CSUM       = 6'h2e;
+  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_UDP_CSUM_DELAY = 6'h2f;
+  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_IP_HEADER_0    = 6'h30;
+  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_IP_HEADER_1    = 6'h31;
+  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_IP_HEADR_DELAY = 6'h32;
 
-  localparam [BITS_STATE-1:0] STATE_TX_UPDATE_LENGTH         = 7'h60;
-  localparam [BITS_STATE-1:0] STATE_TX_WRITE_UDP_LENGTH      = 7'h61;
-  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_RESET       = 7'h62;
-  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_PS_SRCADDR  = 7'h63;
-  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_PS_UDPLLEN  = 7'h64;
-  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_DATAGRAM    = 7'h65;
-  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_WAIT        = 7'h66;
-  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_UDP_CSUM       = 7'h67;
-  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_UDP_CSUM_DELAY = 7'h68;
-  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_IP_HEADER_0    = 7'h69;
-  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_IP_HEADER_1    = 7'h6a;
-  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_IP_HEADR_DELAY = 7'h6b;
-
-  localparam [BITS_STATE-1:0] STATE_TRANSFER_PACKET          = 7'h70;
-
-  localparam [BITS_STATE-1:0] STATE_ERROR_UNIMPLEMENTED      = 7'h7d;
-  localparam [BITS_STATE-1:0] STATE_ERROR_GENERAL            = 7'h7e;
-  localparam [BITS_STATE-1:0] STATE_DROP_PACKET              = 7'h7f;
+  localparam [BITS_STATE-1:0] STATE_ERROR_GENERAL            = 6'h3d;
+  localparam [BITS_STATE-1:0] STATE_TRANSFER_PACKET          = 6'h3e;
+  localparam [BITS_STATE-1:0] STATE_DROP_PACKET              = 6'h3f;
 
   localparam CRYPTO_FSM_IDLE                 = 'h00;
   localparam CRYPTO_FSM_WAIT_THEN_SUCCESS    = 'h01; // wait for complete. Always indicate success.
@@ -565,6 +567,10 @@ module nts_parser_ctrl #(
   reg                   [4:0] crypto_fsm_new;
   reg                   [4:0] crypto_fsm_reg;
 
+  reg                         icmp_state_we;
+  reg   [BITS_ICMP_STATE-1:0] icmp_state_new;
+  reg   [BITS_ICMP_STATE-1:0] icmp_state_reg;
+
   reg                         state_we;
   reg        [BITS_STATE-1:0] state_new;
   reg        [BITS_STATE-1:0] state_reg;
@@ -751,6 +757,8 @@ module nts_parser_ctrl #(
   reg       [ADDR_WIDTH+3-1:0] nts_cookie_start_addr_new;
   reg       [ADDR_WIDTH+3-1:0] nts_cookie_start_addr_reg;
 
+  reg                          protocol_detect_icmpv6_new;
+  reg                          protocol_detect_icmpv6_reg;
   reg                          protocol_detect_echo_new;
   reg                          protocol_detect_echo_reg;
   reg                          protocol_detect_ip6ns_new;
@@ -1470,6 +1478,8 @@ module nts_parser_ctrl #(
       error_size_reg             <= 'b0;
       error_state_reg            <= 'b0;
 
+      icmp_state_reg             <= 'b0;
+
       ipdecode_arp_hrd_reg       <= 'b0;
       ipdecode_arp_pro_reg       <= 'b0;
       ipdecode_arp_hln_reg       <= 'b0;
@@ -1528,6 +1538,7 @@ module nts_parser_ctrl #(
       nts_valid_placeholders_reg           <= 'b0;
 
       protocol_detect_echo_reg      <= 'b0;
+      protocol_detect_icmpv6_reg    <= 'b0;
       protocol_detect_ip6ns_reg     <= 'b0;
       protocol_detect_nts_reg       <= 'b0;
 
@@ -1716,6 +1727,9 @@ module nts_parser_ctrl #(
       if (error_state_we)
         error_state_reg <= error_state_new;
 
+      if (icmp_state_we)
+        icmp_state_reg <= icmp_state_new;
+
       if (ipdecode_arp_hrd_we)
         ipdecode_arp_hrd_reg <= ipdecode_arp_hrd_new;
 
@@ -1857,6 +1871,7 @@ module nts_parser_ctrl #(
       nts_valid_placeholders_reg           <= nts_valid_placeholders_new;
 
       protocol_detect_echo_reg <= protocol_detect_echo_new;
+      protocol_detect_icmpv6_reg <= protocol_detect_icmpv6_new;
       protocol_detect_ip6ns_reg <= protocol_detect_ip6ns_new;
       protocol_detect_nts_reg <= protocol_detect_nts_new;
 
@@ -2229,23 +2244,26 @@ module nts_parser_ctrl #(
         access_port_rd_en_we  = 'b1; //reset read signal if high
 
       case (state_reg)
-        STATE_ICMPV6_ECHO_COPY:
-          begin
-            access_port_addr_we       = 'b1;
-            access_port_addr_new      = OFFSET_ICMP_ECHO_COPY;
-            access_port_burstsize_we  = 'b1;
-            access_port_burstsize_new[ADDR_WIDTH+3-1:0] = memory_bound_reg - OFFSET_ICMP_ECHO_COPY;
-            access_port_rd_en_we      = 'b1;
-            access_port_rd_en_new     = 'b1;
-            access_port_wordsize_we   = 'b1;
-            access_port_wordsize_new  = 4; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit, 4: burst
-          end
-        STATE_ICMPV6_ECHO_COPY_D:
-          begin
-            access_port_rd_en_we      = 'b1;
-            access_port_rd_en_new     = 'b0;
-          end
-
+        STATE_PROCESS_ICMP:
+          case (icmp_state_reg)
+            ICMP_S_V6_ECHO_COPY:
+              begin
+                access_port_addr_we       = 'b1;
+                access_port_addr_new      = OFFSET_ICMP_ECHO_COPY;
+                access_port_burstsize_we  = 'b1;
+                access_port_burstsize_new[ADDR_WIDTH+3-1:0] = memory_bound_reg - OFFSET_ICMP_ECHO_COPY;
+                access_port_rd_en_we      = 'b1;
+                access_port_rd_en_new     = 'b1;
+                access_port_wordsize_we   = 'b1;
+                access_port_wordsize_new  = 4; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit, 4: burst
+              end
+            ICMP_S_V6_ECHO_COPY_D:
+              begin
+                access_port_rd_en_we      = 'b1;
+                access_port_rd_en_new     = 'b0;
+              end
+            default: ;
+          endcase
         STATE_EXTRACT_EXT_FROM_RAM:
           if (ntp_extension_copied_reg[ntp_extension_counter_reg] == 'b0) begin
              //$display("%s:%0d i_access_port_rd_dv=%0d i_access_port_wait=%0d", `__FILE__, `__LINE__, i_access_port_rd_dv, i_access_port_wait);
@@ -2323,17 +2341,21 @@ module nts_parser_ctrl #(
     copy_tx_addr_new = 0;
 
     case (state_reg)
-      STATE_ICMPV6_ECHO_COPY:
-        begin
-          copy_bytes_we     = 1;
-          copy_bytes_new[ADDR_WIDTH+3-1:0] = memory_bound_reg - OFFSET_ICMP_ECHO_COPY;
-          copy_tx_addr_we   = 1;
-          copy_tx_addr_new  = OFFSET_ICMP_ECHO_COPY;
-        end
-      STATE_ICMPV6_ECHO_COPY_D:
-        begin
-          copy_rx_tx = 1;
-        end
+      STATE_PROCESS_ICMP:
+        case (icmp_state_reg)
+          ICMP_S_V6_ECHO_COPY:
+            begin
+              copy_bytes_we     = 1;
+              copy_bytes_new[ADDR_WIDTH+3-1:0] = memory_bound_reg - OFFSET_ICMP_ECHO_COPY;
+              copy_tx_addr_we   = 1;
+              copy_tx_addr_new  = OFFSET_ICMP_ECHO_COPY;
+            end
+          ICMP_S_V6_ECHO_COPY_D:
+            begin
+              copy_rx_tx = 1;
+            end
+          default: ;
+        endcase
       STATE_TIMESTAMP_WAIT:
         begin
           //Kiss-o'-Death requires copy_tx_addr_reg set earlier, ahead of jump
@@ -2642,6 +2664,94 @@ module nts_parser_ctrl #(
           tx_header_ipv6_index_we = 1;
           tx_header_ipv6_index_new = 7;
         end
+      STATE_PROCESS_ICMP:
+        case (icmp_state_reg)
+          ICMP_S_V6_ND_INIT:
+            begin
+              tx_icmp_total_length_we    = 1;
+              tx_icmp_total_length_new   = 86; //14 byte ethernet, 40 byte IPv6, 32 byte ICMPv6
+              tx_icmp_payload_length_we  = 1;
+              tx_icmp_payload_length_new = 32;
+              tx_icmp_csum_bytes_we      = 1;
+              tx_icmp_csum_bytes_new     = 16 + 16 //2 ipv6 addresses
+                                         + tx_icmp_payload_length_new;
+              tx_icmp_tmpblock_we = 1;
+              tx_icmp_tmpblock_new = tx_header_ethernet_ipv6_icmp_na[
+                                        (86-OFFSET_ETH_IPV6_ICMPV6_CSUM)*8-1-:64
+                                     ];
+            end
+          ICMP_S_V6_ND_RESPOND:
+            begin : emit_icmp_na
+              reg [11*64-1:0] header;
+              tx_header_icmpv6ns_index_we = 1;
+              tx_header_icmpv6ns_index_new = tx_header_icmpv6ns_index_reg - 1;
+              header = { tx_header_ethernet_ipv6_icmp_na, 16'h0000 };
+              tx_address_internal = 1;
+              tx_write_en   = 1;
+              tx_write_data = header[ tx_header_icmpv6ns_index_reg*64+:64 ];
+            end
+          ICMP_S_V6_ECHO_INIT:
+            begin
+              tx_icmp_total_length_we    = 1;
+              tx_icmp_total_length_new   = memory_bound_reg;
+              tx_icmp_payload_length_we  = 1;
+              tx_icmp_payload_length_new = memory_bound_reg - 14 - 40;
+              tx_icmp_csum_bytes_we      = 1;
+              tx_icmp_csum_bytes_new     = memory_bound_reg - 14 /* ethernet */ - 8 /* IPv6 not in csum */;
+              tx_icmp_tmpblock_we        = 1;
+              tx_icmp_tmpblock_new       = { 16'h0000, ipdecode_icmp_echo_id_reg, ipdecode_icmp_echo_seq_reg, ipdecode_icmp_echo_d0_reg };
+            end
+          ICMP_S_V6_ECHO_RESPOND:
+            begin : emit_echo_response
+              reg [8*64-1:0] header;
+              tx_header_icmpv6_echo_index_we = 1;
+              tx_header_icmpv6_echo_index_new = tx_header_icmpv6_echo_index_reg - 1;
+              tx_address_internal = 1;
+              header = { tx_header_ethernet_ipv6_icmp_echo, 48'h0000_0000_0000 };
+              tx_write_en = 1;
+              tx_write_data = header[ tx_header_icmpv6_echo_index_reg*64+:64 ];
+            end
+          ICMP_S_V6_ECHO_COPY_D:
+            begin
+              tx_address    = copy_tx_addr_reg;
+              tx_write_en   = i_access_port_rd_dv;
+              tx_write_data = i_access_port_rd_data;
+            end
+          ICMP_S_V6_UPDATE_LENGTH:
+            begin
+             tx_address       = tx_icmp_total_length_reg;
+             tx_update_length = 1;
+            end
+          ICMP_S_V6_CSUM_RESET:
+            begin : icmpv6_csum_reset
+              reg [15:0] len;
+              len = 0;
+              len[ADDR_WIDTH+3-1:0] = tx_icmp_payload_length_reg;
+              tx_sum_reset = 1;
+              tx_sum_reset_value = {8'h00, IP_PROTO_ICMPV6 } + len;
+            //$display("%s:%0d: csum_reset: %h len %h (%0d)", `__FILE__, `__LINE__, tx_sum_reset_value, len, len);
+            end
+          ICMP_S_V6_CSUM_CALC:
+            begin
+              tx_address = 14 + 8;
+              tx_sum_en = 1;
+              tx_sum_bytes = tx_icmp_csum_bytes_reg;
+            //$display("%s:%0d: csum bytes %h (%0d)", `__FILE__, `__LINE__, tx_sum_bytes, tx_sum_bytes);
+            end
+          ICMP_S_V6_CSUM_WAIT:
+            if (i_tx_sum_done) begin
+              tx_icmp_tmpblock_we = 1;
+              tx_icmp_tmpblock_new = { (~i_tx_sum), tx_icmp_tmpblock_reg[47:0] };
+            //$display("%s:%0d: csum: %h before not: %h", `__FILE__, `__LINE__, (~i_tx_sum), i_tx_sum);
+            end
+          ICMP_S_V6_CSUM_UPDATE:
+            begin
+              tx_address = OFFSET_ETH_IPV6_ICMPV6_CSUM;
+              tx_write_en = 1;
+              tx_write_data = tx_icmp_tmpblock_reg;
+            end
+          default: ;
+        endcase
       STATE_ARP_RESPOND:
         begin : emit_arp
           reg [6*64-1:0] header;
@@ -2651,90 +2761,6 @@ module nts_parser_ctrl #(
           tx_address_internal = 1;
           tx_write_en   = 1;
           tx_write_data = header [ tx_header_arp_index_reg*64+:64 ];
-        end
-      STATE_ICMPV6_ND_INIT:
-        begin
-          tx_icmp_total_length_we    = 1;
-          tx_icmp_total_length_new   = 86; //14 byte ethernet, 40 byte IPv6, 32 byte ICMPv6
-          tx_icmp_payload_length_we  = 1;
-          tx_icmp_payload_length_new = 32;
-          tx_icmp_csum_bytes_we      = 1;
-          tx_icmp_csum_bytes_new     = 16 + 16 //2 ipv6 addresses
-                                     + tx_icmp_payload_length_new;
-          tx_icmp_tmpblock_we = 1;
-          tx_icmp_tmpblock_new = tx_header_ethernet_ipv6_icmp_na[
-                                    (86-OFFSET_ETH_IPV6_ICMPV6_CSUM)*8-1-:64
-                                 ];
-        end
-      STATE_ICMPV6_ND_RESPOND:
-        begin : emit_icmp_na
-          reg [11*64-1:0] header;
-          tx_header_icmpv6ns_index_we = 1;
-          tx_header_icmpv6ns_index_new = tx_header_icmpv6ns_index_reg - 1;
-          header = { tx_header_ethernet_ipv6_icmp_na, 16'h0000 };
-          tx_address_internal = 1;
-          tx_write_en   = 1;
-          tx_write_data = header[ tx_header_icmpv6ns_index_reg*64+:64 ];
-        end
-      STATE_ICMPV6_ECHO_INIT:
-        begin
-          tx_icmp_total_length_we    = 1;
-          tx_icmp_total_length_new   = memory_bound_reg;
-          tx_icmp_payload_length_we  = 1;
-          tx_icmp_payload_length_new = memory_bound_reg - 14 - 40;
-          tx_icmp_csum_bytes_we      = 1;
-          tx_icmp_csum_bytes_new     = memory_bound_reg - 14 /* ethernet */ - 8 /* IPv6 not in csum */;
-          tx_icmp_tmpblock_we        = 1;
-          tx_icmp_tmpblock_new       = { 16'h0000, ipdecode_icmp_echo_id_reg, ipdecode_icmp_echo_seq_reg, ipdecode_icmp_echo_d0_reg };
-        end
-      STATE_ICMPV6_ECHO_RESPOND:
-        begin : emit_echo_response
-          reg [8*64-1:0] header;
-          tx_header_icmpv6_echo_index_we = 1;
-          tx_header_icmpv6_echo_index_new = tx_header_icmpv6_echo_index_reg - 1;
-          tx_address_internal = 1;
-          header = { tx_header_ethernet_ipv6_icmp_echo, 48'h0000_0000_0000 };
-          tx_write_en = 1;
-          tx_write_data = header[ tx_header_icmpv6_echo_index_reg*64+:64 ];
-        end
-      STATE_ICMPV6_ECHO_COPY_D:
-        begin
-          tx_address    = copy_tx_addr_reg;
-          tx_write_en   = i_access_port_rd_dv;
-          tx_write_data = i_access_port_rd_data;
-        end
-      STATE_ICMPV6_UPDATE_LENGTH:
-        begin
-          tx_address       = tx_icmp_total_length_reg;
-          tx_update_length = 1;
-        end
-      STATE_ICMPV6_CSUM_RESET:
-        begin : icmpv6_csum_reset
-          reg [15:0] len;
-          len = 0;
-          len[ADDR_WIDTH+3-1:0] = tx_icmp_payload_length_reg;
-          tx_sum_reset = 1;
-          tx_sum_reset_value = {8'h00, IP_PROTO_ICMPV6 } + len;
-        //$display("%s:%0d: csum_reset: %h len %h (%0d)", `__FILE__, `__LINE__, tx_sum_reset_value, len, len);
-        end
-      STATE_ICMPV6_CSUM_CALC:
-        begin
-          tx_address = 14 + 8;
-          tx_sum_en = 1;
-          tx_sum_bytes = tx_icmp_csum_bytes_reg;
-        //$display("%s:%0d: csum bytes %h (%0d)", `__FILE__, `__LINE__, tx_sum_bytes, tx_sum_bytes);
-        end
-      STATE_ICMPV6_CSUM_WAIT:
-        if (i_tx_sum_done) begin
-          tx_icmp_tmpblock_we = 1;
-          tx_icmp_tmpblock_new = { (~i_tx_sum), tx_icmp_tmpblock_reg[47:0] };
-        //$display("%s:%0d: csum: %h before not: %h", `__FILE__, `__LINE__, (~i_tx_sum), i_tx_sum);
-        end
-      STATE_ICMPV6_CSUM_UPDATE:
-        begin
-          tx_address = OFFSET_ETH_IPV6_ICMPV6_CSUM;
-          tx_write_en = 1;
-          tx_write_data = tx_icmp_tmpblock_reg;
         end
       STATE_WRITE_HEADER_IPV4_IPV6:
         if (detect_ipv4) begin : emit_ipv4_headers
@@ -3140,6 +3166,124 @@ module nts_parser_ctrl #(
   end
 
   //----------------------------------------------------------------
+  // Finite State Machine - ICMP
+  // Overall functionallity control
+  //----------------------------------------------------------------
+
+  always @*
+  begin : fsm_icmp_
+    icmp_state_we  = 'b0;
+    icmp_state_new = ICMP_S_IDLE;
+
+    case (icmp_state_reg)
+      ICMP_S_IDLE:
+        if (state_reg == STATE_PROCESS_ICMP) begin
+          if (protocol_detect_ip6ns_reg) begin
+            icmp_state_we  = 'b1;
+            icmp_state_new = ICMP_S_V6_ND_INIT;
+          end else if (protocol_detect_echo_reg) begin
+            icmp_state_we  = 'b1;
+            icmp_state_new = ICMP_S_V6_ECHO_INIT;
+          end else begin
+            icmp_state_we  = 'b1;
+            icmp_state_new = ICMP_S_DROP_PACKET;
+          end
+        end else begin
+          icmp_state_we  = 'b1;
+          icmp_state_new = ICMP_S_DROP_PACKET;
+        end
+      ICMP_S_V6_ND_INIT:
+        if (addr_match_icmpv6ns_reg) begin
+          icmp_state_we  = 'b1;
+          icmp_state_new = ICMP_S_V6_ND_RESPOND;
+        end else begin
+          icmp_state_we  = 'b1;
+          icmp_state_new = ICMP_S_DROP_PACKET;
+        end
+      ICMP_S_V6_ND_RESPOND:
+        if (tx_header_icmpv6ns_index_reg == 0) begin
+          icmp_state_we  = 'b1;
+          icmp_state_new = ICMP_S_V6_UPDATE_LENGTH;
+        end
+      ICMP_S_V6_ECHO_INIT:
+        if (addr_match_ethernet_reg && addr_match_ipv6_reg) begin
+          icmp_state_we  = 'b1;
+          icmp_state_new = ICMP_S_V6_ECHO_RESPOND;
+        end else begin
+          icmp_state_we  = 'b1;
+          icmp_state_new = ICMP_S_DROP_PACKET;
+        end
+      ICMP_S_V6_ECHO_RESPOND:
+        if (tx_header_icmpv6_echo_index_reg == 0) begin
+          icmp_state_we  = 'b1;
+          icmp_state_new = ICMP_S_V6_ECHO_COPY;
+        end
+      ICMP_S_V6_ECHO_COPY:
+        begin
+          icmp_state_we  = 'b1;
+          icmp_state_new = ICMP_S_V6_ECHO_COPY_D;
+        end
+      ICMP_S_V6_ECHO_COPY_D:
+        if (copy_done) begin
+          icmp_state_we  = 'b1;
+          icmp_state_new = ICMP_S_V6_ECHO_COPY_D2;
+        end
+      ICMP_S_V6_ECHO_COPY_D2:
+        //TXBUF memory controller require wait cycles delay
+        //between different unaligned burst writes.
+        if (i_tx_busy == 'b0) begin
+          icmp_state_we  = 'b1;
+          icmp_state_new = ICMP_S_V6_UPDATE_LENGTH;
+        end
+      ICMP_S_V6_UPDATE_LENGTH:
+        begin
+          icmp_state_we  = 'b1;
+          icmp_state_new = ICMP_S_V6_CSUM_RESET;
+        end
+      ICMP_S_V6_CSUM_RESET:
+        begin
+          icmp_state_we  = 'b1;
+          icmp_state_new = ICMP_S_V6_CSUM_CALC;
+        end
+      ICMP_S_V6_CSUM_CALC:
+        begin
+          icmp_state_we  = 'b1;
+          icmp_state_new = ICMP_S_V6_CSUM_WAIT;
+        end
+      ICMP_S_V6_CSUM_WAIT:
+        if (i_tx_sum_done) begin
+          icmp_state_we  = 'b1;
+          icmp_state_new = ICMP_S_V6_CSUM_UPDATE;
+        end
+      ICMP_S_V6_CSUM_UPDATE:
+        begin
+          icmp_state_we  = 'b1;
+          icmp_state_new = ICMP_S_V6_CSUM_UPDATE_D;
+        end
+      ICMP_S_V6_CSUM_UPDATE_D:
+        begin
+          icmp_state_we  = 'b1;
+          icmp_state_new = ICMP_S_TRANSMIT_PACKET;
+        end
+      ICMP_S_TRANSMIT_PACKET:
+        begin
+          icmp_state_we  = 'b1;
+          icmp_state_new = ICMP_S_IDLE;
+        end
+      ICMP_S_DROP_PACKET:
+        begin
+          icmp_state_we  = 'b1;
+          icmp_state_new = ICMP_S_IDLE;
+        end
+      default:
+        begin
+          icmp_state_we  = 'b1;
+          icmp_state_new = ICMP_S_DROP_PACKET;
+        end
+    endcase
+  end
+
+  //----------------------------------------------------------------
   // Finite State Machine - Set Error Task
   // Goes to STATE_ERROR_GENERAL while setting an error cause
   //----------------------------------------------------------------
@@ -3155,7 +3299,7 @@ module nts_parser_ctrl #(
 
   //----------------------------------------------------------------
   // Finite State Machine
-  // Overall functionallitty control
+  // Overall functionallity control
   //----------------------------------------------------------------
 
   always @*
@@ -3214,17 +3358,30 @@ module nts_parser_ctrl #(
         if (protocol_detect_nts_reg) begin
           state_we  = 'b1;
           state_new = STATE_LENGTH_CHECKS;
-        end else if (protocol_detect_ip6ns_reg) begin
-          state_we  = 'b1;
-          state_new = STATE_ICMPV6_ND_INIT;
-        end else if (protocol_detect_echo_reg) begin
-          state_we  = 'b1;
-          state_new = STATE_ICMPV6_ECHO_INIT;
+        end else if (protocol_detect_icmpv6_reg) begin
+          if (icmp_state_reg == ICMP_S_IDLE) begin
+            state_we = 'b1;
+            state_new = STATE_PROCESS_ICMP;
+          end
         end else begin
           //Unknown packet type
           state_we  = 'b1;
           state_new = STATE_DROP_PACKET;
         end
+      STATE_PROCESS_ICMP:
+        case (icmp_state_reg)
+          ICMP_S_TRANSMIT_PACKET:
+            begin
+              state_we  = 'b1;
+              state_new = STATE_TRANSFER_PACKET;
+            end
+          ICMP_S_DROP_PACKET:
+            begin
+              state_we  = 'b1;
+              state_new = STATE_DROP_PACKET;
+            end
+          default: ;
+        endcase
       STATE_ARP_INIT:
         if (detect_arp_good && addr_match_arp_reg) begin
           state_we  = 'b1;
@@ -3235,79 +3392,6 @@ module nts_parser_ctrl #(
         end
       STATE_ARP_RESPOND:
         if (tx_header_arp_index_reg == 0) begin
-          state_we  = 'b1;
-          state_new = STATE_TRANSFER_PACKET;
-        end
-      STATE_ICMPV6_ND_INIT:
-        if (addr_match_icmpv6ns_reg) begin
-          state_we  = 'b1;
-          state_new = STATE_ICMPV6_ND_RESPOND;
-        end else begin
-          state_we  = 'b1;
-          state_new = STATE_DROP_PACKET;
-        end
-      STATE_ICMPV6_ND_RESPOND:
-        if (tx_header_icmpv6ns_index_reg == 0) begin
-          state_we  = 'b1;
-          state_new = STATE_ICMPV6_UPDATE_LENGTH;
-        end
-      STATE_ICMPV6_ECHO_INIT:
-        if (addr_match_ethernet_reg && addr_match_ipv6_reg) begin
-          state_we  = 'b1;
-          state_new = STATE_ICMPV6_ECHO_RESPOND;
-        end else begin
-          state_we  = 'b1;
-          state_new = STATE_DROP_PACKET;
-        end
-      STATE_ICMPV6_ECHO_RESPOND:
-        if (tx_header_icmpv6_echo_index_reg == 0) begin
-          state_we  = 'b1;
-          state_new = STATE_ICMPV6_ECHO_COPY;
-        end
-      STATE_ICMPV6_ECHO_COPY:
-        begin
-          state_we  = 'b1;
-          state_new = STATE_ICMPV6_ECHO_COPY_D;
-        end
-      STATE_ICMPV6_ECHO_COPY_D:
-        if (copy_done) begin
-          state_we  = 'b1;
-          state_new = STATE_ICMPV6_ECHO_COPY_D2;
-        end
-      STATE_ICMPV6_ECHO_COPY_D2:
-        //TXBUF memory controller require wait cycles delay
-        //between different unaligned burst writes.
-        if (i_tx_busy == 'b0) begin
-          state_we  = 'b1;
-          state_new = STATE_ICMPV6_UPDATE_LENGTH;
-        end
-      STATE_ICMPV6_UPDATE_LENGTH:
-        begin
-          state_we  = 'b1;
-          state_new = STATE_ICMPV6_CSUM_RESET;
-        end
-      STATE_ICMPV6_CSUM_RESET:
-        begin
-          state_we  = 'b1;
-          state_new = STATE_ICMPV6_CSUM_CALC;
-        end
-      STATE_ICMPV6_CSUM_CALC:
-        begin
-          state_we  = 'b1;
-          state_new = STATE_ICMPV6_CSUM_WAIT;
-        end
-      STATE_ICMPV6_CSUM_WAIT:
-        if (i_tx_sum_done) begin
-          state_we  = 'b1;
-          state_new = STATE_ICMPV6_CSUM_UPDATE;
-        end
-      STATE_ICMPV6_CSUM_UPDATE:
-        begin
-          state_we  = 'b1;
-          state_new = STATE_ICMPV6_CSUM_UPDATE_D;
-        end
-      STATE_ICMPV6_CSUM_UPDATE_D:
-        begin
           state_we  = 'b1;
           state_new = STATE_TRANSFER_PACKET;
         end
@@ -3851,6 +3935,7 @@ module nts_parser_ctrl #(
     reg nts_length;
 
     protocol_detect_echo_new = 0;
+    protocol_detect_icmpv6_new = 0;
     protocol_detect_ip6ns_new = 0;
     protocol_detect_nts_new = 0;
 
@@ -3893,6 +3978,7 @@ module nts_parser_ctrl #(
         default: ;
       endcase
     end
+    protocol_detect_icmpv6_new = protocol_detect_echo_new || protocol_detect_ip6ns_new;
 
     if (detect_ipv4) begin
       case (ipdecode_ip4_protocol_reg)

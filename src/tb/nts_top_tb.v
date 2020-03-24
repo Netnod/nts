@@ -1456,7 +1456,7 @@ module nts_top_tb;
     reg [63:0] old_tick_counter;
     reg [63:0] old_tick_counter_crypto;
     reg [63:0] old_tick_counter_packet;
-    reg  [6:0] old_parser_state;
+    reg  [5:0] old_parser_state;
     reg  [4:0] old_parser_state_crypto;
 
     always  @(posedge i_clk or posedge i_areset)

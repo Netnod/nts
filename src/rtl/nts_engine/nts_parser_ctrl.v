@@ -150,6 +150,7 @@ module nts_parser_ctrl #(
   localparam ADDR_VERSION      =    2;
   localparam ADDR_DUMMY        =    3;
   localparam ADDR_STATE        = 'h10;
+  localparam ADDR_STATE_ICMP   = 'h11;
   localparam ADDR_STATE_CRYPTO = 'h12;
   localparam ADDR_ERROR_STATE  = 'h13;
   localparam ADDR_ERROR_COUNT  = 'h14;
@@ -1274,6 +1275,7 @@ module nts_parser_ctrl #(
             ADDR_VERSION: api_read_data = CORE_VERSION;
             ADDR_STATE: api_read_data[BITS_STATE-1:0] = state_reg; //MSB=0 from init
             ADDR_STATE_CRYPTO: api_read_data = { 27'h0, crypto_fsm_reg };
+            ADDR_STATE_ICMP: api_read_data[BITS_ICMP_STATE-1:0] = icmp_state_reg;
             ADDR_ERROR_STATE: api_read_data[BITS_STATE-1:0] = error_state_reg; //MSB=0 from init
             ADDR_ERROR_COUNT: api_read_data = error_count_reg;
             ADDR_ERROR_CAUSE: api_read_data = error_cause_reg;

@@ -1271,6 +1271,44 @@ module nts_parser_ctrl #(
             ADDR_ERROR_CAUSE: api_read_data = error_cause_reg;
             ADDR_ERROR_SIZE: api_read_data[ADDR_WIDTH+3-1:0] = error_size_reg; //MSB=0 from init
             ADDR_DUMMY: api_read_data = api_dummy_reg;
+            ADDR_MAC_CTRL: api_read_data[3:0] = addr_mac_ctrl_reg;
+            ADDR_IPV4_CTRL: api_read_data[7:0] = addr_ipv4_ctrl_reg;
+            ADDR_IPV6_CTRL: api_read_data[7:0] = addr_ipv6_ctrl_reg;
+            ADDR_UDP_PORT_NTP: api_read_data = { config_udp_port_ntp1_reg, config_udp_port_ntp1_reg };
+            ADDR_MAC_0_MSB: api_read_data[15:0] = addr_mac0_msb_reg;
+            ADDR_MAC_0_LSB: api_read_data       = addr_mac0_lsb_reg;
+            ADDR_MAC_1_MSB: api_read_data[15:0] = addr_mac1_msb_reg;
+            ADDR_MAC_1_LSB: api_read_data       = addr_mac1_lsb_reg;
+            ADDR_MAC_2_MSB: api_read_data[15:0] = addr_mac2_msb_reg;
+            ADDR_MAC_2_LSB: api_read_data       = addr_mac2_lsb_reg;
+            ADDR_MAC_3_MSB: api_read_data[15:0] = addr_mac3_msb_reg;
+            ADDR_MAC_3_LSB: api_read_data       = addr_mac3_lsb_reg;
+
+            ADDR_IPV4_0: api_read_data = addr_ipv4_0_reg;
+            ADDR_IPV4_1: api_read_data = addr_ipv4_1_reg;
+            ADDR_IPV4_2: api_read_data = addr_ipv4_2_reg;
+            ADDR_IPV4_3: api_read_data = addr_ipv4_3_reg;
+            ADDR_IPV4_4: api_read_data = addr_ipv4_4_reg;
+            ADDR_IPV4_5: api_read_data = addr_ipv4_5_reg;
+            ADDR_IPV4_6: api_read_data = addr_ipv4_6_reg;
+            ADDR_IPV4_7: api_read_data = addr_ipv4_7_reg;
+
+            ADDR_IPV6_0 + 0: api_read_data = addr_ipv6_0_reg[127-0*32-:32];
+            ADDR_IPV6_0 + 1: api_read_data = addr_ipv6_0_reg[127-1*32-:32];
+            ADDR_IPV6_0 + 2: api_read_data = addr_ipv6_0_reg[127-2*32-:32];
+            ADDR_IPV6_0 + 3: api_read_data = addr_ipv6_0_reg[127-3*32-:32];
+            ADDR_IPV6_1 + 0: api_read_data = addr_ipv6_1_reg[127-0*32-:32];
+            ADDR_IPV6_1 + 1: api_read_data = addr_ipv6_1_reg[127-1*32-:32];
+            ADDR_IPV6_1 + 2: api_read_data = addr_ipv6_1_reg[127-2*32-:32];
+            ADDR_IPV6_1 + 3: api_read_data = addr_ipv6_1_reg[127-3*32-:32];
+            ADDR_IPV6_2 + 0: api_read_data = addr_ipv6_2_reg[127-0*32-:32];
+            ADDR_IPV6_2 + 1: api_read_data = addr_ipv6_2_reg[127-1*32-:32];
+            ADDR_IPV6_2 + 2: api_read_data = addr_ipv6_2_reg[127-2*32-:32];
+            ADDR_IPV6_2 + 3: api_read_data = addr_ipv6_2_reg[127-3*32-:32];
+            ADDR_IPV6_3 + 0: api_read_data = addr_ipv6_3_reg[127-0*32-:32];
+            ADDR_IPV6_3 + 1: api_read_data = addr_ipv6_3_reg[127-1*32-:32];
+            ADDR_IPV6_3 + 2: api_read_data = addr_ipv6_3_reg[127-2*32-:32];
+            ADDR_IPV6_3 + 3: api_read_data = addr_ipv6_3_reg[127-3*32-:32];
             default: ;
           endcase
         end else begin

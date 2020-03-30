@@ -591,6 +591,9 @@ module nts_parser_ctrl #(
   reg                         word_counter_we;
   reg        [ADDR_WIDTH-1:0] word_counter_new;
   reg        [ADDR_WIDTH-1:0] word_counter_reg;
+  reg                         word_counter_overflow_we;
+  reg                         word_counter_overflow_new;
+  reg                         word_counter_overflow_reg;
 
   reg                         last_bytes_we;
   reg                   [3:0] last_bytes_new;
@@ -652,6 +655,11 @@ module nts_parser_ctrl #(
   reg                          ipdecode_ip4_ihl_we;
   reg                    [3:0] ipdecode_ip4_ihl_new;
   reg                    [3:0] ipdecode_ip4_ihl_reg;
+
+  reg                          ipdecode_ip4_total_length_we;
+  reg                   [15:0] ipdecode_ip4_total_length_new;
+  reg                   [15:0] ipdecode_ip4_total_length_reg;
+
   reg                          ipdecode_ip4_protocol_we;
   reg                    [7:0] ipdecode_ip4_protocol_new;
   reg                    [7:0] ipdecode_ip4_protocol_reg;
@@ -1553,10 +1561,11 @@ module nts_parser_ctrl #(
 
       ipdecode_ip_version_reg    <= 'b0;
 
-      ipdecode_ip4_ihl_reg       <= 'b0;
-      ipdecode_ip4_protocol_reg  <= 'b0;
-      ipdecode_ip4_ip_dst_reg    <= 'b0;
-      ipdecode_ip4_ip_src_reg    <= 'b0;
+      ipdecode_ip4_ihl_reg          <= 'b0;
+      ipdecode_ip4_total_length_reg <= 'b0;
+      ipdecode_ip4_protocol_reg     <= 'b0;
+      ipdecode_ip4_ip_dst_reg       <= 'b0;
+      ipdecode_ip4_ip_src_reg       <= 'b0;
 
       ipdecode_ip6_priority_reg       <= 'b0;
       ipdecode_ip6_flowlabel_reg      <= 'b0;
@@ -1640,6 +1649,7 @@ module nts_parser_ctrl #(
       tx_udp_length_reg <= 0;
 
       word_counter_reg           <= 'b0;
+      word_counter_overflow_reg  <= 'b0;
 
       begin : ntp_extension_reset_async
         integer i;
@@ -1836,6 +1846,9 @@ module nts_parser_ctrl #(
       if (ipdecode_ip4_ihl_we)
         ipdecode_ip4_ihl_reg <= ipdecode_ip4_ihl_new;
 
+      if (ipdecode_ip4_total_length_we)
+        ipdecode_ip4_total_length_reg <= ipdecode_ip4_total_length_new;
+
       if (ipdecode_ip4_ip_dst_we)
         ipdecode_ip4_ip_dst_reg <= ipdecode_ip4_ip_dst_new;
 
@@ -2018,6 +2031,9 @@ module nts_parser_ctrl #(
 
       if (word_counter_we)
         word_counter_reg <= word_counter_new;
+
+      if (word_counter_overflow_we)
+        word_counter_overflow_reg <= word_counter_overflow_new;
     end
   end
 
@@ -2046,16 +2062,34 @@ module nts_parser_ctrl #(
 
   always @*
   begin : word_counter
-    word_counter_we  = 'b0;
-    word_counter_new = 'b0;
+    reg                  carry;
+    reg [ADDR_WIDTH-1:0] sum;
+
+    { carry, sum } = { 1'b0, word_counter_reg } + 1;
+
+    word_counter_we  = 0;
+    word_counter_new = 0;
+
+    word_counter_overflow_we  = 0;
+    word_counter_overflow_new = 0;
+
     case (state_reg)
       STATE_IDLE:
-        if (i_process_initial)
-          word_counter_we = 'b1;
+        if (i_process_initial) begin
+          word_counter_we  = 1;
+          word_counter_new = 0;
+          word_counter_overflow_we  = 1;
+          word_counter_overflow_new = 0;
+        end
       STATE_COPY:
         if (i_process_initial) begin
-          word_counter_we  = 'b1;
-          word_counter_new = word_counter_reg + 1;
+          if (carry) begin
+            word_counter_overflow_we  = 1;
+            word_counter_overflow_new = 1;
+          end else begin
+            word_counter_we  = 1;
+            word_counter_new = sum;
+         end
         end
       default: ;
     endcase
@@ -3528,7 +3562,11 @@ module nts_parser_ctrl #(
           state_new = STATE_SELECT_PROTOCOL_HANDLER;
         end
       STATE_SELECT_PROTOCOL_HANDLER:
-        if (detect_arp) begin
+        if (word_counter_overflow_reg) begin
+          //Packet too large to process
+          state_we  = 'b1;
+          state_new = STATE_DROP_PACKET;
+        end else if (detect_arp) begin
           state_we  = 'b1;
           state_new = STATE_ARP_INIT;
         end else if (detect_ipv4) begin
@@ -3933,6 +3971,8 @@ module nts_parser_ctrl #(
 
     ipdecode_ip4_ihl_we            = 'b0;
     ipdecode_ip4_ihl_new           = 'b0;
+    ipdecode_ip4_total_length_we   = 'b0;
+    ipdecode_ip4_total_length_new  = 'b0;
     ipdecode_ip4_protocol_we       = 'b0;
     ipdecode_ip4_protocol_new      = 'b0;
     ipdecode_ip4_ip_dst_we         = 'b0;
@@ -3999,6 +4039,8 @@ module nts_parser_ctrl #(
         ipdecode_ip_version_new        = i_data[15:12];
         ipdecode_ip4_ihl_we            = 'b1;
         ipdecode_ip4_ihl_new           = i_data[11:8];
+      //ipdecode_ip4_tos_we            = 1;
+      //ipdecode_ip4_tos_new           = i_data[7:0];
         ipdecode_ip6_priority_we       = 1;
         ipdecode_ip6_priority_new      = i_data[11:4];
         ipdecode_ip6_flowlabel_we      = 1;
@@ -4039,8 +4081,10 @@ module nts_parser_ctrl #(
       end else if (detect_ipv4 && ipdecode_ip4_ihl_reg == 5) begin
         case (word_counter_reg)
           1: begin
-               ipdecode_ip4_protocol_we  = 'b1;
-               ipdecode_ip4_protocol_new = i_data[7:0];
+               ipdecode_ip4_total_length_we  = 1;
+               ipdecode_ip4_total_length_new = i_data[63:48];
+               ipdecode_ip4_protocol_we      = 1;
+               ipdecode_ip4_protocol_new     = i_data[7:0];
              end
           2: begin
              //ipdecode_ip4_checksum_we  = 'b1;
@@ -4141,6 +4185,10 @@ module nts_parser_ctrl #(
     reg traceroute_port_match;
     reg ntp_port_match;
     reg nts_length;
+    reg payload_length_sane_ipv4;
+    reg payload_length_sane_ipv6;
+    reg udp_length_sane_ipv4;
+    reg udp_length_sane_ipv6;
 
     protocol_detect_echo_new = 0;
     protocol_detect_icmpv6_new = 0;
@@ -4169,44 +4217,101 @@ module nts_parser_ctrl #(
       nts_length = 0;
     end
 
-    if (detect_ipv6) begin
-      case (ipdecode_ip6_next_reg)
-        IP_PROTO_ICMPV6:
-          case (ipdecode_icmp_type_reg)
-            ICMP_TYPE_ECHO_REQUEST:
-              if (ipdecode_ip6_payload_length_reg >= 8 && ipdecode_ip6_payload_length_reg <= 1024) begin
-                protocol_detect_echo_new = 1;
-              end
-            ICMP_TYPE_NEIGHBOR_SOLICITATION:
-              if (ipdecode_ip6_ip_dst_reg[127-:104] == IP_V6_ADDRESS_MULTICAST_SOLICITED_NODE) begin
-                if (ipdecode_icmp_code_reg == 0) begin
-                  if (ipdecode_ip6_payload_length_reg >= 32 && ipdecode_ip6_payload_length_reg <= 1024) begin
-                    protocol_detect_ip6ns_new = 1;
+    payload_length_sane_ipv6 = 0;
+    if (ipdecode_ip6_payload_length_reg[15:ADDR_WIDTH+3] == 0) begin : sanity_check_length_ipv6
+      reg                    carry;
+      reg [ADDR_WIDTH+3-1:0] acc;
+      { carry, acc } = { 1'b0, ipdecode_ip6_payload_length_reg[ADDR_WIDTH+3-1:0] } + 14 + 40;
+
+      if (carry == 0) begin
+        if (acc == memory_bound_reg) begin
+          payload_length_sane_ipv6 = 1;
+        end
+      end
+    end
+
+    payload_length_sane_ipv4 = 0;
+    if (ipdecode_ip4_total_length_reg[15:ADDR_WIDTH+3] == 0) begin : sanity_check_length_ipv4
+      reg                    carry;
+      reg [ADDR_WIDTH+3-1:0] acc;
+      { carry, acc } = { 1'b0, ipdecode_ip4_total_length_reg[ADDR_WIDTH+3-1:0] } + 14;
+
+      if (carry == 0) begin
+        if (acc == memory_bound_reg) begin
+          payload_length_sane_ipv4 = 1;
+        end
+      end
+    end
+
+    udp_length_sane_ipv4 = 0;
+    if (ipdecode_udp_length_reg[15:ADDR_WIDTH+3] == 0) begin : sanity_check_udp_length_ipv4
+      reg                    carry;
+      reg [ADDR_WIDTH+3-1:0] acc;
+      { carry, acc } = { 1'b0, ipdecode_udp_length_reg[ADDR_WIDTH+3-1:0] } + 14 + 20;
+
+      if (carry == 0) begin
+        if (acc == memory_bound_reg) begin
+          udp_length_sane_ipv4 = 1;
+        end
+      end
+    end
+
+    if (ipdecode_ip6_payload_length_reg == ipdecode_udp_length_reg) begin
+      udp_length_sane_ipv6 = 1;
+    end else begin
+      udp_length_sane_ipv6 = 0;
+    end
+
+    if (word_counter_overflow_reg == 1'b0) begin
+
+      if (detect_ipv6) begin
+        if (payload_length_sane_ipv6) begin
+          case (ipdecode_ip6_next_reg)
+            IP_PROTO_ICMPV6:
+              case (ipdecode_icmp_type_reg)
+                ICMP_TYPE_ECHO_REQUEST:
+                  if (ipdecode_ip6_payload_length_reg >= 8 && ipdecode_ip6_payload_length_reg <= 1024) begin
+                    protocol_detect_echo_new = 1;
                   end
+                ICMP_TYPE_NEIGHBOR_SOLICITATION:
+                  if (ipdecode_ip6_ip_dst_reg[127-:104] == IP_V6_ADDRESS_MULTICAST_SOLICITED_NODE) begin
+                    if (ipdecode_icmp_code_reg == 0) begin
+                      if (ipdecode_ip6_payload_length_reg >= 32 && ipdecode_ip6_payload_length_reg <= 1024) begin
+                        protocol_detect_ip6ns_new = 1;
+                      end
+                    end
+                  end
+                default: ;
+              endcase
+            IP_PROTO_UDP:
+              if (udp_length_sane_ipv6) begin
+                if (ntp_port_match && nts_length) begin
+                  protocol_detect_nts_new = 1;
+                end else if (traceroute_port_match) begin
+                  protocol_detect_traceroute_new = 1;
                 end
               end
             default: ;
           endcase
-        IP_PROTO_UDP:
-          if (ntp_port_match && nts_length) begin
-            protocol_detect_nts_new = 1;
-          end else if (traceroute_port_match) begin
-            protocol_detect_traceroute_new = 1;
-          end
-        default: ;
-      endcase
-    end
-    protocol_detect_icmpv6_new = protocol_detect_echo_new || protocol_detect_ip6ns_new || protocol_detect_traceroute_new;
+        end
+      end
+      protocol_detect_icmpv6_new = protocol_detect_echo_new || protocol_detect_ip6ns_new || protocol_detect_traceroute_new;
 
-    if (detect_ipv4) begin
-      case (ipdecode_ip4_protocol_reg)
-        IP_PROTO_UDP:
-          if (ntp_port_match && nts_length) begin
-            protocol_detect_nts_new = 1;
-          end
-        default: ;
-      endcase
+      if (detect_ipv4 && !detect_ipv4_bad) begin
+        if (payload_length_sane_ipv4) begin
+          case (ipdecode_ip4_protocol_reg)
+            IP_PROTO_UDP:
+              if (udp_length_sane_ipv4) begin
+                if (ntp_port_match && nts_length) begin
+                  protocol_detect_nts_new = 1;
+                end
+              end
+            default: ;
+          endcase
+        end
+      end
     end
+
   end
 
   //----------------------------------------------------------------

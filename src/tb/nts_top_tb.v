@@ -500,7 +500,8 @@ module nts_top_tb;
     api_write64( {16'h00_00, 48'hFF_FE_FD_FC_FB_FA}, engine, API_ADDR_PARSER_MAC_0 );
     api_write64( {16'h00_00, 48'hEF_EE_ED_EC_EB_EA}, engine, API_ADDR_PARSER_MAC_1 );
     api_write64( {16'h00_00, 48'hDF_DE_DD_DC_DB_DA}, engine, API_ADDR_PARSER_MAC_2 );
-    api_write64( {16'h00_00, 48'hCF_CE_CD_CC_CB_CA}, engine, API_ADDR_PARSER_MAC_3 );
+  //api_write64( {16'h00_00, 48'hCF_CE_CD_CC_CB_CA}, engine, API_ADDR_PARSER_MAC_3 );
+    api_write64( {16'h00_00, 48'h52_5a_2c_18_2e_80}, engine, API_ADDR_PARSER_MAC_3 ); //TraceRoute testcase
     api_write32( 32'h80_A1_A2_A3, engine, API_ADDR_PARSER_IPV4_0 );
     api_write32( 32'h90_A1_A2_A3, engine, API_ADDR_PARSER_IPV4_1 );
     api_write32( 32'hA0_A1_A2_A3, engine, API_ADDR_PARSER_IPV4_2 );
@@ -841,18 +842,25 @@ module nts_top_tb;
       test_ui36();
     end
     if (TEST_NORMAL) begin
+      $display("%s:%0d: ARP", `__FILE__, `__LINE__);
       send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_KEYID}, 2160, 0);
       #20000;
+      $display("%s:%0d: ARP", `__FILE__, `__LINE__);
       arp_request(48'hF0_F1_F2_F3_F4_F5, 32'hE0_E1_E2_E3, 32'hD0_D1_D2_D3);
       #20000;
+      $display("%s:%0d: ARP", `__FILE__, `__LINE__);
       arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'h80_A1_A2_A3);
       #20000;
+      $display("%s:%0d: ARP", `__FILE__, `__LINE__);
       arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'h90_A1_A2_A3);
       #20000;
+      $display("%s:%0d: ARP", `__FILE__, `__LINE__);
       arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'hA0_A1_A2_A3);
       #20000;
+       $display("%s:%0d: ICMPv6 Neigbour Solicitation", `__FILE__, `__LINE__);
       send_packet({64848'h0, PACKET_NEIGHBOR_SOLICITATION}, 688, 0);
       #20000;
+       $display("%s:%0d: ICMPv6 Trace Route", `__FILE__, `__LINE__);
       send_packet({64784'b0, PACKET_IP6_UDP_TRACEROUTE}, 752, 0);
       #20000;
       begin : ping
@@ -1191,9 +1199,11 @@ module nts_top_tb;
     reg [15:0] ethernet_protocol;
     reg [15:0] payload_length;
     reg  [7:0] next;
+    reg  [7:0] icmp_type;
     ethernet_protocol = tx_read_word16( 12 );
     payload_length = tx_read_word16(14 + 4);
     next = tx_read_byte(14 + 4 + 2);
+    icmp_type = tx_read_byte(14 + 40);
     //$display("%s:%0d * TX * Ethernet Protocol %h", `__FILE__, `__LINE__, ethernet_protocol);
     if (ethernet_protocol == 16'h86DD) begin
       //$display("%s:%0d * TX * IPv6 Payload Length %h (%0d)", `__FILE__, `__LINE__, payload_length, payload_length);
@@ -1205,6 +1215,7 @@ module nts_top_tb;
                                  32 + {16'h0, payload_length }
                                  );
         $display("%s:%0d * TX * ICMPv6 CHECK: %h (%s)", `__FILE__, `__LINE__, csum, (csum==16'hffff)?"PASS":"FAIL");
+        $display("%s:%0d * TX * ICMPv6 Type: %h (%0d)", `__FILE__, `__LINE__, icmp_type, icmp_type);
       end
     end
   end
@@ -1455,9 +1466,11 @@ module nts_top_tb;
     reg [63:0] tick_counter;
     reg [63:0] old_tick_counter;
     reg [63:0] old_tick_counter_crypto;
+    reg [63:0] old_tick_counter_icmp;
     reg [63:0] old_tick_counter_packet;
     reg  [5:0] old_parser_state;
     reg  [4:0] old_parser_state_crypto;
+    reg  [4:0] old_parser_state_icmp;
 
     always  @(posedge i_clk or posedge i_areset)
     begin
@@ -1465,9 +1478,11 @@ module nts_top_tb;
         tick_counter <= 1;
         old_tick_counter <= 1;
         old_tick_counter_crypto <= 1;
+        old_tick_counter_icmp <= 1;
         old_tick_counter_packet <= 1;
         old_parser_state <= 0;
         old_parser_state_crypto <= 0;
+        old_parser_state_icmp <= 0;
       end else begin
         tick_counter <= tick_counter + 1;
 
@@ -1484,16 +1499,24 @@ module nts_top_tb;
           if (dut.genblk1[0].engine.parser.state_reg == 0)
             $display("%s:%0d BENCHMARK: Packet took %0d ticks to process", `__FILE__, `__LINE__, tick_counter - old_tick_counter_packet);
         end
+
         if (old_parser_state_crypto != dut.genblk1[0].engine.parser.crypto_fsm_reg) begin
           old_tick_counter_crypto <= tick_counter;
           old_parser_state_crypto <= dut.genblk1[0].engine.parser.crypto_fsm_reg;
-          $display("%s:%0d BENCHMARK: dut.genblk1[0].engine.parser.crypto_fsm_reg(%0d)->(%0d): %0d ticks", `__FILE__, `__LINE__,
+          $display("%s:%0d BENCHMARK: dut.genblk1[0].engine.parser.crypto_fsm_reg %h -> %h (hex): %0d ticks", `__FILE__, `__LINE__,
             old_parser_state_crypto, dut.genblk1[0].engine.parser.crypto_fsm_reg, tick_counter - old_tick_counter_crypto);
+        end
+
+        if (old_parser_state_icmp != dut.genblk1[0].engine.parser.icmp_state_reg) begin
+          old_tick_counter_icmp <= tick_counter;
+          old_parser_state_icmp <= dut.genblk1[0].engine.parser.icmp_state_reg;
+          $display("%s:%0d BENCHMARK: dut.genblk1[0].engine.parser.icmp_state_reg %h -> %h (hex): %0d ticks", `__FILE__, `__LINE__,
+            old_parser_state_icmp, dut.genblk1[0].engine.parser.icmp_state_reg, tick_counter - old_tick_counter_icmp);
         end
 
       end
     end
- end
+  end
 
 
 endmodule

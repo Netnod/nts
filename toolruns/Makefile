@@ -50,6 +50,7 @@ ENGINE_SRC = ../src/rtl/nts_engine/nts_engine.v \
  ../src/rtl/memory/bram.v \
  ../src/rtl/memory/bram_dpge.v \
  ../src/rtl/memory/bram_dp2w.v \
+ ../src/rtl/misc/counter64.v \
  $(KEYMEM_SRC) \
  $(NONCEGEN_SRC) \
  $(SIV_SRC)

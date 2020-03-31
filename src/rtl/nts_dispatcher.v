@@ -188,19 +188,13 @@ module nts_dispatcher #(
   reg [31:0] api_dummy_new;
   reg [31:0] api_dummy_reg;
 
-  reg        counter_sof_detect_we;
-  reg [63:0] counter_sof_detect_new;
-  reg [63:0] counter_sof_detect_reg;
-  reg        counter_sof_detect_lsb_we;
-  reg [31:0] counter_sof_detect_lsb_reg;
+  wire [31:0] counter_sof_detect_msb;
+  wire [31:0] counter_sof_detect_lsb;
+  reg         counter_sof_detect_lsb_we;
 
-  reg        counter_bad_inc_new;
-  reg        counter_bad_inc_reg;
-  reg        counter_bad_we;
-  reg [63:0] counter_bad_new;
-  reg [63:0] counter_bad_reg;
-  reg        counter_bad_lsb_we;
-  reg [31:0] counter_bad_lsb_reg;
+  wire [31:0] counter_bad_msb;
+  wire [31:0] counter_bad_lsb;
+  reg         counter_bad_lsb_we;
 
   reg        counter_bytes_rx_rst;
   reg        counter_bytes_rx_we;
@@ -209,38 +203,28 @@ module nts_dispatcher #(
   reg        counter_bytes_rx_lsb_we;
   reg [31:0] counter_bytes_rx_lsb_reg;
 
-  reg        counter_dispatched_we;
-  reg [63:0] counter_dispatched_new;
-  reg [63:0] counter_dispatched_reg;
-  reg        counter_dispatched_lsb_we;
-  reg [31:0] counter_dispatched_lsb_reg;
+  wire [31:0] counter_dispatched_msb;
+  wire [31:0] counter_dispatched_lsb;
+  reg         counter_dispatched_lsb_we;
 
-  reg        counter_error_we;
-  reg [63:0] counter_error_new;
-  reg [63:0] counter_error_reg;
-  reg        counter_error_lsb_we;
-  reg [31:0] counter_error_lsb_reg;
+  wire [31:0] counter_error_msb;
+  wire [31:0] counter_error_lsb;
+  reg         counter_error_lsb_we;
 
-  reg        counter_good_we;
-  reg [63:0] counter_good_new;
-  reg [63:0] counter_good_reg;
-  reg        counter_good_lsb_we;
-  reg [31:0] counter_good_lsb_reg;
+  wire [31:0] counter_good_msb;
+  wire [31:0] counter_good_lsb;
+  reg         counter_good_lsb_we;
 
-  reg        counter_packets_discarded_inc;
-  reg        counter_packets_discarded_rst;
-  reg        counter_packets_discarded_we;
-  reg [63:0] counter_packets_discarded_new;
-  reg [63:0] counter_packets_discarded_reg;
-  reg        counter_packets_discarded_lsb_we;
-  reg [31:0] counter_packets_discarded_lsb_reg;
+  reg         counter_packets_discarded_inc;
+  reg         counter_packets_discarded_rst;
+  wire [31:0] counter_packets_discarded_msb;
+  wire [31:0] counter_packets_discarded_lsb;
+  reg         counter_packets_discarded_lsb_we;
 
-  reg        counter_packets_rx_rst;
-  reg        counter_packets_rx_we;
-  reg [63:0] counter_packets_rx_new;
-  reg [63:0] counter_packets_rx_reg;
-  reg        counter_packets_rx_lsb_we;
-  reg [31:0] counter_packets_rx_lsb_reg;
+  reg         counter_packets_rx_rst;
+  wire [31:0] counter_packets_rx_msb;
+  wire [31:0] counter_packets_rx_lsb;
+  reg         counter_packets_rx_lsb_we;
 
   reg        dispatcher_enabled_we;
   reg        dispatcher_enabled_new;
@@ -539,21 +523,21 @@ module nts_dispatcher #(
             end
           ADDR_NTS_REC_MSB:
             begin
-              api_read_data = counter_packets_rx_reg[63:32];
+              api_read_data = counter_packets_rx_msb;
               counter_packets_rx_lsb_we = 1;
             end
           ADDR_NTS_REC_LSB:
             begin
-              api_read_data = counter_packets_rx_lsb_reg;
+              api_read_data = counter_packets_rx_lsb;
             end
           ADDR_NTS_DISCARDED_MSB:
             begin
-              api_read_data = counter_packets_discarded_reg[63:32];
+              api_read_data = counter_packets_discarded_msb;
               counter_packets_discarded_lsb_we = 1;
             end
           ADDR_NTS_DISCARDED_LSB:
             begin
-              api_read_data = counter_packets_discarded_lsb_reg;
+              api_read_data = counter_packets_discarded_lsb;
             end
           ADDR_NTS_ENGINES_READY:
             begin
@@ -565,48 +549,48 @@ module nts_dispatcher #(
              end
           ADDR_COUNTER_FRAMES_MSB:
             begin
-              api_read_data = counter_sof_detect_reg[63:32];
+              api_read_data = counter_sof_detect_msb;
               counter_sof_detect_lsb_we = 1;
             end
           ADDR_COUNTER_FRAMES_LSB:
             begin
-              api_read_data = counter_sof_detect_lsb_reg;
+              api_read_data = counter_sof_detect_lsb;
             end
           ADDR_COUNTER_GOOD_MSB:
             begin
-              api_read_data = counter_good_reg[63:32];
+              api_read_data = counter_good_msb;
               counter_good_lsb_we = 1;
             end
           ADDR_COUNTER_GOOD_LSB:
             begin
-              api_read_data = counter_good_lsb_reg;
+              api_read_data = counter_good_lsb;
             end
           ADDR_COUNTER_BAD_MSB:
             begin
-              api_read_data = counter_bad_reg[63:32];
+              api_read_data = counter_bad_msb;
               counter_bad_lsb_we = 1;
             end
           ADDR_COUNTER_BAD_LSB:
             begin
-              api_read_data = counter_bad_lsb_reg;
+              api_read_data = counter_bad_lsb;
             end
           ADDR_COUNTER_DISPATCHED_MSB:
             begin
-              api_read_data = counter_dispatched_reg[63:32];
+              api_read_data = counter_dispatched_msb;
               counter_dispatched_lsb_we = 1;
             end
           ADDR_COUNTER_DISPATCHED_LSB:
             begin
-              api_read_data = counter_dispatched_lsb_reg;
+              api_read_data = counter_dispatched_lsb;
             end
           ADDR_COUNTER_ERROR_MSB:
             begin
-              api_read_data = counter_error_reg[63:32];
+              api_read_data = counter_error_msb;
               counter_error_lsb_we = 1;
             end
           ADDR_COUNTER_ERROR_LSB:
             begin
-              api_read_data = counter_error_lsb_reg;
+              api_read_data = counter_error_lsb;
             end
           ADDR_BUS_ID_CMD_ADDR:
             begin
@@ -699,23 +683,8 @@ module nts_dispatcher #(
       bus_we_reg   <= 0;
       bus_addr_reg <= 0;
 
-      counter_bad_inc_reg <= 0;
-      counter_bad_reg <= 0;
-      counter_bad_lsb_reg <= 0;
       counter_bytes_rx_reg <= 0;
       counter_bytes_rx_lsb_reg <= 0;
-      counter_dispatched_reg <= 0;
-      counter_dispatched_lsb_reg <= 0;
-      counter_error_reg <= 0;
-      counter_error_lsb_reg <= 0;
-      counter_good_reg <= 0;
-      counter_good_lsb_reg <= 0;
-      counter_packets_discarded_reg <= 0;
-      counter_packets_discarded_lsb_reg <= 0;
-      counter_packets_rx_reg <= 0;
-      counter_packets_rx_lsb_reg <= 0;
-      counter_sof_detect_reg <= 0;
-      counter_sof_detect_lsb_reg <= 0;
 
       current_mem_reg <= 0;
 
@@ -768,55 +737,11 @@ module nts_dispatcher #(
       bus_we_reg   <= bus_we_new;
       bus_addr_reg <= bus_addr_new;
 
-      counter_bad_inc_reg <= counter_bad_inc_new;
-
-      if (counter_bad_we)
-       counter_bad_reg <= counter_bad_new;
-
-      if (counter_bad_lsb_we)
-        counter_bad_lsb_reg <= counter_bad_reg[31:0];
-
       if (counter_bytes_rx_we)
        counter_bytes_rx_reg <= counter_bytes_rx_new;
 
       if (counter_bytes_rx_lsb_we)
         counter_bytes_rx_lsb_reg <= counter_bytes_rx_reg[31:0];
-
-      if (counter_dispatched_we)
-       counter_dispatched_reg <= counter_dispatched_new;
-
-      if (counter_dispatched_lsb_we)
-        counter_dispatched_lsb_reg <= counter_dispatched_reg[31:0];
-
-      if (counter_error_we)
-       counter_error_reg <= counter_error_new;
-
-      if (counter_error_lsb_we)
-        counter_error_lsb_reg <= counter_error_reg[31:0];
-
-      if (counter_good_we)
-       counter_good_reg <= counter_good_new;
-
-      if (counter_good_lsb_we)
-        counter_good_lsb_reg <= counter_good_reg[31:0];
-
-      if (counter_packets_discarded_we)
-       counter_packets_discarded_reg <= counter_packets_discarded_new;
-
-      if (counter_packets_discarded_lsb_we)
-       counter_packets_discarded_lsb_reg <= counter_packets_discarded_reg[31:0];
-
-      if (counter_packets_rx_we)
-       counter_packets_rx_reg <= counter_packets_rx_new;
-
-      if (counter_packets_rx_lsb_we)
-       counter_packets_rx_lsb_reg <= counter_packets_rx_reg[31:0];
-
-      if (counter_sof_detect_we)
-       counter_sof_detect_reg <= counter_sof_detect_new;
-
-      if (counter_sof_detect_lsb_we)
-        counter_sof_detect_lsb_reg <= counter_sof_detect_reg[31:0];
 
       current_mem_reg <= current_mem_new;
 
@@ -864,72 +789,75 @@ module nts_dispatcher #(
   // Debug counters
   //----------------------------------------------------------------
 
-  always @*
-  begin : debug_regs
+  counter64 counter_bad (
+     .i_areset     ( i_areset            ),
+     .i_clk        ( i_clk               ),
+     .i_inc        ( i_rx_bad_frame      ),
+     .i_rst        ( 1'b0                ),
+     .i_lsb_sample ( counter_bad_lsb_we  ),
+     .o_msb        ( counter_bad_msb     ),
+     .o_lsb        ( counter_bad_lsb     )
+  );
 
-    counter_bad_inc_new = i_rx_bad_frame;
-    counter_bad_we = 0;
-    counter_bad_new = 0;
+  counter64 counter_dispatched (
+     .i_areset     ( i_areset                   ),
+     .i_clk        ( i_clk                      ),
+     .i_inc        ( mux_in_fifo_rd_start       ),
+     .i_rst        ( 1'b0                       ),
+     .i_lsb_sample ( counter_dispatched_lsb_we  ),
+     .o_msb        ( counter_dispatched_msb     ),
+     .o_lsb        ( counter_dispatched_lsb     )
+  );
 
-    counter_dispatched_we = 0;
-    counter_dispatched_new = 0;
+  counter64 counter_error (
+     .i_areset     ( i_areset                   ),
+     .i_clk        ( i_clk                      ),
+     .i_inc        ( error_state                ),
+     .i_rst        ( 1'b0                       ),
+     .i_lsb_sample ( counter_error_lsb_we       ),
+     .o_msb        ( counter_error_msb          ),
+     .o_lsb        ( counter_error_lsb          )
+  );
 
-    counter_error_we = 0;
-    counter_error_new = 0;
+  counter64 counter_good (
+     .i_areset     ( i_areset             ),
+     .i_clk        ( i_clk                ),
+     .i_inc        ( i_rx_good_frame      ),
+     .i_rst        ( 1'b0                 ),
+     .i_lsb_sample ( counter_good_lsb_we  ),
+     .o_msb        ( counter_good_msb     ),
+     .o_lsb        ( counter_good_lsb     )
+  );
 
-    counter_good_we = 0;
-    counter_good_new = 0;
+  counter64 counter_packets_discarded (
+     .i_areset     ( i_areset                         ),
+     .i_clk        ( i_clk                            ),
+     .i_inc        ( counter_packets_discarded_inc    ),
+     .i_rst        ( counter_packets_discarded_rst    ),
+     .i_lsb_sample ( counter_packets_discarded_lsb_we ),
+     .o_msb        ( counter_packets_discarded_msb    ),
+     .o_lsb        ( counter_packets_discarded_lsb    )
+  );
 
-    counter_packets_discarded_we = 0;
-    counter_packets_discarded_new = 0;
+  counter64 counter_packets_received (
+     .i_areset     ( i_areset                  ),
+     .i_clk        ( i_clk                     ),
+     .i_inc        ( i_rx_good_frame           ),
+     .i_rst        ( counter_packets_rx_rst    ),
+     .i_lsb_sample ( counter_packets_rx_lsb_we ),
+     .o_msb        ( counter_packets_rx_msb    ),
+     .o_lsb        ( counter_packets_rx_lsb    )
+  );
 
-    counter_packets_rx_we = 0;
-    counter_packets_rx_new = 0;
-
-    counter_sof_detect_we = 0;
-    counter_sof_detect_new = 0;
-
-    if (counter_bad_inc_reg) begin //increment 1 cycle later to reduce setup requirements
-      counter_bad_we = 1;
-      counter_bad_new = counter_bad_reg + 1;
-    end
-
-    if (mux_in_fifo_rd_start) begin
-      counter_dispatched_we = 1;
-      counter_dispatched_new = counter_dispatched_reg + 1;
-    end
-
-    if (error_state) begin
-      counter_error_we = 1;
-      counter_error_new = counter_error_reg + 1;
-    end
-
-    if (i_rx_good_frame) begin
-      counter_good_we = 1;
-      counter_good_new = counter_good_reg + 1;
-    end
-
-    if (counter_packets_rx_rst) begin
-      counter_packets_rx_we = 1;
-      counter_packets_rx_new = 0;
-    end else if (i_rx_good_frame) begin
-      counter_packets_rx_we = 1;
-      counter_packets_rx_new = counter_packets_rx_reg + 1;
-    end
-
-    if (counter_packets_discarded_rst) begin
-      counter_packets_discarded_we = 1;
-      counter_packets_discarded_new = 0;
-    end else if (counter_packets_discarded_inc) begin
-      counter_packets_discarded_we = 1;
-      counter_packets_discarded_new = counter_packets_discarded_reg + 1;
-    end
-
-    if (detect_start_of_frame) begin
-      counter_sof_detect_we = 1;
-      counter_sof_detect_new = counter_sof_detect_reg + 1;
-    end
-  end
+  counter64 counter_start_of_frame (
+     .i_areset     ( i_areset                  ),
+     .i_clk        ( i_clk                     ),
+     .i_inc        ( detect_start_of_frame     ),
+     .i_rst        ( 1'b0                      ),
+     .i_lsb_sample ( counter_sof_detect_lsb_we ),
+     .o_msb        ( counter_sof_detect_msb    ),
+     .o_lsb        ( counter_sof_detect_lsb    )
+  );
 
   always @*
   begin : engines_ready_counter

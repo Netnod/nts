@@ -42,11 +42,6 @@ module counter64 (
   reg        op_inc_reg;
   reg        op_rst_reg;
 
-  reg        counter_we;
-  reg [63:0] counter_new;
-  reg [63:0] counter_reg;
-  reg        counter_updated_reg;
-
   reg        counter_lsb_we;
   reg [31:0] counter_lsb_new;
   reg [31:0] counter_lsb_reg;
@@ -63,23 +58,6 @@ module counter64 (
   assign o_lsb = sample_lsb_reg;
 
   //----------------------------------------------------------------
-  // Counter
-  //----------------------------------------------------------------
-
-  always @*
-  begin
-    counter_we  = 0;
-    counter_new = 0;
-    if (op_rst_reg) begin
-      counter_we  = 1;
-      counter_new = 0;
-    end else if (op_inc_reg) begin
-      counter_we  = 1;
-      counter_new = counter_reg + 1;
-   end
-  end
-
-  //----------------------------------------------------------------
   // Counter MSB, LSB outs
   //----------------------------------------------------------------
 
@@ -92,11 +70,13 @@ module counter64 (
     sample_lsb_we   = 0;
     sample_lsb_new  = 0;
 
-    if (counter_updated_reg) begin
-      counter_msb_we  = 1;
-      counter_msb_new = counter_reg[63:32];
+    if (op_inc_reg) begin
+      if (counter_lsb_reg == 32'hffff_ffff) begin
+        counter_msb_we  = 1;
+        counter_msb_new = counter_msb_reg + 1;
+      end
       counter_lsb_we  = 1;
-      counter_lsb_new = counter_reg[31:0];
+      counter_lsb_new = counter_lsb_reg + 1;
     end
 
     if (i_lsb_sample) begin
@@ -123,8 +103,6 @@ module counter64 (
     if (i_areset) begin
       op_inc_reg          <= 0;
       op_rst_reg          <= 0;
-      counter_reg         <= 0;
-      counter_updated_reg <= 0;
       counter_lsb_reg     <= 0;
       counter_msb_reg     <= 0;
       sample_lsb_reg      <= 0;
@@ -132,16 +110,11 @@ module counter64 (
       op_inc_reg       <= i_inc;
       op_rst_reg       <= i_rst;
 
-      if (counter_we)
-       counter_reg <= counter_new;
-
       if (counter_lsb_we)
        counter_lsb_reg <= counter_lsb_new;
 
       if (counter_msb_we)
        counter_msb_reg <= counter_msb_new;
-
-      counter_updated_reg <= counter_we;
 
       if (sample_lsb_we)
         sample_lsb_reg <= sample_lsb_new;

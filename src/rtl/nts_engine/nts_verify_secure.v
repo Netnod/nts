@@ -1191,7 +1191,7 @@ module nts_verify_secure #(
         end
       STATE_COPY_TX:
         begin
-         $display("%s:%0d tx_ctr_reg %0d < tx_ctr_max_reg %0d", `__FILE__, `__LINE__, tx_ctr_reg, tx_ctr_max_reg);
+          //$display("%s:%0d tx_ctr_reg %0d < tx_ctr_max_reg %0d", `__FILE__, `__LINE__, tx_ctr_reg, tx_ctr_max_reg);
           if (tx_ctr_reg < tx_ctr_max_reg) begin
             //Buffer input into register
             ibuf_tx_read_data_we  = 1;
@@ -1789,21 +1789,4 @@ module nts_verify_secure #(
     endcase
   end
 
-/*
-  generate
-    if (DEBUG_OUTPUT) begin
-      always @(posedge i_clk) begin
-        if (ram_a_en && ram_b_en && ram_a_we && ram_b_we) begin
-          $display("%s:%0d RAM port AB addr[%h,%h] wdata: %h%h", `__FILE__, `__LINE__, ram_a_addr, ram_b_addr, ram_a_wdata, ram_b_wdata);
-        end else if (ram_a_en && ram_b_en && ram_a_we==0 && ram_b_we==0) begin
-          $display("%s:%0d RAM port AB addr[%h,%h] (read)", `__FILE__, `__LINE__, ram_a_addr, ram_b_addr);
-        end else begin
-          if (ram_a_en) $display("%s:%0d RAM port A, en: %h we: %h addr: %h wdata: %h", `__FILE__, `__LINE__, ram_a_en, ram_a_we, ram_a_addr, ram_a_wdata);
-          if (ram_b_en) $display("%s:%0d RAM port B, en: %h we: %h addr: %h wdata: %h", `__FILE__, `__LINE__, ram_b_en, ram_b_we, ram_b_addr, ram_b_wdata);
-        end
-        if (state_reg == STATE_ERROR) $display("%s:%0d state==ERROR!", `__FILE__, `__LINE__);
-      end
-    end
-  endgenerate
-*/
 endmodule

@@ -1037,6 +1037,42 @@ module nts_verify_secure_tb #(
   end
   endtask
 
+  task test_copy_ad;
+  begin : test_copy_ad
+    reg  [63:0] ad1;
+    reg [127:0] ad2;
+    reg  [63:0] tmp1;
+    reg  [63:0] tmp2;
+    ad1 =  64'hf0f1_f2f3_f4f5_f6f7;
+    ad2 = 128'he0e1_e2e3_e4e5_e6e7_d0d1_d2d3_d4d5_d6d7;
+
+    write_tx_ad( 8, { 16320'h0, ad1 } );
+    tmp1 = inspect_dut_ram(512);
+    //$display("%s:%0d tmp1: %h expected: %h", `__FILE__, `__LINE__, tmp1, ad1);
+    `assert( tmp1 === ad1 );
+
+    write_tx_ad( 16, { 16256'h0, ad2 } );
+    tmp1 = inspect_dut_ram(512);
+    tmp2 = inspect_dut_ram(513);
+    //$display("%s:%0d tmp1,2: %h %h expected: %h", `__FILE__, `__LINE__, tmp1, tmp2, ad2);
+    `assert( tmp1 === ad2[127:64] );
+    `assert( tmp2 === ad2[63:0] );
+
+    write_tx_ad( 8, { 16320'h0, ad1 } );
+    tmp1 = inspect_dut_ram(512);
+    tmp2 = inspect_dut_ram(513);
+    `assert( tmp1 === ad1 );
+    `assert( tmp2 === ad2[63:0] );
+
+    write_tx_ad( 16, { 16256'h0, ad2 } );
+    tmp1 = inspect_dut_ram(512);
+    tmp2 = inspect_dut_ram(513);
+    `assert( tmp1 === ad2[127:64] );
+    `assert( tmp2 === ad2[63:0] );
+  end
+  endtask
+
+
   //----------------------------------------------------------------
   // Testbench start
   //----------------------------------------------------------------
@@ -1080,6 +1116,10 @@ module nts_verify_secure_tb #(
     #10;
     init_memory_model_rx( 11'h080 );
     init_memory_model_tx( 11'h040 );
+
+    #20;
+
+    test_copy_ad();
 
     test_verify("case 1", 1, TEST1_C2S, 188, { 14880'h0, TEST1_AD }, TEST1_NONCE, TEST1_TAG);
 

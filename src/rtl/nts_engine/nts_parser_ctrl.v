@@ -282,16 +282,17 @@ module nts_parser_ctrl #(
 
   localparam [BITS_STATE-1:0] STATE_TX_UPDATE_LENGTH         = 6'h27;
   localparam [BITS_STATE-1:0] STATE_TX_WRITE_UDP_LENGTH      = 6'h28;
-  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_RESET       = 6'h29;
-  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_PS_SRCADDR  = 6'h2a;
-  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_PS_UDPLLEN  = 6'h2b;
-  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_DATAGRAM    = 6'h2c;
-  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_WAIT        = 6'h2d;
-  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_UDP_CSUM       = 6'h2e;
-  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_UDP_CSUM_DELAY = 6'h2f;
-  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_IP_HEADER_0    = 6'h30;
-  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_IP_HEADER_1    = 6'h31;
-  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_IP_HEADR_DELAY = 6'h32;
+  localparam [BITS_STATE-1:0] STATE_TX_WRITE_UDP_LENGTH_D    = 6'h29;
+  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_RESET       = 6'h2a;
+  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_PS_SRCADDR  = 6'h2b;
+  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_PS_UDPLLEN  = 6'h2c;
+  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_DATAGRAM    = 6'h2d;
+  localparam [BITS_STATE-1:0] STATE_UDP_CHECKSUM_WAIT        = 6'h2e;
+  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_UDP_CSUM       = 6'h2f;
+  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_UDP_CSUM_DELAY = 6'h30;
+  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_IP_HEADER_0    = 6'h31;
+  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_IP_HEADER_1    = 6'h32;
+  localparam [BITS_STATE-1:0] STATE_WRITE_NEW_IP_HEADR_DELAY = 6'h33;
 
   localparam [BITS_STATE-1:0] STATE_ERROR_GENERAL            = 6'h3d;
   localparam [BITS_STATE-1:0] STATE_TRANSFER_PACKET          = 6'h3e;
@@ -3065,7 +3066,7 @@ module nts_parser_ctrl #(
       tx_address    = copy_tx_addr_reg;
       tx_write_en   = i_access_port_rd_dv;
       tx_write_data = i_access_port_rd_data;
-      $display("%s:%0d COPY: TX[%h (%0d)] = [%h]", `__FILE__, `__LINE__, tx_address, tx_address, tx_write_data);
+      //$display("%s:%0d COPY: TX[%h (%0d)] = [%h]", `__FILE__, `__LINE__, tx_address, tx_address, tx_write_data);
     end
 
     if (response_en_reg) begin
@@ -3830,6 +3831,11 @@ module nts_parser_ctrl #(
         end
       STATE_TX_WRITE_UDP_LENGTH:
         begin
+          state_we  = 'b1;
+          state_new = STATE_TX_WRITE_UDP_LENGTH_D;
+        end
+      STATE_TX_WRITE_UDP_LENGTH_D:
+        if (i_tx_busy == 0) begin
           state_we  = 'b1;
           state_new = STATE_UDP_CHECKSUM_RESET;
         end

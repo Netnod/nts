@@ -875,10 +875,6 @@ module nts_parser_ctrl #(
   reg  [3:0] tx_header_icmpv6_trace_index_new;
   reg  [3:0] tx_header_icmpv6_trace_index_reg;
 
-  reg        tx_icmpv4_icmp_checksum_we;
-  reg [15:0] tx_icmpv4_icmp_checksum_new;
-  reg [15:0] tx_icmpv4_icmp_checksum_reg;
-
   reg        tx_header_icmpv4_echo_index_we;
   reg  [3:0] tx_header_icmpv4_echo_index_new;
   reg  [3:0] tx_header_icmpv4_echo_index_reg;
@@ -1238,7 +1234,7 @@ module nts_parser_ctrl #(
   // ICMPv4 Echo Reply
   //----------------------------------------------------------------
 
-  assign tx_header_icmp4_echo = { ICMP_TYPE_V4_ECHO_REPLY, 8'h0 /* code */, tx_icmpv4_icmp_checksum_reg };
+  assign tx_header_icmp4_echo = { ICMP_TYPE_V4_ECHO_REPLY, 8'h0 /* code */, 16'h0000 };
   assign tx_header_ethernet_ipv4_icmp_echo = { tx_header_ethernet,
                                                tx_header_ipv4_baseicmp,
                                                tx_header_icmp4_echo };
@@ -1715,7 +1711,6 @@ module nts_parser_ctrl #(
       tx_icmp_total_length_reg   <= 0;
       tx_icmp_tmpblock_reg       <= 0;
 
-      tx_icmpv4_icmp_checksum_reg <= 0;
       tx_icmpv4_ip_checksum_reg <= 0;
       tx_icmpv4_ip_total_length_reg <= 0;
 
@@ -2084,10 +2079,7 @@ module nts_parser_ctrl #(
       if (tx_icmp_tmpblock_we)
         tx_icmp_tmpblock_reg <= tx_icmp_tmpblock_new;;
 
-      if (tx_icmpv4_icmp_checksum_we)
-        tx_icmpv4_icmp_checksum_reg <= tx_icmpv4_icmp_checksum_new;
- 
-     if (tx_icmpv4_ip_total_length_we)
+      if (tx_icmpv4_ip_total_length_we)
         tx_icmpv4_ip_total_length_reg <= tx_icmpv4_ip_total_length_new;
 
       tx_icmpv4_ip_checksum_reg <= tx_icmpv4_ip_checksum_new;
@@ -2871,8 +2863,6 @@ module nts_parser_ctrl #(
     tx_icmp_tmpblock_new = 0;
     tx_icmpv4_ip_total_length_we = 0;
     tx_icmpv4_ip_total_length_new = 0;
-    tx_icmpv4_icmp_checksum_we = 0;
-    tx_icmpv4_icmp_checksum_new = 0;
 
     tx_header_arp_index_we = 0;
     tx_header_arp_index_new = 0;
@@ -3003,8 +2993,6 @@ module nts_parser_ctrl #(
               tx_icmp_total_length_new      = memory_bound_reg;
               tx_icmpv4_ip_total_length_we  = 1;
               tx_icmpv4_ip_total_length_new = memory_bound_reg - HEADER_LENGTH_ETHERNET;
-              tx_icmpv4_icmp_checksum_we    = 1;
-              tx_icmpv4_icmp_checksum_new   = 0;
               tx_icmp_csum_bytes_we         = 1;
               tx_icmp_csum_bytes_new        = memory_bound_reg - OFFSET_ETH_IPV4_DATA;
               tx_icmp_tmpblock_we           = 1;
@@ -3022,8 +3010,6 @@ module nts_parser_ctrl #(
             end
           ICMP_S_V4_CSUM_WAIT:
             if (i_tx_sum_done) begin
-              tx_icmpv4_icmp_checksum_we  = 1;
-              tx_icmpv4_icmp_checksum_new = ~i_tx_sum;
               tx_icmp_tmpblock_we  = 1;
               tx_icmp_tmpblock_new = { tx_icmp_tmpblock_reg[63:16], (~i_tx_sum) };
             end

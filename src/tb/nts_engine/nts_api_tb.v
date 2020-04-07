@@ -294,6 +294,9 @@ module nts_api_tb;
     #10 ;
     set(0, 0, 0, 0, i_external_api_cs, i_external_api_we, i_external_api_address, i_external_api_write_data);
     wait_busy();
+    `assert(o_external_api_read_data_valid);
+    if (verbose > 0)
+      $display("%s:%0d %s [ %h ]  = %h", `__FILE__, `__LINE__, i_we?"WRITE":"READ", i_addr, o_external_api_read_data);
   end
   endtask
 

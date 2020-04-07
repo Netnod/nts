@@ -77,53 +77,97 @@ module nts_api #(
   input  wire [31:0] i_internal_parser_api_read_data
 );
 
+  //----------------------------------------------------------------
+  // Busy reg, indicating the pipeline is working. Do not disturb.
+  //----------------------------------------------------------------
+
   reg        busy_we;
   reg        busy_new;
   reg        busy_reg;
+
+  //----------------------------------------------------------------
+  // Pipeline stage 0. Capture external API.
+  //----------------------------------------------------------------
 
   reg        p0_api_cs_reg;
   reg        p0_api_we_reg;
   reg [11:0] p0_api_address_reg;
   reg [31:0] p0_api_write_data_reg;
 
+  //----------------------------------------------------------------
+  // Pipeline stage 1. Address Decoded (demux)
+  //----------------------------------------------------------------
+
   reg        p1_api_cs_reg;
   reg        p1_api_we_reg;
   reg  [7:0] p1_api_address_reg;
   reg [31:0] p1_api_write_data_reg;
-  reg        p1_select_engine_reg;
-  reg        p1_select_clock_reg;
-  reg        p1_select_cookie_reg;
-  reg        p1_select_keymem_reg;
-  reg        p1_select_debug_reg;
-  reg        p1_select_parser_reg;
+  reg        p1_cs_engine_reg;
+  reg        p1_cs_clock_reg;
+  reg        p1_cs_cookie_reg;
+  reg        p1_cs_keymem_reg;
+  reg        p1_cs_debug_reg;
+  reg        p1_cs_parser_reg;
 
-  reg  [7:0] addr_calculated;
-  reg        select_engine;
-  reg        select_clock;
-  reg        select_cookie;
-  reg        select_keymem;
-  reg        select_debug;
-  reg        select_parser;
+  //----------------------------------------------------------------
+  // Pipeline stage 2. Capture API endpoint read_data.
+  //----------------------------------------------------------------
 
-  reg [31:0] p2_api_read_data_new;
-  reg [31:0] p2_api_read_data_reg;
-  reg        p2_api_read_data_valid_reg;
+  reg        p2_api_cs_reg;
+  reg        p2_api_we_reg;
+  reg        p2_cs_engine_reg;
+  reg        p2_cs_clock_reg;
+  reg        p2_cs_cookie_reg;
+  reg        p2_cs_keymem_reg;
+  reg        p2_cs_debug_reg;
+  reg        p2_cs_parser_reg;
+  reg [31:0] p2_data_engine_reg;
+  reg [31:0] p2_data_clock_reg;
+  reg [31:0] p2_data_cookie_reg;
+  reg [31:0] p2_data_keymem_reg;
+  reg [31:0] p2_data_debug_reg;
+  reg [31:0] p2_data_parser_reg;
+
+  //Pipleline stage 2 helper wires. Comintatorial logic, does not synthesis to wire registers.
+  reg [7:0] addr_calculated;
+  reg       select_engine;
+  reg       select_clock;
+  reg       select_cookie;
+  reg       select_keymem;
+  reg       select_debug;
+  reg       select_parser;
+
+  //----------------------------------------------------------------
+  // Pipeline stage 3. Mux p2_data_*_reg into p3_api_read_data_reg
+  //----------------------------------------------------------------
+
+  reg [31:0] p3_api_read_data_new;
+  reg [31:0] p3_api_read_data_reg;
+  reg        p3_api_read_data_valid_reg;
+
+  //----------------------------------------------------------------
+  // Output wire assignment
+  //----------------------------------------------------------------
 
   assign o_internal_api_we         = p1_api_we_reg;
   assign o_internal_api_address    = p1_api_address_reg;
   assign o_internal_api_write_data = p1_api_write_data_reg;
 
-  assign o_internal_engine_api_cs  = p1_api_cs_reg && p1_select_engine_reg;
-  assign o_internal_clock_api_cs   = p1_api_cs_reg && p1_select_clock_reg;
-  assign o_internal_cookie_api_cs  = p1_api_cs_reg && p1_select_cookie_reg;
-  assign o_internal_keymem_api_cs  = p1_api_cs_reg && p1_select_keymem_reg;
-  assign o_internal_debug_api_cs   = p1_api_cs_reg && p1_select_debug_reg;
-  assign o_internal_parser_api_cs  = p1_api_cs_reg && p1_select_parser_reg;
+  assign o_internal_engine_api_cs  = p1_cs_engine_reg;
+  assign o_internal_clock_api_cs   = p1_cs_clock_reg;
+  assign o_internal_cookie_api_cs  = p1_cs_cookie_reg;
+  assign o_internal_keymem_api_cs  = p1_cs_keymem_reg;
+  assign o_internal_debug_api_cs   = p1_cs_debug_reg;
+  assign o_internal_parser_api_cs  = p1_cs_parser_reg;
 
   assign o_busy = busy_reg;
 
-  assign o_external_api_read_data       = p2_api_read_data_reg;
-  assign o_external_api_read_data_valid = p2_api_read_data_valid_reg;
+  assign o_external_api_read_data       = p3_api_read_data_reg;
+  assign o_external_api_read_data_valid = p3_api_read_data_valid_reg;
+
+  //----------------------------------------------------------------
+  // Busy reg
+  //----------------------------------------------------------------
 
   always @*
   begin
@@ -133,14 +177,18 @@ module nts_api #(
       busy_we = 1;
       busy_new = 1;
     end
-    if (p1_api_cs_reg) begin
+    if (p2_api_cs_reg) begin
       busy_we = 1;
       busy_new = 0;
     end
   end
 
+  //----------------------------------------------------------------
+  // Reg update. Updates the pipeline
+  //----------------------------------------------------------------
+
   always @(posedge i_clk or posedge i_areset)
-  begin : pipeline_stage0;
+  begin : reg_update
     if (i_areset) begin
       busy_reg <= 0;
 
@@ -153,39 +201,82 @@ module nts_api #(
       p1_api_we_reg         <= 0;
       p1_api_address_reg    <= 0;
       p1_api_write_data_reg <= 0;
-      p1_select_engine_reg  <= 0;
-      p1_select_clock_reg   <= 0;
-      p1_select_cookie_reg  <= 0;
-      p1_select_keymem_reg  <= 0;
-      p1_select_debug_reg   <= 0;
-      p1_select_parser_reg  <= 0;
+      p1_cs_engine_reg      <= 0;
+      p1_cs_clock_reg       <= 0;
+      p1_cs_cookie_reg      <= 0;
+      p1_cs_keymem_reg      <= 0;
+      p1_cs_debug_reg       <= 0;
+      p1_cs_parser_reg      <= 0;
 
-      p2_api_read_data_reg       <= 0;
-      p2_api_read_data_valid_reg <= 0;
+      p2_api_cs_reg      <= 0;
+      p2_cs_engine_reg   <= 0;
+      p2_cs_clock_reg    <= 0;
+      p2_cs_cookie_reg   <= 0;
+      p2_cs_keymem_reg   <= 0;
+      p2_cs_debug_reg    <= 0;
+      p2_cs_parser_reg   <= 0;
+      p2_data_engine_reg <= 0;
+      p2_data_clock_reg  <= 0;
+      p2_data_cookie_reg <= 0;
+      p2_data_keymem_reg <= 0;
+      p2_data_debug_reg  <= 0;
+      p2_data_parser_reg <= 0;
+
+      p3_api_read_data_reg       <= 0;
+      p3_api_read_data_valid_reg <= 0;
     end else begin
       if (busy_we)
         busy_reg <= busy_new;
+
+      // Pipeline stage 0: capture input
 
       p0_api_cs_reg         <= i_external_api_cs;
       p0_api_we_reg         <= i_external_api_we;
       p0_api_address_reg    <= i_external_api_address;
       p0_api_write_data_reg <= i_external_api_write_data;
 
+      // Pipeline stage 1: decode input
+
       p1_api_cs_reg         <= p0_api_cs_reg;
       p1_api_we_reg         <= p0_api_we_reg;
       p1_api_address_reg    <= addr_calculated;
       p1_api_write_data_reg <= p0_api_write_data_reg;
-      p1_select_engine_reg  <= select_engine;
-      p1_select_clock_reg   <= select_clock;
-      p1_select_cookie_reg  <= select_cookie;
-      p1_select_keymem_reg  <= select_keymem;
-      p1_select_debug_reg   <= select_debug;
-      p1_select_parser_reg  <= select_parser;
+      p1_cs_engine_reg      <= p0_api_cs_reg && select_engine;
+      p1_cs_clock_reg       <= p0_api_cs_reg && select_clock;
+      p1_cs_cookie_reg      <= p0_api_cs_reg && select_cookie;
+      p1_cs_keymem_reg      <= p0_api_cs_reg && select_keymem;
+      p1_cs_debug_reg       <= p0_api_cs_reg && select_debug;
+      p1_cs_parser_reg      <= p0_api_cs_reg && select_parser;
 
-      p2_api_read_data_reg       <= p2_api_read_data_new;
-      p2_api_read_data_valid_reg <= p1_api_cs_reg;
+      // Pipeline stage 2: capture API endpoints read_data
+
+      p2_api_cs_reg      <= p1_api_cs_reg;
+      p2_api_we_reg      <= p1_api_we_reg;
+      p2_cs_engine_reg   <= p1_cs_engine_reg;
+      p2_cs_clock_reg    <= p1_cs_clock_reg;
+      p2_cs_cookie_reg   <= p1_cs_cookie_reg;
+      p2_cs_keymem_reg   <= p1_cs_keymem_reg;
+      p2_cs_debug_reg    <= p1_cs_debug_reg;
+      p2_cs_parser_reg   <= p1_cs_parser_reg;
+      p2_data_engine_reg <= i_internal_engine_api_read_data;
+      p2_data_clock_reg  <= i_internal_clock_api_read_data;
+      p2_data_cookie_reg <= i_internal_cookie_api_read_data;
+      p2_data_keymem_reg <= i_internal_keymem_api_read_data;
+      p2_data_debug_reg  <= i_internal_debug_api_read_data;
+      p2_data_parser_reg <= i_internal_parser_api_read_data;
+
+      // Pipeline stage 3: output results
+
+      p3_api_read_data_reg       <= p3_api_read_data_new;
+      p3_api_read_data_valid_reg <= p2_api_cs_reg;
     end
   end
+
+  //----------------------------------------------------------------
+  // Address Decode.
+  //  * Reads pipeline stage 0
+  //  * Decodes into pipeline 1
+  //----------------------------------------------------------------
 
   always @*
   begin : address_decode
@@ -230,24 +321,30 @@ module nts_api #(
       addr_calculated = addr_tmp[7:0];
   end
 
+  //----------------------------------------------------------------
+  // Pipeline Stage 3 output mux
+  //  * Reads pipeline stage 2
+  //  * Muxes into pipeline 3
+  //----------------------------------------------------------------
+
   always @*
-  begin : pipeline2_demux
-    reg [5:0] demux_ctrl;
-    p2_api_read_data_new = 0;
-    demux_ctrl = { p1_select_engine_reg,
-                   p1_select_clock_reg,
-                   p1_select_cookie_reg,
-                   p1_select_keymem_reg,
-                   p1_select_debug_reg,
-                   p1_select_parser_reg };
-    if (p1_api_cs_reg && p1_api_we_reg == 'b0) begin
-      case (demux_ctrl)
-        6'b100_000: p2_api_read_data_new = i_internal_engine_api_read_data;
-        6'b010_000: p2_api_read_data_new = i_internal_clock_api_read_data;
-        6'b001_000: p2_api_read_data_new = i_internal_cookie_api_read_data;
-        6'b000_100: p2_api_read_data_new = i_internal_keymem_api_read_data;
-        6'b000_010: p2_api_read_data_new = i_internal_debug_api_read_data;
-        6'b000_001: p2_api_read_data_new = i_internal_parser_api_read_data;
+  begin : pipeline3_mux
+    reg [5:0] mux_ctrl;
+    p3_api_read_data_new = 0;
+    mux_ctrl = { p2_cs_engine_reg,
+                 p2_cs_clock_reg,
+                 p2_cs_cookie_reg,
+                 p2_cs_keymem_reg,
+                 p2_cs_debug_reg,
+                 p2_cs_parser_reg };
+    if (p2_api_cs_reg && p2_api_we_reg == 'b0) begin
+      case (mux_ctrl)
+        6'b100_000: p3_api_read_data_new = p2_data_engine_reg;
+        6'b010_000: p3_api_read_data_new = p2_data_clock_reg;
+        6'b001_000: p3_api_read_data_new = p2_data_cookie_reg;
+        6'b000_100: p3_api_read_data_new = p2_data_keymem_reg;
+        6'b000_010: p3_api_read_data_new = p2_data_debug_reg;
+        6'b000_001: p3_api_read_data_new = p2_data_parser_reg;
         default: ;
       endcase
     end

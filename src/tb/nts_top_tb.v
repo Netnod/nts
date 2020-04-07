@@ -225,6 +225,15 @@ module nts_top_tb;
       48'h3233_3435_3637
   };
 
+  localparam [783:0] PACKET_PING4 = {
+     128'h52_5a_2c_18_2e_80_98_03_9b_3c_1c_66_08_00_45_00, // iRZ,......<.f..E.
+     128'h00_54_34_45_40_00_40_01_34_fe_c0_a8_28_01_c0_a8, // .T4E@.@.4þÀ¨(.À¨
+     128'h28_14_08_00_31_d7_12_e7_00_01_7c_07_82_5e_00_00, // (...1×.ç..|..^..
+     128'h00_00_f6_07_00_00_00_00_00_00_10_11_12_13_14_15, // ..ö.............
+     128'h16_17_18_19_1a_1b_1c_1d_1e_1f_20_21_22_23_24_25, // .......... !"#$%
+     128'h26_27_28_29_2a_2b_2c_2d_2e_2f_30_31_32_33_34_35, // &'()*+,-./012345
+      16'h36_37 };                                         //  67
+
   //IP6 fd75:502f:e221:ddcf::1.45876 > fd75:502f:e221:ddcf::2.33434: UDP, length 32
   localparam [751:0] PACKET_IP6_UDP_TRACEROUTE = {
 	128'h525a_2c18_2e80_9803_9b3c_1c66_86dd_6003,
@@ -237,7 +246,7 @@ module nts_top_tb;
 
   localparam DEBUG           = 1;
   localparam BENCHMARK       = 1;
-  localparam ENGINES         = 4;
+  localparam ENGINES         = 1;
   localparam API_ADDR_WIDTH  = 12;
   localparam API_RW_WIDTH    = 32;
   localparam MAC_DATA_WIDTH  = 64;
@@ -509,7 +518,9 @@ module nts_top_tb;
     api_write32( 32'hC0_A1_A2_A3, engine, API_ADDR_PARSER_IPV4_4 );
     api_write32( 32'hD0_A1_A2_A3, engine, API_ADDR_PARSER_IPV4_5 );
     api_write32( 32'hE0_A1_A2_A3, engine, API_ADDR_PARSER_IPV4_6 );
-    api_write32( 32'hF0_A1_A2_A3, engine, API_ADDR_PARSER_IPV4_7 );
+  //api_write32( 32'hF0_A1_A2_A3, engine, API_ADDR_PARSER_IPV4_7 );
+    api_write32( 32'hc0_a8_28_14, engine, API_ADDR_PARSER_IPV4_7 );
+
     for (i = 0; i < 4; i = i + 1) begin
       api_write32( IPV6_ADDR_FD75_02[127-i*32-:32], engine, API_ADDR_PARSER_IPV6_0 + i[11:0]);
       api_write32( IPV6_ADDR_FD75_10[127-i*32-:32], engine, API_ADDR_PARSER_IPV6_1 + i[11:0]);
@@ -872,11 +883,15 @@ module nts_top_tb;
       begin : ping
         integer i;
         for (i = 0; i < 10; i = i + 1) begin
+          $display("%s:%0d: ICMPv6 Ping6", `__FILE__, `__LINE__);
           send_packet({64592'h0, PACKET_PING6}, 944, 0);
-          #800;
+          #2000;
+          $display("%s:%0d: ICMPv4 Ping4", `__FILE__, `__LINE__);
+          send_packet({64752'h0, PACKET_PING4}, 784, 0);
+          #2000;
         end
       end
-      #900000;
+      #2000;
     end
 
     //----------------------------------------------------------------
@@ -1253,28 +1268,78 @@ module nts_top_tb;
 
   task check_icmp_v6;
   begin : check_icmp_v6_
+    reg  [7:0] ip;
     reg [15:0] csum;
     reg [15:0] ethernet_protocol;
     reg [15:0] payload_length;
     reg  [7:0] next;
     reg  [7:0] icmp_type;
+    reg        garbage;
+    integer    csum_offset;
+    integer    csum_bytes;
+
+    garbage = 0;
     ethernet_protocol = tx_read_word16( 12 );
-    payload_length = tx_read_word16(14 + 4);
-    next = tx_read_byte(14 + 4 + 2);
-    icmp_type = tx_read_byte(14 + 40);
     //$display("%s:%0d * TX * Ethernet Protocol %h", `__FILE__, `__LINE__, ethernet_protocol);
-    if (ethernet_protocol == 16'h86DD) begin
-      //$display("%s:%0d * TX * IPv6 Payload Length %h (%0d)", `__FILE__, `__LINE__, payload_length, payload_length);
-      //$display("%s:%0d * TX * IPv6 Next %h (%0d)", `__FILE__, `__LINE__, next, next);
-      if (next == 58) begin
-        csum = { 8'h00, next } + payload_length;
-        csum = internet_checksum(csum,
-                                 14 + 8,
-                                 32 + {16'h0, payload_length }
-                                 );
-        $display("%s:%0d * TX * ICMPv6 CHECK: %h (%s)", `__FILE__, `__LINE__, csum, (csum==16'hffff)?"PASS":"FAIL");
-        $display("%s:%0d * TX * ICMPv6 Type: %h (%0d)", `__FILE__, `__LINE__, icmp_type, icmp_type);
-      end
+    case (ethernet_protocol)
+      16'h86DD:
+        begin
+          payload_length = tx_read_word16(14 + 4);
+          next = tx_read_byte(14 + 4 + 2);
+          icmp_type = tx_read_byte(14 + 40);
+          if (next != 58) garbage = 1;
+          csum = { 8'h00, next } + payload_length;
+          csum_offset = 14 + 8;
+          csum_bytes = { 16'h0000, payload_length } + 32;
+          ip="6";
+        end
+      16'h0800:
+        begin
+          payload_length = tx_read_word16(14 + 2);
+          if (payload_length > 20) begin
+            payload_length = payload_length - 20;
+          end else begin
+            garbage = 1;
+          end
+          next = tx_read_byte(14 + 9);
+          icmp_type = tx_read_byte(14 + 20);
+          if (next != 1) garbage = 1;
+          csum = 0;
+          csum_offset = 14 + 20;
+          csum_bytes = { 16'h0000, payload_length };
+          ip="4";
+        end
+      default: garbage = 1;
+    endcase
+
+    if (!garbage) begin
+      csum = internet_checksum(csum, csum_offset, csum_bytes);
+      $display("%s:%0d * TX * ICMPv%s CHECK: %h (%s)", `__FILE__, `__LINE__, ip, csum, (csum==16'hffff)?"PASS":"FAIL");
+      $display("%s:%0d * TX * ICMPv%s Type: %h (%0d)", `__FILE__, `__LINE__, ip, icmp_type, icmp_type);
+    end
+  end
+  endtask
+
+  task check_ipv4;
+  begin : check_ipv4_
+    reg [15:0] csum;
+    reg [15:0] ethernet_protocol;
+    reg  [7:0] ip_ihl;
+    reg [15:0] total_length;
+    integer expected_length;
+    ethernet_protocol = tx_read_word16( 12 );
+    ip_ihl = tx_read_byte( 14 );
+    total_length = tx_read_word16(14 + 2);
+    if (ethernet_protocol == 16'h0800) begin
+      `assert(ip_ihl == 8'h45);
+      `assert(total_length > 20);
+      expected_length = tx_rec_bytes - 14;
+      $display("%s:%0d * TX * IPv4 total length %s: %0d (expected: %0d), tx_rec_bytes: %0d)", `__FILE__, `__LINE__,
+         ( ( {16'h0000, total_length} ) == expected_length) ?"GOOD":"BAD!",
+         total_length, expected_length, tx_rec_bytes);
+      //`assert( ( {16'h0000, total_length} ) == expected_length);
+      csum = internet_checksum( 16'h0000, 14, 20);
+      $display("%s:%0d * TX * IPv4 CHECK: %h (%s)", `__FILE__, `__LINE__, csum, (csum==16'hffff)?"PASS":"FAIL");
     end
   end
   endtask
@@ -1372,6 +1437,7 @@ module nts_top_tb;
     end else if (tx_rec_new) begin
       $display("%s:%0d * TX * tx_rec_bytes: %h (%0d)", `__FILE__, `__LINE__, tx_rec_bytes, tx_rec_bytes);
       check_icmp_v6();
+      check_ipv4();
       check_udp_checksum();
       check_nts();
     end
@@ -1488,6 +1554,8 @@ module nts_top_tb;
 
   if (DEBUG>0) begin
     always @*
+     $display("%s:%0d dut.genblk1[0].engine.parser.protocol_detect_ip4echo_reg: %h", `__FILE__, `__LINE__, dut.genblk1[0].engine.parser.protocol_detect_ip4echo_reg);
+    always @*
      $display("%s:%0d dut.genblk1[0].engine.parser.cookies_count_reg: %h", `__FILE__, `__LINE__, dut.genblk1[0].engine.parser.cookies_count_reg);
     always @*
       $display("%s:%0d dut.dispatcher.engines_ready_reg: %h", `__FILE__, `__LINE__,  dut.dispatcher.engines_ready_reg);
@@ -1529,7 +1597,7 @@ module nts_top_tb;
     reg [63:0] old_tick_counter_packet;
     reg  [5:0] old_parser_state;
     reg  [4:0] old_parser_state_crypto;
-    reg  [4:0] old_parser_state_icmp;
+    reg  [5:0] old_parser_state_icmp;
 
     always  @(posedge i_clk or posedge i_areset)
     begin

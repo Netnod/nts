@@ -29,7 +29,11 @@
 //
 
 module nts_rx_buffer #(
-  parameter ADDR_WIDTH = 8
+  parameter ADDR_WIDTH = 8,
+  parameter SUPPORT_8BIT = 0,
+  parameter SUPPORT_16BIT = 0,
+  parameter SUPPORT_32BIT = 1,
+  parameter SUPPORT_64BIT = 1
 ) (
   input  wire                    i_areset, // async reset
   input  wire                    i_clk,
@@ -581,21 +585,39 @@ module nts_rx_buffer #(
           if (fifo_start) begin
             ;
           end else if (i_access_port_rd_en) begin
-            access_ws_we          = 'b1;
-            access_addr_lo_we     = 'b1;
 
-            access_wait_new       = 'b1;
-            access_addr_lo_new    = i_access_port_addr[2:0];
+            access_addr_lo_we   = 'b1;
+            access_addr_lo_new  = i_access_port_addr[2:0];
+            burst_size_we       = 1;
+            burst_size_new      = i_access_port_burstsize;
+
             case (i_access_port_wordsize)
-              0: access_ws8bit_new  = 'b1;
-              1: access_ws16bit_new = 'b1;
-              2: access_ws32bit_new = 'b1;
-              3: access_ws64bit_new = 'b1;
-              4: if (i_access_port_burstsize == 0) access_wait_we = 0; //only burst if burst>0.
+              0: if (SUPPORT_8BIT) begin
+                   access_wait_new    = 'b1;
+                   access_ws_we       = 'b1;
+                   access_ws8bit_new  = 'b1;
+                 end
+              1: if (SUPPORT_16BIT) begin
+                   access_wait_new    = 'b1;
+                   access_ws_we       = 'b1;
+                   access_ws16bit_new = 'b1;
+                 end
+              2: if (SUPPORT_32BIT) begin
+                   access_wait_new    = 'b1;
+                   access_ws_we       = 'b1;
+                   access_ws32bit_new = 'b1;
+                 end
+              3: if (SUPPORT_64BIT) begin
+                   access_wait_new    = 'b1;
+                   access_ws_we       = 'b1;
+                   access_ws64bit_new = 'b1;
+                 end
+              4: if (i_access_port_burstsize != 0) begin
+                   access_wait_new    = 'b1;
+                   access_ws_we       = 'b1;
+                 end
               default: ;
             endcase
-            burst_size_we  = 1;
-            burst_size_new = i_access_port_burstsize;
           end
         end
       MEMORY_CTRL_READ_SIMPLE:

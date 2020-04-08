@@ -56,7 +56,7 @@ module nts_rx_buffer_tb;
 
   reg [64*TEST_BUFF_WORDS-1:0] rd_buf;
 
-  nts_rx_buffer #(ADDR_WIDTH) dut (
+  nts_rx_buffer #(.ADDR_WIDTH(ADDR_WIDTH), .SUPPORT_8BIT(1), .SUPPORT_16BIT(1) ) dut (
      .i_areset(i_areset),
      .i_clk(i_clk),
      .i_parser_busy(i_parser_busy),

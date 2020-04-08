@@ -544,8 +544,7 @@ module nts_engine #(
   //----------------------------------------------------------------
 
   nts_rx_buffer #(
-    .ADDR_WIDTH(ADDR_WIDTH),
-    .ACCESS_PORT_WIDTH(ACCESS_PORT_WIDTH)
+    .ADDR_WIDTH(ADDR_WIDTH)
   ) rx_buffer (
      .i_areset(i_areset),
      .i_clk(i_clk),

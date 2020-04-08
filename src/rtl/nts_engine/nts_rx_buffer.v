@@ -29,33 +29,34 @@
 //
 
 module nts_rx_buffer #(
-  parameter ADDR_WIDTH = 8,
-  parameter ACCESS_PORT_WIDTH = 64
+  parameter ADDR_WIDTH = 8
 ) (
-  input  wire                         i_areset, // async reset
-  input  wire                         i_clk,
+  input  wire                    i_areset, // async reset
+  input  wire                    i_clk,
 
-  input  wire                         i_parser_busy,
+  input  wire                    i_parser_busy,
 
-  input  wire                         i_dispatch_packet_available,
-  output wire                         o_dispatch_packet_read,
-  input  wire                         i_dispatch_fifo_empty,
-  output wire                         o_dispatch_fifo_rd_start,
-  input  wire                         i_dispatch_fifo_rd_valid,
-  input  wire                  [63:0] i_dispatch_fifo_rd_data,
+  input  wire                    i_dispatch_packet_available,
+  output wire                    o_dispatch_packet_read,
+  input  wire                    i_dispatch_fifo_empty,
+  output wire                    o_dispatch_fifo_rd_start,
+  input  wire                    i_dispatch_fifo_rd_valid,
+  input  wire             [63:0] i_dispatch_fifo_rd_data,
 
-  output wire                         o_access_port_wait,
-  input  wire      [ADDR_WIDTH+3-1:0] i_access_port_addr,
-  input  wire                   [2:0] i_access_port_wordsize,
-  input  wire                  [15:0] i_access_port_burstsize,
-  input  wire                         i_access_port_rd_en,
-  output wire                         o_access_port_rd_dv,
-  output wire [ACCESS_PORT_WIDTH-1:0] o_access_port_rd_data
+  output wire                    o_access_port_wait,
+  input  wire [ADDR_WIDTH+3-1:0] i_access_port_addr,
+  input  wire              [2:0] i_access_port_wordsize,
+  input  wire             [15:0] i_access_port_burstsize,
+  input  wire                    i_access_port_rd_en,
+  output wire                    o_access_port_rd_dv,
+  output wire             [63:0] o_access_port_rd_data
 );
 
   //----------------------------------------------------------------
   // Internal constant and parameter definitions.
   //----------------------------------------------------------------
+
+  localparam ACCESS_PORT_WIDTH = 64;
 
   localparam MEMORY_CTRL_IDLE            = 4'h0;
   localparam MEMORY_CTRL_FIFO_WRITE      = 4'h1;
@@ -166,37 +167,6 @@ module nts_rx_buffer #(
      .i_data(ram_wr_data_reg),
      .o_data(ram_rd_data)
   );
-
-  //----------------------------------------------------------------
-  // Task copy_from_ram_to_accessout
-  // Copies bits from RAM (ram_rd_data) to access_out_new
-  // Avoids accessing beyond ACCESS_PORT_WIDTH bits, i.e. this task
-  // avoids lint and optimization warnings upon 64bit mode present
-  // when design is restricted to 32bit or 16 bit support.
-  //----------------------------------------------------------------
-  task copy_from_ram_to_accessout;
-    inout [ACCESS_PORT_WIDTH-1:0] dst;
-    input                 integer dst_start;
-    input                  [63:0] src;
-    input                 integer src_start;
-    input                 integer bits;
-    begin : copy_from_ram_to_accessout_locals
-      integer i;
-      //$display("%s:%0d copy_from_ram_to_accessout_locals(dst, %0d, src, %0d, %0d)", `__FILE__, `__LINE__, dst_start, src_start, bits);
-      for (i = 0; i < bits; i=i+1) begin : copy_from_ram_to_accessout_loop_locals
-        /* verilator lint_off UNUSED */
-        integer ram_offset;               //TODO clean up this, not very readable, and lint warns
-        /* verilator lint_on UNUSED */
-        integer access_out_offset;
-        ram_offset = src_start + i;
-        access_out_offset = dst_start + i;
-        if (access_out_offset < ACCESS_PORT_WIDTH) begin
-          dst[access_out_offset] = src[ram_offset];
-        end
-      end
-    end
-  endtask
-
 
   //----------------------------------------------------------------
   // Register Update
@@ -638,39 +608,39 @@ module nts_rx_buffer #(
           access_wait_new         = 'b0;
           if (access_ws8bit_reg)
               case (access_addr_lo_reg)
-                0: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 56, 8);
-                1: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 48, 8);
-                2: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 40, 8);
-                3: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 32, 8);
-                4: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 24, 8);
-                5: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 16, 8);
-                6: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 8, 8);
-                7: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 0, 8);
+                0: access_out_new[ 7:0 ] = ram_rd_data[ 56+:8 ];
+                1: access_out_new[ 7:0 ] = ram_rd_data[ 48+:8 ];
+                2: access_out_new[ 7:0 ] = ram_rd_data[ 40+:8 ];
+                3: access_out_new[ 7:0 ] = ram_rd_data[ 32+:8 ];
+                4: access_out_new[ 7:0 ] = ram_rd_data[ 24+:8 ];
+                5: access_out_new[ 7:0 ] = ram_rd_data[ 16+:8 ];
+                6: access_out_new[ 7:0 ] = ram_rd_data[ 8+:8 ];
+                7: access_out_new[ 7:0 ] = ram_rd_data[ 0+:8 ];
                 default: ;
               endcase
           else if (access_ws16bit_reg)
               case (access_addr_lo_reg)
-                0: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 48, 16);
-                1: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 40, 16);
-                2: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 32, 16);
-                3: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 24, 16);
-                4: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 16, 16);
-                5: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 8, 16);
-                6: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 0, 16);
+                0: access_out_new[ 15:0 ] = ram_rd_data[ 48+:16 ];
+                1: access_out_new[ 15:0 ] = ram_rd_data[ 40+:16 ];
+                2: access_out_new[ 15:0 ] = ram_rd_data[ 32+:16 ];
+                3: access_out_new[ 15:0 ] = ram_rd_data[ 24+:16 ];
+                4: access_out_new[ 15:0 ] = ram_rd_data[ 16+:16 ];
+                5: access_out_new[ 15:0 ] = ram_rd_data[ 8+:16 ];
+                6: access_out_new[ 15:0 ] = ram_rd_data[ 0+:16 ];
                 default: ;
               endcase
           else if (access_ws32bit_reg)
             case (access_addr_lo_reg)
-              0: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 32, 32);
-              1: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 24, 32);
-              2: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 16, 32);
-              3: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 8, 32);
-              4: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 0, 32);
+              0: access_out_new[ 31:0 ] = ram_rd_data[ 32+:32 ];
+              1: access_out_new[ 31:0 ] = ram_rd_data[ 24+:32 ];
+              2: access_out_new[ 31:0 ] = ram_rd_data[ 16+:32 ];
+              3: access_out_new[ 31:0 ] = ram_rd_data[ 8+:32 ];
+              4: access_out_new[ 31:0 ] = ram_rd_data[ 0+:32 ];
               default: ;
             endcase
           else if (access_ws64bit_reg)
             case (access_addr_lo_reg)
-              0: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 0, 64);
+              0: access_out_new[ 63:0 ] = ram_rd_data[ 0+:64 ];
               default: ;
             endcase
         end
@@ -680,25 +650,25 @@ module nts_rx_buffer #(
           access_out_new          = 0;
           if (access_ws16bit_reg)
             case (access_addr_lo_reg)
-              7: copy_from_ram_to_accessout(access_out_new, 8, ram_rd_data, 0, 8);
+              7: access_out_new[ 15:8 ] = ram_rd_data[ 0+:8 ];
               default: ;
             endcase
           else if (access_ws32bit_reg)
             case (access_addr_lo_reg)
-              5: copy_from_ram_to_accessout(access_out_new, 8, ram_rd_data, 0, 24);
-              6: copy_from_ram_to_accessout(access_out_new, 16, ram_rd_data, 0, 16);
-              7: copy_from_ram_to_accessout(access_out_new, 24, ram_rd_data, 0, 8);
+              5: access_out_new[  8+:24 ] = ram_rd_data[ 0+:24 ];
+              6: access_out_new[ 16+:16 ] = ram_rd_data[ 0+:16 ];
+              7: access_out_new[ 24+:8  ] = ram_rd_data[ 0+:8  ];
               default: ;
             endcase
           else if (access_ws64bit_reg)
             case (access_addr_lo_reg)
-              1: copy_from_ram_to_accessout(access_out_new, 8, ram_rd_data, 0, 56);
-              2: copy_from_ram_to_accessout(access_out_new, 16, ram_rd_data, 0, 48);
-              3: copy_from_ram_to_accessout(access_out_new, 24, ram_rd_data, 0, 40);
-              4: copy_from_ram_to_accessout(access_out_new, 32, ram_rd_data, 0, 32);
-              5: copy_from_ram_to_accessout(access_out_new, 40, ram_rd_data, 0, 24);
-              6: copy_from_ram_to_accessout(access_out_new, 48, ram_rd_data, 0, 16);
-              7: copy_from_ram_to_accessout(access_out_new, 56, ram_rd_data, 0, 8);
+              1: access_out_new[  8+:56 ] = ram_rd_data[ 0+:56 ];
+              2: access_out_new[ 16+:48 ] = ram_rd_data[ 0+:48 ];
+              3: access_out_new[ 24+:40 ] = ram_rd_data[ 0+:40 ];
+              4: access_out_new[ 32+:32 ] = ram_rd_data[ 0+:32 ];
+              5: access_out_new[ 40+:24 ] = ram_rd_data[ 0+:24 ];
+              6: access_out_new[ 48+:16 ] = ram_rd_data[ 0+:16 ];
+              7: access_out_new[ 56+:8  ] = ram_rd_data[ 0+:8  ];
               default: ;
             endcase
         end
@@ -712,25 +682,25 @@ module nts_rx_buffer #(
           access_wait_new         = 'b0;
           if ( access_ws16bit_reg)
             case (access_addr_lo_reg)
-              7: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 56, 8);
+              7: access_out_new[ 0+:8 ] = ram_rd_data[ 56+:8 ];
               default: ;
             endcase
           else if (access_ws32bit_reg)
             case (access_addr_lo_reg)
-              5: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 56, 8);
-              6: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 48, 16);
-              7: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 40, 24);
+              5: access_out_new[ 0+:8  ] = ram_rd_data[ 56+:8  ];
+              6: access_out_new[ 0+:16 ] = ram_rd_data[ 48+:16 ];
+              7: access_out_new[ 0+:24 ] = ram_rd_data[ 40+:24 ];
               default: ;
             endcase
           else if (access_ws64bit_reg)
             case (access_addr_lo_reg)
-              1: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 56, 8);
-              2: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 48, 16);
-              3: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 40, 24);
-              4: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 32, 32);
-              5: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 24, 40);
-              6: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 16, 48);
-              7: copy_from_ram_to_accessout(access_out_new, 0, ram_rd_data, 8, 56);
+              1: access_out_new[ 0+:8  ] = ram_rd_data[ 56+: 8 ];
+              2: access_out_new[ 0+:16 ] = ram_rd_data[ 48+:16 ];
+              3: access_out_new[ 0+:24 ] = ram_rd_data[ 40+:24 ];
+              4: access_out_new[ 0+:32 ] = ram_rd_data[ 32+:32 ];
+              5: access_out_new[ 0+:40 ] = ram_rd_data[ 24+:40 ];
+              6: access_out_new[ 0+:48 ] = ram_rd_data[ 16+:48 ];
+              7: access_out_new[ 0+:56 ] = ram_rd_data[  8+:56 ];
               default: ;
             endcase
         end

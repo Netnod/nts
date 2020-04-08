@@ -205,6 +205,7 @@ module nts_top_tb;
 
   localparam [127:0] IPV6_ADDR_FD75_02 = 128'hfd_75_50_2f_e2_21_dd_cf_00_00_00_00_00_00_00_02;
   localparam [127:0] IPV6_ADDR_FD75_10 = 128'hfd_75_50_2f_e2_21_dd_cf_00_00_00_00_00_00_00_10;
+
   localparam [687:0] PACKET_NEIGHBOR_SOLICITATION = {
        128'h33_33_ff_00_00_02_98_03_9b_3c_1c_66_86_dd_60_00, // 33ÿ......<.f.Ý`.
        128'h00_00_00_20_3a_ff_fd_75_50_2f_e2_21_dd_cf_00_00, // ... :ÿýuP/â!ÝÏ..
@@ -226,13 +227,20 @@ module nts_top_tb;
   };
 
   localparam [783:0] PACKET_PING4 = {
-     128'h52_5a_2c_18_2e_80_98_03_9b_3c_1c_66_08_00_45_00, // iRZ,......<.f..E.
+     128'h52_5a_2c_18_2e_80_98_03_9b_3c_1c_66_08_00_45_00, // RZ,......<.f..E.
      128'h00_54_34_45_40_00_40_01_34_fe_c0_a8_28_01_c0_a8, // .T4E@.@.4þÀ¨(.À¨
      128'h28_14_08_00_31_d7_12_e7_00_01_7c_07_82_5e_00_00, // (...1×.ç..|..^..
      128'h00_00_f6_07_00_00_00_00_00_00_10_11_12_13_14_15, // ..ö.............
      128'h16_17_18_19_1a_1b_1c_1d_1e_1f_20_21_22_23_24_25, // .......... !"#$%
      128'h26_27_28_29_2a_2b_2c_2d_2e_2f_30_31_32_33_34_35, // &'()*+,-./012345
       16'h36_37 };                                         //  67
+
+  localparam [591:0] PACKET_IP4_UDP_TRACEROUTE = {
+       128'h52_5a_2c_18_2e_80_98_03_9b_3c_1c_66_08_00_45_00, // RZ,......<.f..E.
+       128'h00_3c_b2_a5_00_00_01_11_35_a6_c0_a8_28_01_c0_a8, // .<²¥....5¦À¨(.À¨
+       128'h28_14_d8_2f_82_9a_00_28_d1_9f_40_41_42_43_44_45, // (.Ø/...(Ñ.@ABCDE
+       128'h46_47_48_49_4a_4b_4c_4d_4e_4f_50_51_52_53_54_55, // FGHIJKLMNOPQRSTU
+        80'h56_57_58_59_5a_5b_5c_5d_5e_5f };                 // VWXYZ[\]^_
 
   //IP6 fd75:502f:e221:ddcf::1.45876 > fd75:502f:e221:ddcf::2.33434: UDP, length 32
   localparam [751:0] PACKET_IP6_UDP_TRACEROUTE = {
@@ -814,6 +822,7 @@ module nts_top_tb;
           arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'hE0_A1_A2_A3);
           arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'hF0_A1_A2_A3);
         //send_packet({64592'b0, PACKET_PING6}, 944, 0);
+          send_packet({64944'b0, PACKET_IP4_UDP_TRACEROUTE}, 592, 0);
           send_packet({64784'b0, PACKET_IP6_UDP_TRACEROUTE}, 752, 0);
           send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_KEYID}, 2160, 0);
           send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_KEYID}, 2160, 0);
@@ -880,9 +889,18 @@ module nts_top_tb;
       $display("%s:%0d: ICMPv6 Trace Route", `__FILE__, `__LINE__);
       send_packet({64784'b0, PACKET_IP6_UDP_TRACEROUTE}, 752, 0);
       #20000;
+      $display("%s:%0d: ICMPv4 Trace Route", `__FILE__, `__LINE__);
+      send_packet({64944'b0, PACKET_IP4_UDP_TRACEROUTE}, 592, 0);
+      #20000;
+      $display("%s:%0d: ICMPv4 Trace Route", `__FILE__, `__LINE__);
+      send_packet({64944'b0, PACKET_IP4_UDP_TRACEROUTE}, 592, 0);
+      #20000;
+      $display("%s:%0d: ICMPv4 Trace Route", `__FILE__, `__LINE__);
+      send_packet({64944'b0, PACKET_IP4_UDP_TRACEROUTE}, 592, 0);
+      #20000;
       begin : ping
         integer i;
-        for (i = 0; i < 10; i = i + 1) begin
+        for (i = 0; i < 3; i = i + 1) begin
           $display("%s:%0d: ICMPv6 Ping6", `__FILE__, `__LINE__);
           send_packet({64592'h0, PACKET_PING6}, 944, 0);
           #2000;
@@ -1266,32 +1284,40 @@ module nts_top_tb;
   end
   endtask
 
-  task check_icmp_v6;
-  begin : check_icmp_v6_
+  task check_icmp;
+  begin : check_icmp_
     reg  [7:0] ip;
     reg [15:0] csum;
     reg [15:0] ethernet_protocol;
     reg [15:0] payload_length;
     reg  [7:0] next;
     reg  [7:0] icmp_type;
+    reg        icmp_unreachable;
+    reg [15:0] icmp_unreachable_udp_src;
+    reg [15:0] icmp_unreachable_udp_dst;
+    reg [15:0] icmp_unreachable_udp_length;
     reg        garbage;
     integer    csum_offset;
     integer    csum_bytes;
 
     garbage = 0;
+    icmp_unreachable = 0;
     ethernet_protocol = tx_read_word16( 12 );
-    //$display("%s:%0d * TX * Ethernet Protocol %h", `__FILE__, `__LINE__, ethernet_protocol);
     case (ethernet_protocol)
       16'h86DD:
         begin
           payload_length = tx_read_word16(14 + 4);
           next = tx_read_byte(14 + 4 + 2);
           icmp_type = tx_read_byte(14 + 40);
-          if (next != 58) garbage = 1;
+          icmp_unreachable_udp_src    = tx_read_word16(14 + 40 + 8 + 40);
+          icmp_unreachable_udp_dst    = tx_read_word16(14 + 40 + 8 + 40 + 2);
+          icmp_unreachable_udp_length = tx_read_word16(14 + 40 + 8 + 40 + 2 + 2);
           csum = { 8'h00, next } + payload_length;
           csum_offset = 14 + 8;
           csum_bytes = { 16'h0000, payload_length } + 32;
           ip="6";
+          if (next != 58) garbage = 1;
+          if (icmp_type == 1) icmp_unreachable = 1;
         end
       16'h0800:
         begin
@@ -1303,11 +1329,15 @@ module nts_top_tb;
           end
           next = tx_read_byte(14 + 9);
           icmp_type = tx_read_byte(14 + 20);
-          if (next != 1) garbage = 1;
+          icmp_unreachable_udp_src    = tx_read_word16(14 + 20 + 8 + 20);
+          icmp_unreachable_udp_dst    = tx_read_word16(14 + 20 + 8 + 20 + 2);
+          icmp_unreachable_udp_length = tx_read_word16(14 + 20 + 8 + 20 + 2 + 2);
           csum = 0;
           csum_offset = 14 + 20;
           csum_bytes = { 16'h0000, payload_length };
           ip="4";
+          if (next != 1) garbage = 1;
+          if (icmp_type == 3) icmp_unreachable = 1;
         end
       default: garbage = 1;
     endcase
@@ -1316,6 +1346,9 @@ module nts_top_tb;
       csum = internet_checksum(csum, csum_offset, csum_bytes);
       $display("%s:%0d * TX * ICMPv%s CHECK: %h (%s)", `__FILE__, `__LINE__, ip, csum, (csum==16'hffff)?"PASS":"FAIL");
       $display("%s:%0d * TX * ICMPv%s Type: %h (%0d)", `__FILE__, `__LINE__, ip, icmp_type, icmp_type);
+      if (icmp_unreachable) begin
+        $display("%s:%0d * TX * ICMPv%s Destination Unreachable (SrcPort %0d, DstPort %0d, Length %0d)", `__FILE__, `__LINE__, ip, icmp_unreachable_udp_src, icmp_unreachable_udp_dst, icmp_unreachable_udp_length);
+      end
     end
   end
   endtask
@@ -1436,7 +1469,7 @@ module nts_top_tb;
     if (i_areset) begin
     end else if (tx_rec_new) begin
       $display("%s:%0d * TX * tx_rec_bytes: %h (%0d)", `__FILE__, `__LINE__, tx_rec_bytes, tx_rec_bytes);
-      check_icmp_v6();
+      check_icmp();
       check_ipv4();
       check_udp_checksum();
       check_nts();

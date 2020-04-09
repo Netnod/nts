@@ -157,6 +157,11 @@ module nts_parser_ctrl #(
   localparam ADDR_ERROR_CAUSE  = 'h15;
   localparam ADDR_ERROR_SIZE   = 'h16;
 
+  localparam ADDR_CSUM_IPV4_BAD0  = 'h20;
+  localparam ADDR_CSUM_IPV4_BAD1  = 'h21;
+  localparam ADDR_CSUM_IPV4_GOOD0 = 'h22;
+  localparam ADDR_CSUM_IPV4_GOOD1 = 'h23;
+
   localparam ADDR_MAC_CTRL       = 'h30;
   localparam ADDR_IPV4_CTRL      = 'h31;
   localparam ADDR_IPV6_CTRL      = 'h32;
@@ -269,12 +274,13 @@ module nts_parser_ctrl #(
   localparam [BITS_STATE-1:0] STATE_IDLE                     = 6'h00;
   localparam [BITS_STATE-1:0] STATE_COPY                     = 6'h01; //RX handling states
   localparam [BITS_STATE-1:0] STATE_SELECT_PROTOCOL_HANDLER  = 6'h02;
-  localparam [BITS_STATE-1:0] STATE_SELECT_IPV4_HANDLER      = 6'h03;
-  localparam [BITS_STATE-1:0] STATE_SELECT_IPV6_HANDLER      = 6'h04;
-  localparam [BITS_STATE-1:0] STATE_PROCESS_ICMP             = 6'h05;
+  localparam [BITS_STATE-1:0] STATE_VERIFY_IPV4              = 6'h03;
+  localparam [BITS_STATE-1:0] STATE_SELECT_IPV4_HANDLER      = 6'h04;
+  localparam [BITS_STATE-1:0] STATE_SELECT_IPV6_HANDLER      = 6'h05;
+  localparam [BITS_STATE-1:0] STATE_PROCESS_ICMP             = 6'h06;
 
-  localparam [BITS_STATE-1:0] STATE_ARP_INIT                 = 6'h06;
-  localparam [BITS_STATE-1:0] STATE_ARP_RESPOND              = 6'h07;
+  localparam [BITS_STATE-1:0] STATE_ARP_INIT                 = 6'h0e;
+  localparam [BITS_STATE-1:0] STATE_ARP_RESPOND              = 6'h0f;
 
   localparam [BITS_STATE-1:0] STATE_LENGTH_CHECKS            = 6'h10;
   localparam [BITS_STATE-1:0] STATE_EXTRACT_EXT_FROM_RAM     = 6'h11;
@@ -345,6 +351,12 @@ module nts_parser_ctrl #(
   localparam CRYPTO_FSM_DONE_FAILURE         = 'h1e;
   localparam CRYPTO_FSM_DONE_SUCCESS         = 'h1f;
 
+  localparam BITS_VERIFIER_STATE = 3;
+  localparam [BITS_VERIFIER_STATE-1:0] VERIFIER_IDLE    = 0;
+  localparam [BITS_VERIFIER_STATE-1:0] VERIFIER_WAIT_0  = 1;
+  localparam [BITS_VERIFIER_STATE-1:0] VERIFIER_WAIT_1  = 2;
+  localparam [BITS_VERIFIER_STATE-1:0] VERIFIER_BAD     = 6;
+  localparam [BITS_VERIFIER_STATE-1:0] VERIFIER_GOOD    = 7;
 
   localparam BYTES_TAG_LEN           = 4;
 
@@ -915,6 +927,10 @@ module nts_parser_ctrl #(
   reg [15:0] tx_udp_checksum_new;
   reg [15:0] tx_udp_checksum_reg;
 
+  reg                           verifier_we;
+  reg [BITS_VERIFIER_STATE-1:0] verifier_new;
+  reg [BITS_VERIFIER_STATE-1:0] verifier_reg;
+
   //----------------------------------------------------------------
   // Debug buffer
   //----------------------------------------------------------------
@@ -1273,6 +1289,39 @@ module nts_parser_ctrl #(
                                                 tx_header_ipv4_baseicmp,
                                                 tx_header_icmp4_trace };
 
+  //----------------------------------------------------------------
+  // Counters
+  //----------------------------------------------------------------
+
+  reg         counter_ipv4checksum_bad_inc;
+  reg         counter_ipv4checksum_bad_lsb_we;
+  wire [31:0] counter_ipv4checksum_bad_msb;
+  wire [31:0] counter_ipv4checksum_bad_lsb;
+
+  reg         counter_ipv4checksum_good_inc;
+  reg         counter_ipv4checksum_good_lsb_we;
+  wire [31:0] counter_ipv4checksum_good_msb;
+  wire [31:0] counter_ipv4checksum_good_lsb;
+
+  counter64 counter_ipv4checksum_bad (
+     .i_areset     ( i_areset                         ),
+     .i_clk        ( i_clk                            ),
+     .i_inc        ( counter_ipv4checksum_bad_inc     ),
+     .i_rst        ( 1'b0                             ),
+     .i_lsb_sample ( counter_ipv4checksum_bad_lsb_we  ),
+     .o_msb        ( counter_ipv4checksum_bad_msb     ),
+     .o_lsb        ( counter_ipv4checksum_bad_lsb     )
+  );
+
+  counter64 counter_ipv4checksum_good (
+     .i_areset     ( i_areset                         ),
+     .i_clk        ( i_clk                            ),
+     .i_inc        ( counter_ipv4checksum_good_inc    ),
+     .i_rst        ( 1'b0                             ),
+     .i_lsb_sample ( counter_ipv4checksum_good_lsb_we ),
+     .o_msb        ( counter_ipv4checksum_good_msb    ),
+     .o_lsb        ( counter_ipv4checksum_good_lsb    )
+  );
 
   //----------------------------------------------------------------
   // Functions and Tasks
@@ -1374,6 +1423,9 @@ module nts_parser_ctrl #(
     config_udp_port_ntp1_we = 0;
     config_udp_port_ntp1_new = 0;
 
+    counter_ipv4checksum_bad_lsb_we = 0;
+    counter_ipv4checksum_good_lsb_we = 0;
+
     if (i_api_cs) begin
       if (i_api_we) begin
         case (i_api_address)
@@ -1452,6 +1504,18 @@ module nts_parser_ctrl #(
             ADDR_ERROR_CAUSE: api_read_data = error_cause_reg;
             ADDR_ERROR_SIZE: api_read_data[ADDR_WIDTH+3-1:0] = error_size_reg; //MSB=0 from init
             ADDR_DUMMY: api_read_data = api_dummy_reg;
+            ADDR_CSUM_IPV4_BAD0:
+              begin
+                counter_ipv4checksum_bad_lsb_we = 1;
+                api_read_data = counter_ipv4checksum_bad_msb;
+              end
+            ADDR_CSUM_IPV4_BAD1: api_read_data = counter_ipv4checksum_bad_lsb;
+            ADDR_CSUM_IPV4_GOOD0:
+              begin
+                counter_ipv4checksum_good_lsb_we = 1;
+                api_read_data = counter_ipv4checksum_good_msb;
+              end
+            ADDR_CSUM_IPV4_GOOD1: api_read_data = counter_ipv4checksum_good_lsb;
             ADDR_MAC_CTRL: api_read_data[3:0] = addr_mac_ctrl_reg;
             ADDR_IPV4_CTRL: api_read_data[7:0] = addr_ipv4_ctrl_reg;
             ADDR_IPV6_CTRL: api_read_data[7:0] = addr_ipv6_ctrl_reg;
@@ -1769,6 +1833,8 @@ module nts_parser_ctrl #(
       tx_ipv4_totlen_reg <= 0;
       tx_udp_checksum_reg <= 0;
       tx_udp_length_reg <= 0;
+
+      verifier_reg <= VERIFIER_IDLE;
 
       word_counter_reg           <= 'b0;
       word_counter_overflow_reg  <= 'b0;
@@ -2166,6 +2232,9 @@ module nts_parser_ctrl #(
       if (tx_udp_length_we)
         tx_udp_length_reg <= tx_udp_length_new;
 
+      if (verifier_we)
+        verifier_reg <= verifier_new;
+
       if (word_counter_we)
         word_counter_reg <= word_counter_new;
 
@@ -2490,6 +2559,20 @@ module nts_parser_ctrl #(
     end else begin
 
       case (state_reg)
+        STATE_VERIFY_IPV4:
+          case (verifier_reg)
+            VERIFIER_IDLE:
+              begin
+                access_port_addr_we       = 'b1;
+                access_port_addr_new      = HEADER_LENGTH_ETHERNET;
+                access_port_burstsize_we  = 'b1;
+                access_port_burstsize_new = HEADER_LENGTH_IPV4;
+                access_port_rd_en_new     = 'b1;
+                access_port_wordsize_we   = 'b1;
+                access_port_wordsize_new  = 5; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit, 4: burst, 5: csum
+              end
+            default: ;
+          endcase
         STATE_PROCESS_ICMP:
           case (icmp_state_reg)
             ICMP_S_V6_ECHO_COPY:
@@ -2838,6 +2921,73 @@ module nts_parser_ctrl #(
       memory_address_failure_reg = 1;
       memory_address_lastbyte_read_reg = 1;
     end
+  end
+
+  //----------------------------------------------------------------
+  // RX csum calculation
+  //----------------------------------------------------------------
+
+  always @*
+  begin
+    verifier_we = 0;
+    verifier_new = VERIFIER_IDLE;
+
+    case (verifier_reg)
+      VERIFIER_IDLE:
+        case (state_reg)
+          STATE_VERIFY_IPV4:
+            begin
+              verifier_we = 1;
+              verifier_new = VERIFIER_WAIT_0;
+            end
+          default: ;
+        endcase
+      VERIFIER_WAIT_0:
+        begin
+          //Access port is initilized in this phase
+          verifier_we = 1;
+          verifier_new = VERIFIER_WAIT_1;
+        end
+      VERIFIER_WAIT_1:
+        if ((i_access_port_rd_dv == 1'b1) && (i_access_port_rd_data[15:0] == 16'hffff)) begin
+          verifier_we = 1;
+          verifier_new = VERIFIER_GOOD;
+        end else if (i_access_port_wait == 1'b0) begin
+          verifier_we = 1;
+          verifier_new = VERIFIER_BAD;
+        end
+      default: //VERIFIER_BAD, VERIFIER_GOOD:
+        begin
+          verifier_we = 1;
+          verifier_new = VERIFIER_IDLE;
+        end
+    endcase
+    //$display("%s:%0d: Good checksum; %h %h", `__FILE__, `__LINE__, i_access_port_rd_dv, i_access_port_rd_data);
+    //$display("%s:%0d: No checksum?; %h %h", `__FILE__, `__LINE__, i_access_port_rd_dv, i_access_port_rd_data);
+  end
+
+  //----------------------------------------------------------------
+  // RX csum calculation statistic counters
+  //----------------------------------------------------------------
+
+  always @*
+  begin
+    counter_ipv4checksum_bad_inc = 0;
+    counter_ipv4checksum_good_inc = 0;
+
+    case (verifier_reg)
+      VERIFIER_BAD:
+        case (state_reg)
+          STATE_VERIFY_IPV4: counter_ipv4checksum_bad_inc = 1;
+          default: ;
+        endcase
+      VERIFIER_GOOD:
+        case (state_reg)
+          STATE_VERIFY_IPV4: counter_ipv4checksum_good_inc = 1;
+          default: ;
+        endcase
+      default: ;
+    endcase
   end
 
   //----------------------------------------------------------------
@@ -3952,7 +4102,7 @@ module nts_parser_ctrl #(
           state_new = STATE_ARP_INIT;
         end else if (detect_ipv4) begin
           state_we  = 'b1;
-          state_new = STATE_SELECT_IPV4_HANDLER;
+          state_new = STATE_VERIFY_IPV4;
         end else if (detect_ipv6) begin
           state_we  = 'b1;
           state_new = STATE_SELECT_IPV6_HANDLER;
@@ -3961,6 +4111,20 @@ module nts_parser_ctrl #(
           state_we  = 'b1;
           state_new = STATE_DROP_PACKET;
         end
+      STATE_VERIFY_IPV4:
+        case (verifier_reg)
+          VERIFIER_BAD:
+            begin
+              state_we  = 'b1;
+              state_new = STATE_DROP_PACKET;
+            end
+          VERIFIER_GOOD:
+            begin
+              state_we  = 'b1;
+              state_new = STATE_SELECT_IPV4_HANDLER;
+            end
+          default: ;
+        endcase
       STATE_SELECT_IPV4_HANDLER:
         if (protocol_detect_nts_reg) begin
           state_we  = 'b1;

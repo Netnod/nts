@@ -209,6 +209,7 @@ module nts_api #(
       p1_cs_parser_reg      <= 0;
 
       p2_api_cs_reg      <= 0;
+      p2_api_we_reg      <= 0;
       p2_cs_engine_reg   <= 0;
       p2_cs_clock_reg    <= 0;
       p2_cs_cookie_reg   <= 0;

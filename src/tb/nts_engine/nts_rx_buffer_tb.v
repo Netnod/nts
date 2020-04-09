@@ -56,6 +56,8 @@ module nts_rx_buffer_tb;
 
   reg [64*TEST_BUFF_WORDS-1:0] rd_buf;
 
+  reg [15:0] csum;
+
   nts_rx_buffer #(.ADDR_WIDTH(ADDR_WIDTH), .SUPPORT_8BIT(1), .SUPPORT_16BIT(1) ) dut (
      .i_areset(i_areset),
      .i_clk(i_clk),
@@ -136,6 +138,39 @@ module nts_rx_buffer_tb;
   end
   endtask
 
+  task read_csum (input [10:0] addr, input [15:0] bytes, output [15:0] csum);
+  begin : read_csum
+    integer i;
+    if (VERBOSE>1) $display("%s:%0d read_csum(%h, %h, ...)", `__FILE__, `__LINE__, addr, bytes);
+    csum = 0;
+    #10 `assert(access_port_wait == 'b0);
+    access_port_addr = addr;
+    access_port_rd_en = 1;
+    access_port_wordsize = 5; //csum
+    access_port_burstsize = bytes;
+
+    #10;
+    if (bytes == 0) begin
+      `assert(access_port_wait==0);
+      access_port_rd_en = 0;
+    end else begin
+      `assert(access_port_wait);
+      access_port_rd_en = 0;
+      i = 0;
+      while(access_port_wait) begin
+        if (access_port_rd_dv) begin
+          `assert(i == 0);
+          `assert(access_port_rd_data[63:16] == 0);
+          csum = access_port_rd_data[15:0];
+          if (VERBOSE>1) $display("%s:%0d read[%0d] = %h.", `__FILE__, `__LINE__, i, access_port_rd_data);
+          i = i + 1;
+        end
+        #10 ;
+      end
+    end
+  end
+  endtask
+
   initial
       begin
         $display("Test start: %s:%0d.", `__FILE__, `__LINE__);
@@ -170,6 +205,7 @@ module nts_rx_buffer_tb;
         #10 { dispatch_fifo_rd_valid, dispatch_fifo_rd_data } = { 1'b1, 64'habad1deac0fef00d };
         #10 { dispatch_fifo_rd_valid, dispatch_fifo_rd_data } = { 1'b1, 64'h0123456789abcdef };
         #10 { dispatch_fifo_rd_valid, dispatch_fifo_rd_data } = { 1'b1, 64'hffffffffffffffff };
+        #10 { dispatch_fifo_rd_valid, dispatch_fifo_rd_data } = { 1'b1, 64'heeeeeeeeeeeeeeee };
         #10 { dispatch_fifo_rd_valid, dispatch_fifo_rd_data } = { 1'b0, 64'h0 };
 
         #10 dispatch_fifo_empty = 'b1;
@@ -179,7 +215,7 @@ module nts_rx_buffer_tb;
 
         if (VERBOSE>0) $display("%s:%0d 64 bit access port tests.", `__FILE__, `__LINE__);
         #100
-      $display("%s:%0d dut.memctrl_reg=%h", `__FILE__, `__LINE__, dut.memctrl_reg);
+        //$display("%s:%0d dut.memctrl_reg=%h", `__FILE__, `__LINE__, dut.memctrl_reg);
         read('b00_000, 3);
         `assert(access_port_rd_data == 64'hdeadbeef00000000);
         read('b00_000, 3);
@@ -333,6 +369,57 @@ module nts_rx_buffer_tb;
         read_burst(7, 17, rd_buf);
         `assert(rd_buf[0+:196] == 196'h00abad1deac0fef00d0123456789abcdef_00000000000000 );
 
+        if (VERBOSE>0) $display("%s:%0d csum access port tests.", `__FILE__, `__LINE__);
+        #100
+
+        read_csum(0, 0, csum);
+        `assert(csum == 0);
+
+        read_csum(0, 1, csum);
+        `assert(csum == 16'hde00);
+
+        read_csum(0, 2, csum);
+        `assert(csum == 16'hdead);
+
+        read_csum(0, 3, csum);
+        `assert(csum == 16'h9CAE); // 19CAD = dead + be00
+
+        read_csum(0, 4, csum);
+        `assert(csum == 16'h9D9D); // 19D9C = dead + beef
+
+        read_csum(0, 8, csum);
+        `assert(csum == 16'h9D9D); // 19D9C = dead + beef + 0000 + 0000
+
+        read_csum(0, 9, csum);
+        `assert(csum == 16'h489e); // 2489C = dead + beef + 0000 + 0000 + ab00
+
+        read_csum(0, 10, csum);
+        `assert(csum == 16'h494b); // 24949 = dead + beef + 0000 + 0000 + abad
+
+        read_csum(0, 11, csum);
+        `assert(csum == 16'h664b); // 26649 = dead + beef + 0000 + 0000 + abad + 1d00
+
+        read_csum(0, 12, csum);
+        `assert(csum == 16'h6735); // 26733 = dead + beef + 0000 + 0000 + abad + 1dea
+
+        read_csum(0, 13, csum);
+        `assert(csum == 16'h2736); // 32733 = dead + beef + 0000 + 0000 + abad + 1dea + c000
+
+        read_csum(0, 14, csum);
+        `assert(csum == 16'h2834); // 32831 = dead + beef + 0000 + 0000 + abad + 1dea + c0fe
+
+        read_csum(0, 15, csum);
+        `assert(csum == 16'h1835); // 41831 = dead + beef + 0000 + 0000 + abad + 1dea + c0fe + f000
+
+        read_csum(0, 16, csum);
+        `assert(csum == 16'h1842); // 4183E = dead + beef + 0000 + 0000 + abad + 1dea + c0fe + f00d
+
+        read_csum(0, 24, csum);
+        `assert(csum == 16'hB667); // 5B662 = dead + beef + abad + 1dea + c0fe + f00d + 0123 + 4567 + 89ab + cdef
+
+        read_csum(14, 20, csum);
+        `assert(csum == 16'h7D22); // 77D1B = f00d + 0123 + 4567 + 89ab + cdef + ffff + ffff + ffff + ffff + eeee
+
 
         $display("Test stop: %s:%0d.", `__FILE__, `__LINE__);
         #40 $finish;
@@ -351,6 +438,18 @@ module nts_rx_buffer_tb;
   if (VERBOSE>2) begin
     always @(posedge i_clk)
       if (dispatch_packet_read==1) $display("%s:%0d dispatch_packet_read.", `__FILE__, `__LINE__);
+
+    always @(posedge i_clk)
+      begin
+        if (dut.csum_reset) begin
+          $display("%s:%0d csum_reset!",  `__FILE__, `__LINE__);
+        end
+        if (dut.p0_done_new)
+          $display("%s:%0d p0_done!",  `__FILE__, `__LINE__);
+        if (dut.csum_block_valid_reg) begin
+          $display("%s:%0d checksum block: %h!",  `__FILE__, `__LINE__, dut.csum_block_reg);
+        end
+      end
 
     always @*
       $display("%s:%0d dispatch_packet_read: %b",  `__FILE__, `__LINE__, dispatch_packet_read);

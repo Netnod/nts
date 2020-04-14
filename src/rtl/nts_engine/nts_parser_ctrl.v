@@ -157,10 +157,14 @@ module nts_parser_ctrl #(
   localparam ADDR_ERROR_CAUSE  = 'h15;
   localparam ADDR_ERROR_SIZE   = 'h16;
 
-  localparam ADDR_CSUM_IPV4_BAD0  = 'h20;
-  localparam ADDR_CSUM_IPV4_BAD1  = 'h21;
-  localparam ADDR_CSUM_IPV4_GOOD0 = 'h22;
-  localparam ADDR_CSUM_IPV4_GOOD1 = 'h23;
+  localparam ADDR_CSUM_IPV4_BAD0       = 'h20;
+  localparam ADDR_CSUM_IPV4_BAD1       = 'h21;
+  localparam ADDR_CSUM_IPV4_GOOD0      = 'h22;
+  localparam ADDR_CSUM_IPV4_GOOD1      = 'h23;
+  localparam ADDR_CSUM_IPV4_ICMP_BAD0  = 'h24;
+  localparam ADDR_CSUM_IPV4_ICMP_BAD1  = 'h25;
+  localparam ADDR_CSUM_IPV4_ICMP_GOOD0 = 'h26;
+  localparam ADDR_CSUM_IPV4_ICMP_GOOD1 = 'h27;
 
   localparam ADDR_MAC_CTRL       = 'h30;
   localparam ADDR_IPV4_CTRL      = 'h31;
@@ -275,9 +279,10 @@ module nts_parser_ctrl #(
   localparam [BITS_STATE-1:0] STATE_COPY                     = 6'h01; //RX handling states
   localparam [BITS_STATE-1:0] STATE_SELECT_PROTOCOL_HANDLER  = 6'h02;
   localparam [BITS_STATE-1:0] STATE_VERIFY_IPV4              = 6'h03;
-  localparam [BITS_STATE-1:0] STATE_SELECT_IPV4_HANDLER      = 6'h04;
-  localparam [BITS_STATE-1:0] STATE_SELECT_IPV6_HANDLER      = 6'h05;
-  localparam [BITS_STATE-1:0] STATE_PROCESS_ICMP             = 6'h06;
+  localparam [BITS_STATE-1:0] STATE_VERIFY_IPV4_ICMP         = 6'h04;
+  localparam [BITS_STATE-1:0] STATE_SELECT_IPV4_HANDLER      = 6'h05;
+  localparam [BITS_STATE-1:0] STATE_SELECT_IPV6_HANDLER      = 6'h06;
+  localparam [BITS_STATE-1:0] STATE_PROCESS_ICMP             = 6'h07;
 
   localparam [BITS_STATE-1:0] STATE_ARP_INIT                 = 6'h0e;
   localparam [BITS_STATE-1:0] STATE_ARP_RESPOND              = 6'h0f;
@@ -1303,6 +1308,16 @@ module nts_parser_ctrl #(
   wire [31:0] counter_ipv4checksum_good_msb;
   wire [31:0] counter_ipv4checksum_good_lsb;
 
+  reg         counter_ipv4icmp_checksum_bad_inc;
+  reg         counter_ipv4icmp_checksum_bad_lsb_we;
+  wire [31:0] counter_ipv4icmp_checksum_bad_msb;
+  wire [31:0] counter_ipv4icmp_checksum_bad_lsb;
+
+  reg         counter_ipv4icmp_checksum_good_inc;
+  reg         counter_ipv4icmp_checksum_good_lsb_we;
+  wire [31:0] counter_ipv4icmp_checksum_good_msb;
+  wire [31:0] counter_ipv4icmp_checksum_good_lsb;
+
   counter64 counter_ipv4checksum_bad (
      .i_areset     ( i_areset                         ),
      .i_clk        ( i_clk                            ),
@@ -1321,6 +1336,26 @@ module nts_parser_ctrl #(
      .i_lsb_sample ( counter_ipv4checksum_good_lsb_we ),
      .o_msb        ( counter_ipv4checksum_good_msb    ),
      .o_lsb        ( counter_ipv4checksum_good_lsb    )
+  );
+
+  counter64 counter_ipv4icmp_checksum_bad (
+     .i_areset     ( i_areset                             ),
+     .i_clk        ( i_clk                                ),
+     .i_inc        ( counter_ipv4icmp_checksum_bad_inc    ),
+     .i_rst        ( 1'b0                                 ),
+     .i_lsb_sample ( counter_ipv4icmp_checksum_bad_lsb_we ),
+     .o_msb        ( counter_ipv4icmp_checksum_bad_msb    ),
+     .o_lsb        ( counter_ipv4icmp_checksum_bad_lsb    )
+  );
+
+  counter64 counter_ipv4icmp_checksum_good (
+     .i_areset     ( i_areset                              ),
+     .i_clk        ( i_clk                                 ),
+     .i_inc        ( counter_ipv4icmp_checksum_good_inc    ),
+     .i_rst        ( 1'b0                                  ),
+     .i_lsb_sample ( counter_ipv4icmp_checksum_good_lsb_we ),
+     .o_msb        ( counter_ipv4icmp_checksum_good_msb    ),
+     .o_lsb        ( counter_ipv4icmp_checksum_good_lsb    )
   );
 
   //----------------------------------------------------------------
@@ -1425,6 +1460,8 @@ module nts_parser_ctrl #(
 
     counter_ipv4checksum_bad_lsb_we = 0;
     counter_ipv4checksum_good_lsb_we = 0;
+    counter_ipv4icmp_checksum_bad_lsb_we = 0;
+    counter_ipv4icmp_checksum_good_lsb_we = 0;
 
     if (i_api_cs) begin
       if (i_api_we) begin
@@ -1504,6 +1541,7 @@ module nts_parser_ctrl #(
             ADDR_ERROR_CAUSE: api_read_data = error_cause_reg;
             ADDR_ERROR_SIZE: api_read_data[ADDR_WIDTH+3-1:0] = error_size_reg; //MSB=0 from init
             ADDR_DUMMY: api_read_data = api_dummy_reg;
+
             ADDR_CSUM_IPV4_BAD0:
               begin
                 counter_ipv4checksum_bad_lsb_we = 1;
@@ -1516,6 +1554,20 @@ module nts_parser_ctrl #(
                 api_read_data = counter_ipv4checksum_good_msb;
               end
             ADDR_CSUM_IPV4_GOOD1: api_read_data = counter_ipv4checksum_good_lsb;
+
+            ADDR_CSUM_IPV4_ICMP_BAD0:
+              begin
+                counter_ipv4icmp_checksum_bad_lsb_we = 1;
+                api_read_data = counter_ipv4icmp_checksum_bad_msb;
+              end
+            ADDR_CSUM_IPV4_ICMP_BAD1: api_read_data = counter_ipv4icmp_checksum_bad_lsb;
+            ADDR_CSUM_IPV4_ICMP_GOOD0:
+              begin
+                counter_ipv4icmp_checksum_good_lsb_we = 1;
+                api_read_data = counter_ipv4icmp_checksum_good_msb;
+              end
+            ADDR_CSUM_IPV4_ICMP_GOOD1: api_read_data = counter_ipv4icmp_checksum_good_lsb;
+
             ADDR_MAC_CTRL: api_read_data[3:0] = addr_mac_ctrl_reg;
             ADDR_IPV4_CTRL: api_read_data[7:0] = addr_ipv4_ctrl_reg;
             ADDR_IPV6_CTRL: api_read_data[7:0] = addr_ipv6_ctrl_reg;
@@ -2573,6 +2625,20 @@ module nts_parser_ctrl #(
               end
             default: ;
           endcase
+        STATE_VERIFY_IPV4_ICMP:
+          case (verifier_reg)
+            VERIFIER_IDLE:
+              begin
+                access_port_addr_we       = 'b1;
+                access_port_addr_new      = OFFSET_ETH_IPV4_DATA;
+                access_port_burstsize_we  = 'b1;
+                access_port_burstsize_new = ipdecode_ip4_total_length_reg - HEADER_LENGTH_IPV4;
+                access_port_rd_en_new     = 'b1;
+                access_port_wordsize_we   = 'b1;
+                access_port_wordsize_new  = 5; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit, 4: burst, 5: csum
+              end
+            default: ;
+          endcase
         STATE_PROCESS_ICMP:
           case (icmp_state_reg)
             ICMP_S_V6_ECHO_COPY:
@@ -2928,20 +2994,27 @@ module nts_parser_ctrl #(
   //----------------------------------------------------------------
 
   always @*
-  begin
+  begin : verifier_proc
+    reg verify;
+
+    verify = 0;
+
     verifier_we = 0;
     verifier_new = VERIFIER_IDLE;
 
     case (verifier_reg)
       VERIFIER_IDLE:
-        case (state_reg)
-          STATE_VERIFY_IPV4:
-            begin
-              verifier_we = 1;
-              verifier_new = VERIFIER_WAIT_0;
-            end
-          default: ;
-        endcase
+        begin
+          case (state_reg)
+             STATE_VERIFY_IPV4:      verify = 1;
+             STATE_VERIFY_IPV4_ICMP: verify = 1;
+             default:                verify = 0;
+          endcase
+          if (verify) begin
+            verifier_we = 1;
+            verifier_new = VERIFIER_WAIT_0;
+          end
+        end
       VERIFIER_WAIT_0:
         begin
           //Access port is initilized in this phase
@@ -2974,16 +3047,20 @@ module nts_parser_ctrl #(
   begin
     counter_ipv4checksum_bad_inc = 0;
     counter_ipv4checksum_good_inc = 0;
+    counter_ipv4icmp_checksum_bad_inc = 0;
+    counter_ipv4icmp_checksum_good_inc = 0;
 
     case (verifier_reg)
       VERIFIER_BAD:
         case (state_reg)
-          STATE_VERIFY_IPV4: counter_ipv4checksum_bad_inc = 1;
+          STATE_VERIFY_IPV4:      counter_ipv4checksum_bad_inc = 1;
+          STATE_VERIFY_IPV4_ICMP: counter_ipv4icmp_checksum_bad_inc = 1;
           default: ;
         endcase
       VERIFIER_GOOD:
         case (state_reg)
-          STATE_VERIFY_IPV4: counter_ipv4checksum_good_inc = 1;
+          STATE_VERIFY_IPV4:      counter_ipv4checksum_good_inc = 1;
+          STATE_VERIFY_IPV4_ICMP: counter_ipv4icmp_checksum_good_inc = 1;
           default: ;
         endcase
       default: ;
@@ -4112,6 +4189,20 @@ module nts_parser_ctrl #(
           state_new = STATE_DROP_PACKET;
         end
       STATE_VERIFY_IPV4:
+        case (verifier_reg)
+          VERIFIER_BAD:
+            begin
+              state_we  = 'b1;
+              state_new = STATE_DROP_PACKET;
+            end
+          VERIFIER_GOOD:
+            begin
+              state_we  = 'b1;
+              state_new = STATE_VERIFY_IPV4_ICMP;
+            end
+          default: ;
+        endcase
+      STATE_VERIFY_IPV4_ICMP:
         case (verifier_reg)
           VERIFIER_BAD:
             begin

@@ -76,6 +76,7 @@ module nts_parser_ctrl #(
   input  wire                         i_access_port_wait,
   output wire      [ADDR_WIDTH+3-1:0] o_access_port_addr,
   output wire                  [15:0] o_access_port_burstsize,
+  output wire                  [15:0] o_access_port_csum_initial,
   output wire                   [2:0] o_access_port_wordsize,
   output wire                         o_access_port_rd_en,
   input  wire                         i_access_port_rd_dv,
@@ -165,6 +166,10 @@ module nts_parser_ctrl #(
   localparam ADDR_CSUM_IPV4_ICMP_BAD1  = 'h25;
   localparam ADDR_CSUM_IPV4_ICMP_GOOD0 = 'h26;
   localparam ADDR_CSUM_IPV4_ICMP_GOOD1 = 'h27;
+  localparam ADDR_CSUM_IPV4_UDP_BAD0   = 'h28;
+  localparam ADDR_CSUM_IPV4_UDP_BAD1   = 'h29;
+  localparam ADDR_CSUM_IPV4_UDP_GOOD0  = 'h2a;
+  localparam ADDR_CSUM_IPV4_UDP_GOOD1  = 'h2b;
 
   localparam ADDR_MAC_CTRL       = 'h30;
   localparam ADDR_IPV4_CTRL      = 'h31;
@@ -280,9 +285,10 @@ module nts_parser_ctrl #(
   localparam [BITS_STATE-1:0] STATE_SELECT_PROTOCOL_HANDLER  = 6'h02;
   localparam [BITS_STATE-1:0] STATE_VERIFY_IPV4              = 6'h03;
   localparam [BITS_STATE-1:0] STATE_VERIFY_IPV4_ICMP         = 6'h04;
-  localparam [BITS_STATE-1:0] STATE_SELECT_IPV4_HANDLER      = 6'h05;
-  localparam [BITS_STATE-1:0] STATE_SELECT_IPV6_HANDLER      = 6'h06;
-  localparam [BITS_STATE-1:0] STATE_PROCESS_ICMP             = 6'h07;
+  localparam [BITS_STATE-1:0] STATE_VERIFY_IPV4_UDP          = 6'h05;
+  localparam [BITS_STATE-1:0] STATE_SELECT_IPV4_HANDLER      = 6'h06;
+  localparam [BITS_STATE-1:0] STATE_SELECT_IPV6_HANDLER      = 6'h07;
+  localparam [BITS_STATE-1:0] STATE_PROCESS_ICMP             = 6'h08;
 
   localparam [BITS_STATE-1:0] STATE_ARP_INIT                 = 6'h0e;
   localparam [BITS_STATE-1:0] STATE_ARP_RESPOND              = 6'h0f;
@@ -458,7 +464,8 @@ module nts_parser_ctrl #(
   localparam HEADER_LENGTH_IPV6     = 40;
   localparam HEADER_LENGTH_ARP      = 28;
 
-  localparam OFFSET_ETH_IPV4_SRCADDR    = HEADER_LENGTH_ETHERNET + 12;
+  localparam OFFSET_IPV4_SRCADDR        = 12;
+  localparam OFFSET_ETH_IPV4_SRCADDR    = HEADER_LENGTH_ETHERNET + OFFSET_IPV4_SRCADDR;
   localparam OFFSET_ETH_IPV6_SRCADDR    = HEADER_LENGTH_ETHERNET + 8;
 
   localparam OFFSET_ETH_IPV4_DATA       = HEADER_LENGTH_ETHERNET + HEADER_LENGTH_IPV4;
@@ -496,6 +503,9 @@ module nts_parser_ctrl #(
   reg                         access_port_addr_we;
   reg      [ADDR_WIDTH+3-1:0] access_port_addr_new;
   reg      [ADDR_WIDTH+3-1:0] access_port_addr_reg;
+  reg                         access_port_csum_initial_we;
+  reg                  [15:0] access_port_csum_initial_new;
+  reg                  [15:0] access_port_csum_initial_reg;
   reg                         access_port_burstsize_we;
   reg                  [15:0] access_port_burstsize_new;
   reg                  [15:0] access_port_burstsize_reg;
@@ -1089,10 +1099,11 @@ module nts_parser_ctrl #(
 
   assign o_busy                 = (i_tx_empty == 'b0) || (state_reg != STATE_IDLE);
 
-  assign o_access_port_addr      = access_port_addr_reg;
-  assign o_access_port_burstsize = access_port_burstsize_reg;
-  assign o_access_port_rd_en     = access_port_rd_en_reg;
-  assign o_access_port_wordsize  = access_port_wordsize_reg;
+  assign o_access_port_addr         = access_port_addr_reg;
+  assign o_access_port_burstsize    = access_port_burstsize_reg;
+  assign o_access_port_csum_initial = access_port_csum_initial_reg;
+  assign o_access_port_rd_en        = access_port_rd_en_reg;
+  assign o_access_port_wordsize     = access_port_wordsize_reg;
 
   assign o_api_read_data = api_read_data;
 
@@ -1318,6 +1329,16 @@ module nts_parser_ctrl #(
   wire [31:0] counter_ipv4icmp_checksum_good_msb;
   wire [31:0] counter_ipv4icmp_checksum_good_lsb;
 
+  reg         counter_ipv4udp_checksum_bad_inc;
+  reg         counter_ipv4udp_checksum_bad_lsb_we;
+  wire [31:0] counter_ipv4udp_checksum_bad_msb;
+  wire [31:0] counter_ipv4udp_checksum_bad_lsb;
+
+  reg         counter_ipv4udp_checksum_good_inc;
+  reg         counter_ipv4udp_checksum_good_lsb_we;
+  wire [31:0] counter_ipv4udp_checksum_good_msb;
+  wire [31:0] counter_ipv4udp_checksum_good_lsb;
+
   counter64 counter_ipv4checksum_bad (
      .i_areset     ( i_areset                         ),
      .i_clk        ( i_clk                            ),
@@ -1356,6 +1377,26 @@ module nts_parser_ctrl #(
      .i_lsb_sample ( counter_ipv4icmp_checksum_good_lsb_we ),
      .o_msb        ( counter_ipv4icmp_checksum_good_msb    ),
      .o_lsb        ( counter_ipv4icmp_checksum_good_lsb    )
+  );
+
+  counter64 counter_ipv4udp_checksum_bad (
+     .i_areset     ( i_areset                            ),
+     .i_clk        ( i_clk                               ),
+     .i_inc        ( counter_ipv4udp_checksum_bad_inc    ),
+     .i_rst        ( 1'b0                                ),
+     .i_lsb_sample ( counter_ipv4udp_checksum_bad_lsb_we ),
+     .o_msb        ( counter_ipv4udp_checksum_bad_msb    ),
+     .o_lsb        ( counter_ipv4udp_checksum_bad_lsb    )
+  );
+
+  counter64 counter_ipv4udp_checksum_good (
+     .i_areset     ( i_areset                             ),
+     .i_clk        ( i_clk                                ),
+     .i_inc        ( counter_ipv4udp_checksum_good_inc    ),
+     .i_rst        ( 1'b0                                 ),
+     .i_lsb_sample ( counter_ipv4udp_checksum_good_lsb_we ),
+     .o_msb        ( counter_ipv4udp_checksum_good_msb    ),
+     .o_lsb        ( counter_ipv4udp_checksum_good_lsb    )
   );
 
   //----------------------------------------------------------------
@@ -1462,6 +1503,8 @@ module nts_parser_ctrl #(
     counter_ipv4checksum_good_lsb_we = 0;
     counter_ipv4icmp_checksum_bad_lsb_we = 0;
     counter_ipv4icmp_checksum_good_lsb_we = 0;
+    counter_ipv4udp_checksum_bad_lsb_we = 0;
+    counter_ipv4udp_checksum_good_lsb_we = 0;
 
     if (i_api_cs) begin
       if (i_api_we) begin
@@ -1567,6 +1610,19 @@ module nts_parser_ctrl #(
                 api_read_data = counter_ipv4icmp_checksum_good_msb;
               end
             ADDR_CSUM_IPV4_ICMP_GOOD1: api_read_data = counter_ipv4icmp_checksum_good_lsb;
+
+            ADDR_CSUM_IPV4_UDP_BAD0:
+              begin
+                counter_ipv4udp_checksum_bad_lsb_we = 1;
+                api_read_data = counter_ipv4udp_checksum_bad_msb;
+              end
+            ADDR_CSUM_IPV4_UDP_BAD1: api_read_data = counter_ipv4udp_checksum_bad_lsb;
+            ADDR_CSUM_IPV4_UDP_GOOD0:
+              begin
+                counter_ipv4udp_checksum_good_lsb_we = 1;
+                api_read_data = counter_ipv4udp_checksum_good_msb;
+              end
+            ADDR_CSUM_IPV4_UDP_GOOD1: api_read_data = counter_ipv4udp_checksum_good_lsb;
 
             ADDR_MAC_CTRL: api_read_data[3:0] = addr_mac_ctrl_reg;
             ADDR_IPV4_CTRL: api_read_data[7:0] = addr_ipv4_ctrl_reg;
@@ -1700,10 +1756,11 @@ module nts_parser_ctrl #(
   always @ (posedge i_clk, posedge i_areset)
   begin : reg_update
     if (i_areset == 1'b1) begin
-      access_port_addr_reg       <= 'b0;
-      access_port_burstsize_reg  <= 'b0;
-      access_port_rd_en_reg      <= 'b0;
-      access_port_wordsize_reg   <= 'b0;
+      access_port_addr_reg         <= 'b0;
+      access_port_burstsize_reg    <= 'b0;
+      access_port_csum_initial_reg <= 'b0;
+      access_port_rd_en_reg        <= 'b0;
+      access_port_wordsize_reg     <= 'b0;
 
       addr_ipv4_ctrl_reg <= 0;
 
@@ -1907,6 +1964,9 @@ module nts_parser_ctrl #(
 
       if (access_port_burstsize_we)
         access_port_burstsize_reg <= access_port_burstsize_new;
+
+      if (access_port_csum_initial_we)
+        access_port_csum_initial_reg <= access_port_csum_initial_new;
 
       access_port_rd_en_reg <= access_port_rd_en_new;
 
@@ -2596,13 +2656,15 @@ module nts_parser_ctrl #(
   always @*
   begin : access_port_proc
 
-    access_port_addr_we        = 'b0;
-    access_port_addr_new       = 'b0;
-    access_port_burstsize_we   = 'b0;
-    access_port_burstsize_new  = 'b0;
-    access_port_rd_en_new      = 'b0;
-    access_port_wordsize_we    = 'b0;
-    access_port_wordsize_new   = 'b0;
+    access_port_addr_we          = 'b0;
+    access_port_addr_new         = 'b0;
+    access_port_burstsize_we     = 'b0;
+    access_port_burstsize_new    = 'b0;
+    access_port_csum_initial_we  = 'b0;
+    access_port_csum_initial_new = 'b0;
+    access_port_rd_en_new        = 'b0;
+    access_port_wordsize_we      = 'b0;
+    access_port_wordsize_new     = 'b0;
 
     if (i_clear) begin : addr_port_sync_reset_from_top_module
       access_port_addr_we      = 'b1; //write zeros if top module requests reset
@@ -2629,13 +2691,31 @@ module nts_parser_ctrl #(
           case (verifier_reg)
             VERIFIER_IDLE:
               begin
-                access_port_addr_we       = 'b1;
-                access_port_addr_new      = OFFSET_ETH_IPV4_DATA;
-                access_port_burstsize_we  = 'b1;
-                access_port_burstsize_new = ipdecode_ip4_total_length_reg - HEADER_LENGTH_IPV4;
-                access_port_rd_en_new     = 'b1;
-                access_port_wordsize_we   = 'b1;
-                access_port_wordsize_new  = 5; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit, 4: burst, 5: csum
+                access_port_addr_we          = 'b1;
+                access_port_addr_new         = OFFSET_ETH_IPV4_DATA;
+                access_port_burstsize_we     = 'b1;
+                access_port_burstsize_new    = ipdecode_ip4_total_length_reg - HEADER_LENGTH_IPV4;
+                access_port_csum_initial_we  = 'b1;
+                access_port_csum_initial_new = 16'h0000;
+                access_port_rd_en_new        = 'b1;
+                access_port_wordsize_we      = 'b1;
+                access_port_wordsize_new     = 5; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit, 4: burst, 5: csum
+              end
+            default: ;
+          endcase
+        STATE_VERIFY_IPV4_UDP:
+          case (verifier_reg)
+            VERIFIER_IDLE:
+              begin
+                access_port_addr_we          = 'b1;
+                access_port_addr_new         = OFFSET_ETH_IPV4_SRCADDR;
+                access_port_burstsize_we     = 'b1;
+                access_port_burstsize_new    = ipdecode_ip4_total_length_reg - OFFSET_IPV4_SRCADDR;
+                access_port_csum_initial_we  = 'b1;
+                access_port_csum_initial_new = { 8'h00, IP_PROTO_UDP } + ipdecode_udp_length_reg;
+                access_port_rd_en_new        = 'b1;
+                access_port_wordsize_we      = 'b1;
+                access_port_wordsize_new     = 5; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit, 4: burst, 5: csum
               end
             default: ;
           endcase
@@ -3008,6 +3088,7 @@ module nts_parser_ctrl #(
           case (state_reg)
              STATE_VERIFY_IPV4:      verify = 1;
              STATE_VERIFY_IPV4_ICMP: verify = 1;
+             STATE_VERIFY_IPV4_UDP:  verify = 1;
              default:                verify = 0;
           endcase
           if (verify) begin
@@ -3049,18 +3130,22 @@ module nts_parser_ctrl #(
     counter_ipv4checksum_good_inc = 0;
     counter_ipv4icmp_checksum_bad_inc = 0;
     counter_ipv4icmp_checksum_good_inc = 0;
+    counter_ipv4udp_checksum_bad_inc = 0;
+    counter_ipv4udp_checksum_good_inc = 0;
 
     case (verifier_reg)
       VERIFIER_BAD:
         case (state_reg)
           STATE_VERIFY_IPV4:      counter_ipv4checksum_bad_inc = 1;
           STATE_VERIFY_IPV4_ICMP: counter_ipv4icmp_checksum_bad_inc = 1;
+          STATE_VERIFY_IPV4_UDP:  counter_ipv4udp_checksum_bad_inc = 1;
           default: ;
         endcase
       VERIFIER_GOOD:
         case (state_reg)
           STATE_VERIFY_IPV4:      counter_ipv4checksum_good_inc = 1;
           STATE_VERIFY_IPV4_ICMP: counter_ipv4icmp_checksum_good_inc = 1;
+          STATE_VERIFY_IPV4_UDP:  counter_ipv4udp_checksum_good_inc = 1;
           default: ;
         endcase
       default: ;
@@ -4204,9 +4289,8 @@ module nts_parser_ctrl #(
                 end
               IP_PROTO_UDP:
                 begin
-                  //TODO implement UDP checksum checker
                   state_we  = 'b1;
-                  state_new = STATE_SELECT_IPV4_HANDLER;
+                  state_new = STATE_VERIFY_IPV4_UDP;
                 end
               default:
                 begin
@@ -4218,6 +4302,20 @@ module nts_parser_ctrl #(
           default: ;
         endcase
       STATE_VERIFY_IPV4_ICMP:
+        case (verifier_reg)
+          VERIFIER_BAD:
+            begin
+              state_we  = 'b1;
+              state_new = STATE_DROP_PACKET;
+            end
+          VERIFIER_GOOD:
+            begin
+              state_we  = 'b1;
+              state_new = STATE_SELECT_IPV4_HANDLER;
+            end
+          default: ;
+        endcase
+      STATE_VERIFY_IPV4_UDP:
         case (verifier_reg)
           VERIFIER_BAD:
             begin

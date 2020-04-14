@@ -45,6 +45,7 @@ module nts_rx_buffer_tb;
 
   wire                    access_port_wait;
   reg  [ADDR_WIDTH+3-1:0] access_port_addr;
+  reg  [15:0]             access_port_csum_initial;
   reg  [2:0]              access_port_wordsize;
   reg  [15:0]             access_port_burstsize;
   reg                     access_port_rd_en;
@@ -70,6 +71,7 @@ module nts_rx_buffer_tb;
      .i_dispatch_fifo_rd_data(dispatch_fifo_rd_data),
      .o_access_port_wait(access_port_wait),
      .i_access_port_addr(access_port_addr),
+     .i_access_port_csum_initial(access_port_csum_initial),
      .i_access_port_wordsize(access_port_wordsize),
      .i_access_port_burstsize(access_port_burstsize),
      .i_access_port_rd_en(access_port_rd_en),
@@ -138,13 +140,14 @@ module nts_rx_buffer_tb;
   end
   endtask
 
-  task read_csum (input [10:0] addr, input [15:0] bytes, output [15:0] csum);
-  begin : read_csum
+  task read_csum_with_init (input [10:0] addr, input [15:0] bytes, input [15:0] csum_initial, output [15:0] csum);
+  begin : read_csum_with_init
     integer i;
     if (VERBOSE>1) $display("%s:%0d read_csum(%h, %h, ...)", `__FILE__, `__LINE__, addr, bytes);
     csum = 0;
     #10 `assert(access_port_wait == 'b0);
     access_port_addr = addr;
+    access_port_csum_initial = csum_initial;
     access_port_rd_en = 1;
     access_port_wordsize = 5; //csum
     access_port_burstsize = bytes;
@@ -171,6 +174,12 @@ module nts_rx_buffer_tb;
   end
   endtask
 
+  task read_csum (input [10:0] addr, input [15:0] bytes, output [15:0] csum);
+  begin
+    read_csum_with_init(addr, bytes, 16'h0000, csum);
+  end
+  endtask
+
   initial
       begin
         $display("Test start: %s:%0d.", `__FILE__, `__LINE__);
@@ -179,6 +188,7 @@ module nts_rx_buffer_tb;
         i_areset = 1;
         i_parser_busy = 1;
         access_port_addr = 'b0;
+        access_port_csum_initial = 16'h0;
         access_port_wordsize = 'b0;
         access_port_burstsize = 16'h0;
         access_port_rd_en = 'b0;
@@ -420,6 +430,21 @@ module nts_rx_buffer_tb;
         read_csum(14, 20, csum);
         `assert(csum == 16'h7D22); // 77D1B = f00d + 0123 + 4567 + 89ab + cdef + ffff + ffff + ffff + ffff + eeee
 
+
+        read_csum_with_init(0, 4, 16'h0000, csum);
+        `assert(csum == 16'h9D9D); // 19D9C = 0000 + dead + beef
+
+        read_csum_with_init(0, 4, 16'h0001, csum);
+        `assert(csum == 16'h9D9E); // 19D9D = 0001 + dead + beef
+
+        read_csum_with_init(0, 4, 16'h6261, csum);
+        `assert(csum == 16'hfffe); // 6261 = fffe - 9D9D
+
+        read_csum_with_init(0, 4, 16'h6262, csum);
+        `assert(csum == 16'hffff); // 6262 = ffff - 9D9D
+
+        read_csum_with_init(0, 4, 16'h6263, csum);
+        `assert(csum == 16'h0001); //overflows comes back in csum algorithm
 
         $display("Test stop: %s:%0d.", `__FILE__, `__LINE__);
         #40 $finish;

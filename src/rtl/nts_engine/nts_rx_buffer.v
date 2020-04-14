@@ -49,6 +49,7 @@ module nts_rx_buffer #(
 
   output wire                    o_access_port_wait,
   input  wire [ADDR_WIDTH+3-1:0] i_access_port_addr,
+  input  wire             [15:0] i_access_port_csum_initial,
   input  wire              [2:0] i_access_port_wordsize,
   input  wire             [15:0] i_access_port_burstsize,
   input  wire                    i_access_port_rd_en,
@@ -141,15 +142,20 @@ module nts_rx_buffer #(
   reg                  [15:0] burst_size_reg;
 
 
+  //---- internal wires for checksum
   reg        csum_read_done;
   reg        csum_calculate_done;
   reg        csum_reset;
   reg [15:0] csum_value;
 
+  //---- internal registers for checksum
   reg [63:0] csum_block_new;
   reg [63:0] csum_block_reg;
   reg        csum_block_valid_new;
   reg        csum_block_valid_reg;
+  reg        csum_initial_we;
+  reg [15:0] csum_initial_new;
+  reg [15:0] csum_initial_reg;
   reg        csum_mem_we;
   reg [55:0] csum_mem_new;
   reg [55:0] csum_mem_reg;
@@ -157,9 +163,11 @@ module nts_rx_buffer #(
   reg [15:0] csum_size_new;
   reg [15:0] csum_size_reg;
 
-  reg p0_done_new;
-  reg p0_done_reg;
+  //---- internal registers for checksum pipeline stage 0
+  reg        p0_done_new;
+  reg        p0_done_reg;
 
+  //---- internal registers for checksum pipeline stage 1
   reg        p1_done_new;
   reg        p1_done_reg;
   reg        p1_carry_a_new;
@@ -170,10 +178,10 @@ module nts_rx_buffer #(
   reg [15:0] p1_sum_a_reg;
   reg [15:0] p1_sum_b_new;
   reg [15:0] p1_sum_b_reg;
+  reg        p1_valid_new;
+  reg        p1_valid_reg;
 
-  reg p1_valid_new;
-  reg p1_valid_reg;
-
+  //---- internal registers for checksum pipeline stage 2
   reg        p2_carry_a_new;
   reg        p2_carry_a_reg;
   reg        p2_carry_b_new;
@@ -187,6 +195,7 @@ module nts_rx_buffer #(
   reg        p2_valid_new;
   reg        p2_valid_reg;
 
+  //---- internal registers for checksum pipeline stage 3
   reg        p3_done_new;
   reg        p3_done_reg;
   reg [15:0] p3_csum_new;
@@ -264,6 +273,7 @@ module nts_rx_buffer #(
 
       csum_block_reg       <= 'b0;
       csum_block_valid_reg <= 'b0;
+      csum_initial_reg     <= 'b0;
       csum_mem_reg         <= 'b0;
       csum_size_reg        <= 'b0;
 
@@ -319,6 +329,9 @@ module nts_rx_buffer #(
 
       csum_block_reg <= csum_block_new;
       csum_block_valid_reg <= csum_block_valid_new;
+
+      if (csum_initial_we)
+        csum_initial_reg <= csum_initial_new;
 
       if (csum_mem_we)
         csum_mem_reg <= csum_mem_new;
@@ -1020,6 +1033,9 @@ module nts_rx_buffer #(
     csum_block_new       = 0;
     csum_block_valid_new = 0;
 
+    csum_initial_we  = 0;
+    csum_initial_new = 0;
+
     csum_mem_we    = 1;
     csum_mem_new   = ram_rd_data[55:0];
 
@@ -1033,8 +1049,10 @@ module nts_rx_buffer #(
       MEMORY_CTRL_IDLE:
         begin
           if (i_access_port_rd_en) begin
-            csum_size_we  = 1;
-            csum_size_new = i_access_port_burstsize;
+            csum_size_we     = 1;
+            csum_size_new    = i_access_port_burstsize;
+            csum_initial_we  = 1;
+            csum_initial_new = i_access_port_csum_initial;
           end
         end
       MEMORY_CTRL_CSUM_DLY:
@@ -1244,7 +1262,11 @@ module nts_rx_buffer #(
       end else begin
         p3_csum_new = p3_csum_reg;
       end
+
+    end else if (csum_reset == 1'b1) begin
+      p3_csum_new = csum_initial_reg;
     end
+
   end
 
 endmodule

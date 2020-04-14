@@ -133,6 +133,9 @@ module nts_engine #(
   reg                   [15:0] access_port_burstsize;
   wire                  [15:0] access_port_burstsize_parser;
 
+  reg                   [15:0] access_port_csum_initial;
+  wire                  [15:0] access_port_csum_initial_parser;
+
   reg                    [2:0] access_port_wordsize;
   wire                   [2:0] access_port_wordsize_parser;
 
@@ -561,6 +564,7 @@ module nts_engine #(
      .o_access_port_wait(access_port_wait),
      .i_access_port_addr(access_port_addr),
      .i_access_port_burstsize(access_port_burstsize),
+     .i_access_port_csum_initial(access_port_csum_initial),
      .i_access_port_wordsize(access_port_wordsize),
      .i_access_port_rd_en(access_port_rd_en),
      .o_access_port_rd_dv(access_port_rd_dv),
@@ -577,6 +581,7 @@ module nts_engine #(
     muxctrl = { parser_muxctrl_crypto };
 
     access_port_addr = 0;
+    access_port_csum_initial = 0;
     access_port_burstsize = 0;
     access_port_wordsize = 0;
     access_port_rd_en = 0;
@@ -593,6 +598,7 @@ module nts_engine #(
       1'b0:
         begin
           access_port_addr = access_port_addr_parser;
+          access_port_csum_initial = access_port_csum_initial_parser;
           access_port_burstsize = access_port_burstsize_parser;
           access_port_wordsize = access_port_wordsize_parser;
           access_port_rd_en = access_port_rd_en_parser;
@@ -766,6 +772,7 @@ module nts_engine #(
    .i_access_port_wait(access_port_wait_parser),
    .o_access_port_addr(access_port_addr_parser),
    .o_access_port_burstsize(access_port_burstsize_parser),
+   .o_access_port_csum_initial(access_port_csum_initial_parser),
    .o_access_port_wordsize(access_port_wordsize_parser),
    .o_access_port_rd_en(access_port_rd_en_parser),
    .i_access_port_rd_dv(access_port_rd_dv_parser),

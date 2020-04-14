@@ -4196,10 +4196,25 @@ module nts_parser_ctrl #(
               state_new = STATE_DROP_PACKET;
             end
           VERIFIER_GOOD:
-            begin
-              state_we  = 'b1;
-              state_new = STATE_VERIFY_IPV4_ICMP;
-            end
+            case (ipdecode_ip4_protocol_reg)
+              IP_PROTO_ICMPV4:
+                begin
+                  state_we  = 'b1;
+                  state_new = STATE_VERIFY_IPV4_ICMP;
+                end
+              IP_PROTO_UDP:
+                begin
+                  //TODO implement UDP checksum checker
+                  state_we  = 'b1;
+                  state_new = STATE_SELECT_IPV4_HANDLER;
+                end
+              default:
+                begin
+                  //Unknown packet type
+                  state_we  = 'b1;
+                  state_new = STATE_DROP_PACKET;
+                end
+            endcase
           default: ;
         endcase
       STATE_VERIFY_IPV4_ICMP:

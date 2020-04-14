@@ -2727,13 +2727,15 @@ module nts_parser_ctrl #(
           case (verifier_reg)
             VERIFIER_IDLE:
               begin
-                access_port_addr_we       = 'b1;
-                access_port_addr_new      = HEADER_LENGTH_ETHERNET;
-                access_port_burstsize_we  = 'b1;
-                access_port_burstsize_new = HEADER_LENGTH_IPV4;
-                access_port_rd_en_new     = 'b1;
-                access_port_wordsize_we   = 'b1;
-                access_port_wordsize_new  = 5; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit, 4: burst, 5: csum
+                access_port_addr_we          = 'b1;
+                access_port_addr_new         = HEADER_LENGTH_ETHERNET;
+                access_port_burstsize_we     = 'b1;
+                access_port_burstsize_new    = HEADER_LENGTH_IPV4;
+                access_port_csum_initial_we  = 'b1;
+                access_port_csum_initial_new = 16'h0000;
+                access_port_rd_en_new        = 'b1;
+                access_port_wordsize_we      = 'b1;
+                access_port_wordsize_new     = 5; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit, 4: burst, 5: csum
               end
             default: ;
           endcase

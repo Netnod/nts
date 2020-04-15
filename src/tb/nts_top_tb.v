@@ -108,6 +108,7 @@ module nts_top_tb;
   localparam [11:0] API_ADDR_PARSER_NAME         = API_ADDR_PARSER_BASE +    0;
   localparam [11:0] API_ADDR_PARSER_VERSION      = API_ADDR_PARSER_BASE +    2;
   localparam [11:0] API_ADDR_PARSER_DUMMY        = API_ADDR_PARSER_BASE +    3;
+  localparam [11:0] API_ADDR_PARSER_CTRL         = API_ADDR_PARSER_BASE +    4;
   localparam [11:0] API_ADDR_PARSER_STATE        = API_ADDR_PARSER_BASE + 'h10;
   localparam [11:0] API_ADDR_PARSER_STATE_CRYPTO = API_ADDR_PARSER_BASE + 'h12;
   localparam [11:0] API_ADDR_PARSER_ERROR_STATE  = API_ADDR_PARSER_BASE + 'h13;
@@ -511,6 +512,23 @@ module nts_top_tb;
   end
   endtask
 
+  task set_parser_ctrl_bit( input [11:0] engine, input [4:0] bitnumber, input bitvalue );
+  begin : parser_ctrl_bits
+    reg [31:0] tmp;
+    api_read32( tmp, engine, API_ADDR_PARSER_CTRL );
+    tmp[bitnumber] = bitvalue;
+    api_write32( tmp, engine, API_ADDR_PARSER_CTRL );
+  end
+  endtask
+
+  // A lot of testcases are from Linux pcaps with bad checksums. (sigh)
+  // Testbench not so useful when checksums checked...
+  task parser_disable_checksum_checks ( input [11:0] engine );
+  begin
+    set_parser_ctrl_bit( engine, 5'h0, 1'b0 );
+  end
+  endtask
+
   task init_address_resolution( input [11:0] engine );
   begin : address_resoltion
     integer i;
@@ -807,6 +825,7 @@ module nts_top_tb;
             9: set_current_key(engine, 2);
             10: enable_engine(engine);
             11: if (engine == 0) enable_dispatcher();
+            17: parser_disable_checksum_checks( engine );
             default: ;
           endcase
         end

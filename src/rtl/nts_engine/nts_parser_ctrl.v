@@ -150,6 +150,7 @@ module nts_parser_ctrl #(
   localparam ADDR_NAME1        =    1;
   localparam ADDR_VERSION      =    2;
   localparam ADDR_DUMMY        =    3;
+  localparam ADDR_CTRL         =    4;
   localparam ADDR_STATE        = 'h10;
   localparam ADDR_STATE_ICMP   = 'h11;
   localparam ADDR_STATE_CRYPTO = 'h12;
@@ -385,6 +386,9 @@ module nts_parser_ctrl #(
   localparam [BITS_VERIFIER_STATE-1:0] VERIFIER_BAD     = 6;
   localparam [BITS_VERIFIER_STATE-1:0] VERIFIER_GOOD    = 7;
 
+  localparam CONFIG_BITS = 1;
+  localparam CONFIG_BIT_VERIFY_IP_CHECKSUMS = 0;
+
   localparam BYTES_TAG_LEN           = 4;
 
   localparam BYTES_KEYID             = 4;
@@ -610,6 +614,10 @@ module nts_parser_ctrl #(
 
   reg          addr_match_ipv6_new;
   reg          addr_match_ipv6_reg;
+
+  reg                   config_ctrl_we;
+  reg [CONFIG_BITS-1:0] config_ctrl_new;
+  reg [CONFIG_BITS-1:0] config_ctrl_reg;
 
   reg          config_udp_port_ntp0_we;
   reg   [15:0] config_udp_port_ntp0_new;
@@ -1574,6 +1582,9 @@ module nts_parser_ctrl #(
 
     api_read_data = 0;
 
+    config_ctrl_we = 0;
+    config_ctrl_new = 0;
+
     config_udp_port_ntp0_we = 0;
     config_udp_port_ntp0_new = 0;
     config_udp_port_ntp1_we = 0;
@@ -1597,6 +1608,11 @@ module nts_parser_ctrl #(
             begin
               api_dummy_we = 1;
               api_dummy_new = i_api_write_data;
+            end
+          ADDR_CTRL:
+            begin
+              config_ctrl_we = 1;
+              config_ctrl_new = i_api_write_data[CONFIG_BITS-1:0];
             end
           ADDR_MAC_CTRL:
             begin
@@ -1660,6 +1676,8 @@ module nts_parser_ctrl #(
             ADDR_NAME0: api_read_data = CORE_NAME[63:32];
             ADDR_NAME1: api_read_data = CORE_NAME[31:0];
             ADDR_VERSION: api_read_data = CORE_VERSION;
+            ADDR_DUMMY: api_read_data = api_dummy_reg;
+            ADDR_CTRL: api_read_data[CONFIG_BITS-1:0] = config_ctrl_reg;
             ADDR_STATE: api_read_data[BITS_STATE-1:0] = state_reg; //MSB=0 from init
             ADDR_STATE_CRYPTO: api_read_data = { 27'h0, crypto_fsm_reg };
             ADDR_STATE_ICMP: api_read_data[BITS_ICMP_STATE-1:0] = icmp_state_reg;
@@ -1667,7 +1685,6 @@ module nts_parser_ctrl #(
             ADDR_ERROR_COUNT: api_read_data = error_count_reg;
             ADDR_ERROR_CAUSE: api_read_data = error_cause_reg;
             ADDR_ERROR_SIZE: api_read_data[ADDR_WIDTH+3-1:0] = error_size_reg; //MSB=0 from init
-            ADDR_DUMMY: api_read_data = api_dummy_reg;
 
             ADDR_CSUM_IPV4_BAD0:
               begin
@@ -1918,6 +1935,7 @@ module nts_parser_ctrl #(
 
       api_dummy_reg              <= 32'h64_75_4d_79; //"duMy"
 
+      config_ctrl_reg             <= 1'b1; //Default on: CONFIG_BIT_VERIFY_IP_CHECKSUMS
       config_udp_port_ntp0_reg    <= UDP_PORT_NTP;
       config_udp_port_ntp1_reg    <= UDP_PORT_NTS;
 
@@ -2178,6 +2196,9 @@ module nts_parser_ctrl #(
 
       if (api_dummy_we)
         api_dummy_reg <= api_dummy_new;
+
+      if (config_ctrl_we)
+        config_ctrl_reg <= config_ctrl_new;
 
       if (config_udp_port_ntp0_we)
         config_udp_port_ntp0_reg <= config_udp_port_ntp0_new;
@@ -4732,19 +4753,30 @@ module nts_parser_ctrl #(
           state_we  = 'b1;
           state_new = STATE_ARP_INIT;
         end else if (detect_ipv4) begin
-          state_we  = 'b1;
-          state_new = STATE_VERIFY_IPV4;
+          if (config_ctrl_reg[CONFIG_BIT_VERIFY_IP_CHECKSUMS]) begin
+            state_we  = 'b1;
+            state_new = STATE_VERIFY_IPV4;
+          end else begin
+            state_we  = 'b1;
+            state_new = STATE_SELECT_IPV4_HANDLER;
+          end
         end else if (detect_ipv6) begin
           case (ipdecode_ip6_next_reg)
             IP_PROTO_ICMPV6:
-              begin
+              if (config_ctrl_reg[CONFIG_BIT_VERIFY_IP_CHECKSUMS]) begin
                 state_we  = 'b1;
                 state_new = STATE_VERIFY_IPV6_ICMP;
+              end else begin
+                state_we  = 'b1;
+                state_new = STATE_SELECT_IPV6_HANDLER;
               end
             IP_PROTO_UDP:
-              begin
+              if (config_ctrl_reg[CONFIG_BIT_VERIFY_IP_CHECKSUMS]) begin
                 state_we  = 'b1;
                 state_new = STATE_VERIFY_IPV6_UDP;
+              end else begin
+                state_we  = 'b1;
+                state_new = STATE_SELECT_IPV6_HANDLER;
               end
             default:
               begin

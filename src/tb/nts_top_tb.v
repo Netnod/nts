@@ -1197,6 +1197,28 @@ module nts_top_tb;
   end
   endfunction
 
+  function [31:0] tx_read_word32(input integer i);
+  begin
+    tx_read_word32[31-:8] = tx_read_byte( i );
+    tx_read_word32[23-:8] = tx_read_byte( i + 1 );
+    tx_read_word32[15-:8] = tx_read_byte( i + 2 );
+    tx_read_word32[7-:8]  = tx_read_byte( i + 3 );
+  end
+  endfunction
+
+  function [63:0] tx_read_word64(input integer i);
+  begin
+    tx_read_word64[63-:8] = tx_read_byte( i );
+    tx_read_word64[55-:8] = tx_read_byte( i + 1 );
+    tx_read_word64[47-:8] = tx_read_byte( i + 2 );
+    tx_read_word64[39-:8] = tx_read_byte( i + 3 );
+    tx_read_word64[31-:8] = tx_read_byte( i + 4 );
+    tx_read_word64[23-:8] = tx_read_byte( i + 5 );
+    tx_read_word64[15-:8] = tx_read_byte( i + 6 );
+    tx_read_word64[7-:8]  = tx_read_byte( i + 7 );
+  end
+  endfunction
+
   function [15:0] internet_checksum(input  [15:0] init,
                                     input integer start,
                                     input integer length);
@@ -1384,10 +1406,24 @@ module nts_top_tb;
     reg [15:0] srcport;
     reg [15:0] payload_length;
     reg  [7:0] next;
+    integer    ntp_offset;
     integer    extension_offset;
     integer    i;
     reg [15:0] ext_tag;
     reg [15:0] ext_length;
+    reg  [1:0] ntp_li;
+    reg  [2:0] ntp_vn;
+    reg  [2:0] ntp_mode;
+    reg  [7:0] ntp_stratum;
+    reg  [7:0] ntp_poll;
+    reg  [7:0] ntp_precision;
+    reg [31:0] ntp_root_delay;
+    reg [31:0] ntp_root_dispersion;
+    reg [31:0] ntp_reference_id;
+    reg [63:0] ntp_ref_time;
+    reg [63:0] ntp_origin_time;
+    reg [63:0] ntp_receive_time;
+    reg [63:0] ntp_transmit_time;
     garbage = 0;
 
     ethernet_protocol = tx_read_word16( 12 );
@@ -1397,7 +1433,7 @@ module nts_top_tb;
           payload_length = tx_read_word16(14 + 4);
           next = tx_read_byte(14 + 4 + 2);
           srcport = tx_read_word16( 14 + 40 );
-          extension_offset = 14 + 40 + 8 + 6*8;
+          ntp_offset = 14 + 40 + 8;
         end
       16'h0800:
         begin
@@ -1409,7 +1445,7 @@ module nts_top_tb;
           end
           next = tx_read_byte(14 + 9);
           srcport = tx_read_word16( 14 + 20 );
-          extension_offset = 14 + 20 + 8 + 6*8;
+          ntp_offset = 14 + 20 + 8;
         end
       default: garbage = 1;
     endcase
@@ -1425,6 +1461,26 @@ module nts_top_tb;
         end
       end else garbage = 1;
     end
+
+    if (!garbage) begin
+      { ntp_li, ntp_vn, ntp_mode, ntp_stratum, ntp_poll, ntp_precision } = tx_read_word32( ntp_offset );
+      ntp_root_delay = tx_read_word32( ntp_offset + 4 );
+      ntp_root_dispersion = tx_read_word32( ntp_offset + 8) ;
+      ntp_reference_id = tx_read_word32( ntp_offset + 12 );
+      ntp_ref_time = tx_read_word64( ntp_offset + 16 );
+      ntp_origin_time = tx_read_word64( ntp_offset + 24 );
+      ntp_receive_time = tx_read_word64( ntp_offset + 32 );
+      ntp_transmit_time = tx_read_word64( ntp_offset + 40 );
+      $display("%s:%0d * TX * NTP LI: %h, VN: %h, mode: %h, stratum: %h, poll: %h, precision: %h", `__FILE__, `__LINE__, ntp_li, ntp_vn, ntp_mode, ntp_stratum, ntp_poll, ntp_precision );
+      $display("%s:%0d * TX * NTP Root Delay: %h", `__FILE__, `__LINE__, ntp_root_delay);
+      $display("%s:%0d * TX * NTP Root Dispersion: %h", `__FILE__, `__LINE__, ntp_root_dispersion);
+      $display("%s:%0d * TX * NTP Reference Id: %h (%s)", `__FILE__, `__LINE__, ntp_reference_id, ntp_reference_id);
+      $display("%s:%0d * TX * NTP Reference Time: %h", `__FILE__, `__LINE__, ntp_ref_time);
+      $display("%s:%0d * TX * NTP Origin Time: %h", `__FILE__, `__LINE__, ntp_origin_time);
+      $display("%s:%0d * TX * NTP Receive Time: %h", `__FILE__, `__LINE__, ntp_receive_time);
+      $display("%s:%0d * TX * NTP Transmit Time: %h", `__FILE__, `__LINE__, ntp_transmit_time);
+    end
+
     if (!garbage) begin
       if (payload_length < 8+6*8) begin
         $display("%s:%0d * TX * NTP Payload Length: (%0d) (%0d) - ERROR SHORT", `__FILE__, `__LINE__, payload_length, payload_length-8);
@@ -1436,9 +1492,12 @@ module nts_top_tb;
         $display("%s:%0d * TX * NTP Payload Length: (%0d) (%0d) - Probably NTS", `__FILE__, `__LINE__, payload_length, payload_length-8);
       end
     end
+
     if (!garbage) begin : ext_proc
       reg [15:0] skip_bytes;
       skip_bytes = 0;
+
+      extension_offset = ntp_offset + 6*8;
       i = extension_offset;
       while (i < tx_rec_bytes) begin
         if (skip_bytes > 0) begin
@@ -1628,7 +1687,7 @@ module nts_top_tb;
     reg [63:0] old_tick_counter_crypto;
     reg [63:0] old_tick_counter_icmp;
     reg [63:0] old_tick_counter_packet;
-    reg  [5:0] old_parser_state;
+    reg  [4:0] old_parser_state;
     reg  [4:0] old_parser_state_crypto;
     reg  [5:0] old_parser_state_icmp;
 

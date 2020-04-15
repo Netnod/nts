@@ -1577,6 +1577,8 @@ module nts_parser_ctrl #(
     counter_ipv4udp_checksum_good_lsb_we = 0;
     counter_ipv6icmp_checksum_bad_lsb_we = 0;
     counter_ipv6icmp_checksum_good_lsb_we = 0;
+    counter_ipv6udp_checksum_bad_lsb_we = 0;
+    counter_ipv6udp_checksum_good_lsb_we = 0;
 
     if (i_api_cs) begin
       if (i_api_we) begin

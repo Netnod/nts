@@ -38,7 +38,10 @@ module nts_parser_ctrl #(
   parameter [15:0] LEN_NTS_COOKIE             = 'h0068,
   parameter [15:0] LEN_NTS_MIN_UNIQUE_IDENT   = 'h0024, //5.3. The string MUST be at least 32 octets long.
   parameter [15:0] LEN_NTS_AUTHENTICATOR      = 'h0028, //TL 4h + KeyId 4h + SIV nonce 10h + SIV tag 10h
-  parameter DEBUG_BUFFER = 1
+  parameter  [0:0] DEFAULT_VERIFY_IP_CHECKSUM = 1'b1,
+  parameter  [0:0] DEFAULT_SUPPORT_NTS        = 1'b1,
+  parameter  [0:0] DEFAULT_SUPPORT_NTP        = 1'b0,
+  parameter        DEBUG_BUFFER = 1
 ) (
   input  wire                         i_areset, // async reset
   input  wire                         i_clk,
@@ -323,7 +326,7 @@ module nts_parser_ctrl #(
   localparam [BITS_NTS_STATE-1:0] NTS_S_TX_WRITE_UDP_LENGTH_D    = 6'h1b;
   localparam [BITS_NTS_STATE-1:0] NTS_S_UDP_CHECKSUM_RESET       = 6'h1c;
   localparam [BITS_NTS_STATE-1:0] NTS_S_UDP_CHECKSUM_PS_SRCADDR  = 6'h1d;
-  localparam [BITS_NTS_STATE-1:0] NTS_S_UDP_CHECKSUM_PS_UDPLLEN  = 6'h1e;
+  localparam [BITS_NTS_STATE-1:0] NTS_S_UDP_CHECKSUM_PS_UDPLLEN  = 6'h1e; //TODO: simplify by merging into NTS_S_UDP_CHECKSUM_RESET
   localparam [BITS_NTS_STATE-1:0] NTS_S_UDP_CHECKSUM_DATAGRAM    = 6'h1f;
   localparam [BITS_NTS_STATE-1:0] NTS_S_UDP_CHECKSUM_WAIT        = 6'h20;
   localparam [BITS_NTS_STATE-1:0] NTS_S_WRITE_NEW_UDP_CSUM       = 6'h21;
@@ -334,8 +337,22 @@ module nts_parser_ctrl #(
   localparam [BITS_NTS_STATE-1:0] NTS_S_ERROR                    = 6'h26;
   localparam [BITS_NTS_STATE-1:0] NTS_S_TRANSMIT_PACKET          = 6'h27;
 
-  localparam BITS_STATE = 5;
+  localparam BITS_BASIC_NTP_STATE = 4;
+  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_IDLE                  = 4'h0;
+  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_WRITE_HEADER          = 4'h1;
+  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_TIMESTAMP             = 4'h2;
+  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_TIMESTAMP_WAIT        = 4'h3;
+  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_TX_UPDATE_LENGTH      = 4'h4;
+  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_UDP_CSUM_RESET        = 4'h5;
+  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_UDP_CSUM_ISSUE_0      = 4'h6;
+  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_UDP_CSUM_ISSUE_1      = 4'h7;
+  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_UDP_CSUM_DELAY        = 4'h8;
+  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_UDP_CSUM_UPDATE       = 4'h9;
+  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_UDP_CSUM_UPDATE_DELAY = 4'ha;
+  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_ERROR                 = 4'he;
+  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_TRANSMIT_PACKET       = 4'hf;
 
+  localparam BITS_STATE = 5;
   localparam [BITS_STATE-1:0] STATE_IDLE                     = 5'h00;
   localparam [BITS_STATE-1:0] STATE_COPY                     = 5'h01; //RX handling states
   localparam [BITS_STATE-1:0] STATE_SELECT_PROTOCOL_HANDLER  = 5'h02;
@@ -350,6 +367,7 @@ module nts_parser_ctrl #(
   localparam [BITS_STATE-1:0] STATE_ARP_INIT                 = 5'h0b;
   localparam [BITS_STATE-1:0] STATE_ARP_RESPOND              = 5'h0c;
   localparam [BITS_STATE-1:0] STATE_PROCESS_NTS              = 5'h0d;
+  localparam [BITS_STATE-1:0] STATE_PROCESS_NTP              = 5'h0e;
   localparam [BITS_STATE-1:0] STATE_ERROR_GENERAL            = 5'h1d;
   localparam [BITS_STATE-1:0] STATE_TRANSFER_PACKET          = 5'h1e;
   localparam [BITS_STATE-1:0] STATE_DROP_PACKET              = 5'h1f;
@@ -386,8 +404,10 @@ module nts_parser_ctrl #(
   localparam [BITS_VERIFIER_STATE-1:0] VERIFIER_BAD     = 6;
   localparam [BITS_VERIFIER_STATE-1:0] VERIFIER_GOOD    = 7;
 
-  localparam CONFIG_BITS = 1;
+  localparam CONFIG_BITS = 3;
   localparam CONFIG_BIT_VERIFY_IP_CHECKSUMS = 0;
+  localparam CONFIG_BIT_SUPPORT_NTS         = 1;
+  localparam CONFIG_BIT_SUPPORT_NTP         = 2;
 
   localparam BYTES_TAG_LEN           = 4;
 
@@ -491,7 +511,8 @@ module nts_parser_ctrl #(
   localparam OFFSET_ETH_IPV4_DATA       = HEADER_LENGTH_ETHERNET + HEADER_LENGTH_IPV4;
   localparam OFFSET_ETH_IPV4_UDP        = OFFSET_ETH_IPV4_DATA;
 
-  localparam OFFSET_ETH_IPV6_UDP         = HEADER_LENGTH_ETHERNET + HEADER_LENGTH_IPV6;
+  localparam OFFSET_ETH_IPV6_DATA        = HEADER_LENGTH_ETHERNET + HEADER_LENGTH_IPV6;
+  localparam OFFSET_ETH_IPV6_UDP         = OFFSET_ETH_IPV6_DATA;
   localparam OFFSET_ETH_IPV6_ICMPV6_CSUM = 'h38;
   localparam OFFSET_ETH_IPV6_UDP_LENGTH  = OFFSET_ETH_IPV6_UDP + 4;
 
@@ -503,6 +524,9 @@ module nts_parser_ctrl #(
 
   localparam ICMP_V4_UNREACHABLE_INITIAL_BYTES = 8; //Type,Code,Csum,Unused
   localparam ICMP_V6_UNREACHABLE_INITIAL_BYTES = 8; //Type,Code,Csum,Unused
+
+  localparam UDP_LENGTH_NTP_VANILLA = 8      // UDP Header
+                                    + 6 * 8; // NTP Payload
 
   localparam UDP_LENGTH_NTS_MINIMUM = 8     // UDP Header
                                     + 6 * 8 // NTP Payload
@@ -615,9 +639,10 @@ module nts_parser_ctrl #(
   reg          addr_match_ipv6_new;
   reg          addr_match_ipv6_reg;
 
-  reg                   config_ctrl_we;
-  reg [CONFIG_BITS-1:0] config_ctrl_new;
-  reg [CONFIG_BITS-1:0] config_ctrl_reg;
+  reg                    config_ctrl_we;
+  reg  [CONFIG_BITS-1:0] config_ctrl_new;
+  reg  [CONFIG_BITS-1:0] config_ctrl_reg;
+  wire [CONFIG_BITS-1:0] config_ctrl_default;
 
   reg          config_udp_port_ntp0_we;
   reg   [15:0] config_udp_port_ntp0_new;
@@ -669,6 +694,10 @@ module nts_parser_ctrl #(
   reg                         icmp_state_we;
   reg   [BITS_ICMP_STATE-1:0] icmp_state_new;
   reg   [BITS_ICMP_STATE-1:0] icmp_state_reg;
+
+  reg                            basic_ntp_state_we;
+  reg [BITS_BASIC_NTP_STATE-1:0] basic_ntp_state_new;
+  reg [BITS_BASIC_NTP_STATE-1:0] basic_ntp_state_reg;
 
   reg                         nts_state_we;
   reg    [BITS_NTS_STATE-1:0] nts_state_new;
@@ -838,6 +867,9 @@ module nts_parser_ctrl #(
   reg                   [63:0] response_data_reg;
   reg                          response_done_new;
   reg                          response_done_reg;
+  reg                          response_packet_total_length_we;
+  reg       [ADDR_WIDTH+3-1:0] response_packet_total_length_new;
+  reg       [ADDR_WIDTH+3-1:0] response_packet_total_length_reg;
 
   reg                          timestamp_record_receive_timestamp_we;
   reg                          timestamp_record_receive_timestamp_new;
@@ -900,6 +932,9 @@ module nts_parser_ctrl #(
 
   reg                          protocol_detect_nts_new;
   reg                          protocol_detect_nts_reg;
+
+  reg                          protocol_detect_ntp_new;
+  reg                          protocol_detect_ntp_reg;
 
   reg                          detect_unique_identifier_reg;
   reg                          detect_nts_cookie_reg;
@@ -1038,9 +1073,6 @@ module nts_parser_ctrl #(
   reg                    tx_icmp_payload_length_we;
   reg [ADDR_WIDTH+3-1:0] tx_icmp_payload_length_new;
   reg [ADDR_WIDTH+3-1:0] tx_icmp_payload_length_reg;
-  reg                    tx_icmp_total_length_we;
-  reg [ADDR_WIDTH+3-1:0] tx_icmp_total_length_new;
-  reg [ADDR_WIDTH+3-1:0] tx_icmp_total_length_reg;
   reg                    tx_icmp_tmpblock_we;
   reg             [63:0] tx_icmp_tmpblock_new;
   reg             [63:0] tx_icmp_tmpblock_reg;
@@ -1107,6 +1139,10 @@ module nts_parser_ctrl #(
 
   assign cookies_to_emit = 1 + { 1'b0, nts_valid_placeholders_reg };
 
+  assign config_ctrl_default[CONFIG_BIT_VERIFY_IP_CHECKSUMS] = DEFAULT_VERIFY_IP_CHECKSUM;
+  assign config_ctrl_default[CONFIG_BIT_SUPPORT_NTS]         = DEFAULT_SUPPORT_NTS;
+  assign config_ctrl_default[CONFIG_BIT_SUPPORT_NTP]         = DEFAULT_SUPPORT_NTP;
+
   assign detect_arp      = ipdecode_ethernet_protocol_reg == E_TYPE_ARP;
 
   assign detect_arp_good = ipdecode_ethernet_protocol_reg == E_TYPE_ARP &&
@@ -1155,7 +1191,7 @@ module nts_parser_ctrl #(
 
   assign o_timestamp_kiss_of_death            = nts_kiss_of_death_reg;
   assign o_timestamp_record_receive_timestamp = timestamp_record_receive_timestamp_reg;
-  assign o_timestamp_transmit                 = (nts_state_reg == NTS_S_TIMESTAMP);
+  assign o_timestamp_transmit                 = (nts_state_reg == NTS_S_TIMESTAMP) || (basic_ntp_state_reg == BASIC_NTP_S_TIMESTAMP);
   assign o_timestamp_origin_timestamp         = timestamp_origin_timestamp_reg;
   assign o_timestamp_version_number           = timestamp_version_number_reg;
   assign o_timestamp_poll                     = timestamp_poll_reg;
@@ -1188,8 +1224,14 @@ module nts_parser_ctrl #(
   assign o_crypto_op_c2s_verify_auth   = crypto_op_c2s_verify_auth;
   assign o_crypto_op_s2c_generate_auth = crypto_op_s2c_generate_auth;
 
-  assign o_muxctrl_timestamp_ipv4 = ((nts_state_reg == NTS_S_TIMESTAMP) || (nts_state_reg == NTS_S_TIMESTAMP_WAIT)) && (detect_ipv4) && (detect_ipv4_bad=='b0);
-  assign o_muxctrl_timestamp_ipv6 = ((nts_state_reg == NTS_S_TIMESTAMP) || (nts_state_reg == NTS_S_TIMESTAMP_WAIT)) && (detect_ipv6);
+  wire muxctrl_timestamp;
+  assign muxctrl_timestamp =  (nts_state_reg == NTS_S_TIMESTAMP)
+                           || (nts_state_reg == NTS_S_TIMESTAMP_WAIT)
+                           || (basic_ntp_state_reg == BASIC_NTP_S_TIMESTAMP)
+                           || (basic_ntp_state_reg == BASIC_NTP_S_TIMESTAMP_WAIT);
+
+  assign o_muxctrl_timestamp_ipv4 = muxctrl_timestamp && detect_ipv4;
+  assign o_muxctrl_timestamp_ipv6 = muxctrl_timestamp && detect_ipv6;
 
   assign o_muxctrl_crypto = muxctrl_crypto;
 
@@ -1935,7 +1977,9 @@ module nts_parser_ctrl #(
 
       api_dummy_reg              <= 32'h64_75_4d_79; //"duMy"
 
-      config_ctrl_reg             <= 1'b1; //Default on: CONFIG_BIT_VERIFY_IP_CHECKSUMS
+      basic_ntp_state_reg <= BASIC_NTP_S_IDLE;
+
+      config_ctrl_reg             <= config_ctrl_default;
       config_udp_port_ntp0_reg    <= UDP_PORT_NTP;
       config_udp_port_ntp1_reg    <= UDP_PORT_NTS;
 
@@ -2024,11 +2068,13 @@ module nts_parser_ctrl #(
       protocol_detect_ip6ns_reg         <= 'b0;
       protocol_detect_ip6traceroute_reg <= 'b0;
 
+      protocol_detect_ntp_reg       <= 'b0;
       protocol_detect_nts_reg       <= 'b0;
 
       response_en_reg   <= 'b0;
       response_data_reg <= 'b0;
       response_done_reg <= 'b0;
+      response_packet_total_length_reg   <= 0;
 
       state_reg                     <= 'b0;
       state_previous_reg            <= 'b0;
@@ -2049,7 +2095,6 @@ module nts_parser_ctrl #(
 
       tx_icmp_csum_bytes_reg     <= 0;
       tx_icmp_payload_length_reg <= 0;
-      tx_icmp_total_length_reg   <= 0;
       tx_icmp_tmpblock_reg       <= 0;
 
       tx_icmpv4_ip_checksum_reg <= 0;
@@ -2193,6 +2238,9 @@ module nts_parser_ctrl #(
 
       addr_match_ipv4_reg <= addr_match_ipv4_new;
       addr_match_ipv6_reg <= addr_match_ipv6_new;
+
+      if (basic_ntp_state_we)
+        basic_ntp_state_reg <= basic_ntp_state_new;
 
       if (api_dummy_we)
         api_dummy_reg <= api_dummy_new;
@@ -2396,11 +2444,15 @@ module nts_parser_ctrl #(
       protocol_detect_ip6ns_reg         <= protocol_detect_ip6ns_new;
       protocol_detect_ip6traceroute_reg <= protocol_detect_ip6traceroute_new;
 
+      protocol_detect_ntp_reg <= protocol_detect_ntp_new;
       protocol_detect_nts_reg <= protocol_detect_nts_new;
 
       response_en_reg   <= response_en_new;
       response_data_reg <= response_data_new;
       response_done_reg <= response_done_new;
+
+      if (response_packet_total_length_we)
+        response_packet_total_length_reg <= response_packet_total_length_new;
 
       if (state_we) begin
         state_reg <= state_new;
@@ -2432,9 +2484,6 @@ module nts_parser_ctrl #(
 
       if (tx_icmp_payload_length_we)
         tx_icmp_payload_length_reg <= tx_icmp_payload_length_new;
-
-      if (tx_icmp_total_length_we)
-        tx_icmp_total_length_reg <= tx_icmp_total_length_new;
 
       if (tx_icmp_tmpblock_we)
         tx_icmp_tmpblock_reg <= tx_icmp_tmpblock_new;;
@@ -3419,12 +3468,16 @@ module nts_parser_ctrl #(
   always @*
   begin : tx_response
 
+    reg respond_ip_udp;
+
+    respond_ip_udp = 0;
+
     response_en_new = 0;
     response_data_new = 0;
     response_done_new = 0;
 
-    tx_icmp_total_length_we = 0;
-    tx_icmp_total_length_new = 0;
+    response_packet_total_length_we = 0;
+    response_packet_total_length_new = 0;
     tx_icmp_csum_bytes_we = 0;
     tx_icmp_csum_bytes_new = 0;
     tx_icmp_payload_length_we = 0;
@@ -3450,6 +3503,7 @@ module nts_parser_ctrl #(
     tx_header_ipv4_index_new = 0;
     tx_header_ipv6_index_we = 0;
     tx_header_ipv6_index_new = 0;
+    //TODO Implement vanilla NTP
 
     case (state_reg)
       STATE_SELECT_PROTOCOL_HANDLER:
@@ -3476,8 +3530,8 @@ module nts_parser_ctrl #(
           // ----- IPV6 Neighbor Discovery / Advertisement ----
           ICMP_S_V6_ND_INIT:
             begin
-              tx_icmp_total_length_we    = 1;
-              tx_icmp_total_length_new   = 86; //14 byte ethernet, 40 byte IPv6, 32 byte ICMPv6
+              response_packet_total_length_we    = 1;
+              response_packet_total_length_new   = 86; //14 byte ethernet, 40 byte IPv6, 32 byte ICMPv6
               tx_icmp_payload_length_we  = 1;
               tx_icmp_payload_length_new = 32;
               tx_icmp_csum_bytes_we      = 1;
@@ -3501,8 +3555,8 @@ module nts_parser_ctrl #(
           // ----- IPV6 Ping (Echo Reply) ----
           ICMP_S_V6_ECHO_INIT:
             begin
-              tx_icmp_total_length_we    = 1;
-              tx_icmp_total_length_new   = memory_bound_reg;
+              response_packet_total_length_we    = 1;
+              response_packet_total_length_new   = memory_bound_reg;
               tx_icmp_payload_length_we  = 1;
               tx_icmp_payload_length_new = memory_bound_reg - ( HEADER_LENGTH_ETHERNET + HEADER_LENGTH_IPV6 );
               tx_icmp_csum_bytes_we      = 1;
@@ -3524,19 +3578,19 @@ module nts_parser_ctrl #(
           ICMP_S_V6_TRACE_INIT:
             begin
               if (ipdecode_ip6_payload_length_reg > IPV6_MTU_MIN - HEADER_LENGTH_IPV6 - ICMP_V6_UNREACHABLE_INITIAL_BYTES) begin
-                tx_icmp_total_length_we    = 1;
-                tx_icmp_total_length_new   = IPV6_MTU_MIN + HEADER_LENGTH_ETHERNET;
+                response_packet_total_length_we    = 1;
+                response_packet_total_length_new   = IPV6_MTU_MIN + HEADER_LENGTH_ETHERNET;
                 tx_icmp_payload_length_we  = 1;
                 tx_icmp_payload_length_new = IPV6_MTU_MIN - HEADER_LENGTH_IPV6;
                 tx_icmp_csum_bytes_we      = 1;
                 tx_icmp_csum_bytes_new     = IPV6_MTU_MIN - 8 /* IPv6 not in csum */;
               end else begin
-                tx_icmp_total_length_we    = 1;
-                tx_icmp_total_length_new   = HEADER_LENGTH_IPV6 + ICMP_V6_UNREACHABLE_INITIAL_BYTES + memory_bound_reg;
+                response_packet_total_length_we    = 1;
+                response_packet_total_length_new   = HEADER_LENGTH_IPV6 + ICMP_V6_UNREACHABLE_INITIAL_BYTES + memory_bound_reg;
                 tx_icmp_payload_length_we  = 1;
                 tx_icmp_payload_length_new = HEADER_LENGTH_IPV6 + ICMP_V6_UNREACHABLE_INITIAL_BYTES + ipdecode_ip6_payload_length_reg[ADDR_WIDTH+3-1:0];
                 tx_icmp_csum_bytes_we      = 1;
-                tx_icmp_csum_bytes_new     = tx_icmp_total_length_new - HEADER_LENGTH_ETHERNET - 8 /* IPv6 not in csum */;
+                tx_icmp_csum_bytes_new     = response_packet_total_length_new - HEADER_LENGTH_ETHERNET - 8 /* IPv6 not in csum */;
               end
               tx_icmp_tmpblock_we = 1;
               tx_icmp_tmpblock_new = tx_header_ethernet_ipv6_icmp_trace[
@@ -3563,8 +3617,8 @@ module nts_parser_ctrl #(
           // ----- IPV4 Ping (Echo Reply) ----
           ICMP_S_V4_ECHO_INIT:
             begin
-              tx_icmp_total_length_we       = 1;
-              tx_icmp_total_length_new      = memory_bound_reg;
+              response_packet_total_length_we       = 1;
+              response_packet_total_length_new      = memory_bound_reg;
               tx_icmpv4_ip_total_length_we  = 1;
               tx_icmpv4_ip_total_length_new = memory_bound_reg - HEADER_LENGTH_ETHERNET;
               tx_icmp_csum_bytes_we         = 1;
@@ -3584,8 +3638,8 @@ module nts_parser_ctrl #(
             end
           ICMP_S_V4_TRACE_INIT:
             begin
-              tx_icmp_total_length_we       = 1;
-              tx_icmp_total_length_new      = HEADER_LENGTH_ETHERNET + HEADER_LENGTH_IPV4 + ICMP_V4_UNREACHABLE_INITIAL_BYTES + ICMPV4_BYTES_TRACEROUTE;
+              response_packet_total_length_we       = 1;
+              response_packet_total_length_new      = HEADER_LENGTH_ETHERNET + HEADER_LENGTH_IPV4 + ICMP_V4_UNREACHABLE_INITIAL_BYTES + ICMPV4_BYTES_TRACEROUTE;
               tx_icmpv4_ip_total_length_we  = 1;
               tx_icmpv4_ip_total_length_new = HEADER_LENGTH_IPV4 + ICMP_V4_UNREACHABLE_INITIAL_BYTES + ICMPV4_BYTES_TRACEROUTE;
               tx_icmp_csum_bytes_we         = 1;
@@ -3622,29 +3676,46 @@ module nts_parser_ctrl #(
         end
       STATE_PROCESS_NTS:
         case (nts_state_reg)
-          NTS_S_WRITE_HEADER_IPV4_IPV6:
-            if (detect_ipv4) begin : emit_ipv4_headers
-              reg [6*64-1:0] header;
-              header = { tx_header_ethernet_ipv4_udp, 48'h0 };
-              if (response_done_reg == 1'b0) begin
-                tx_header_ipv4_index_we = 1;
-                tx_header_ipv4_index_new = tx_header_ipv4_index_reg - 1;
-                tx_response_helper( 1, header[ tx_header_ipv4_index_reg*64+:64 ], tx_header_ipv4_index_reg == 0 );
-              end
-            end
-            else if (detect_ipv6) begin : emit_ipv6_headers
-              reg [8*64-1:0] header;
-              header = { tx_header_ethernet_ipv6_udp, 16'h0 };
-              if (response_done_reg == 1'b0) begin
-                tx_header_ipv6_index_we = 1;
-                tx_header_ipv6_index_new = tx_header_ipv6_index_reg - 1;
-                tx_response_helper( 1, header[ tx_header_ipv6_index_reg*64+:64 ], tx_header_ipv6_index_reg == 0 );
-              end
-            end
+          NTS_S_WRITE_HEADER_IPV4_IPV6: respond_ip_udp = 1;
+          default: ;
+        endcase
+      STATE_PROCESS_NTP:
+        case (basic_ntp_state_reg)
+          BASIC_NTP_S_IDLE:
+            if (detect_ipv4) begin
+              response_packet_total_length_we  = 1;
+              response_packet_total_length_new = OFFSET_ETH_IPV4_DATA + UDP_LENGTH_NTP_VANILLA;
+            end else if (detect_ipv6) begin
+              response_packet_total_length_we  = 1;
+              response_packet_total_length_new = OFFSET_ETH_IPV6_DATA + UDP_LENGTH_NTP_VANILLA;
+           end
+          BASIC_NTP_S_WRITE_HEADER: respond_ip_udp = 1;
           default: ;
         endcase
       default: ;
     endcase
+
+    if (respond_ip_udp) begin
+      if (detect_ipv4) begin : emit_ipv4_headers
+        reg [6*64-1:0] header;
+        header = { tx_header_ethernet_ipv4_udp, 48'h0 };
+        if (response_done_reg == 1'b0) begin
+          tx_header_ipv4_index_we = 1;
+          tx_header_ipv4_index_new = tx_header_ipv4_index_reg - 1;
+          tx_response_helper( 1, header[ tx_header_ipv4_index_reg*64+:64 ], tx_header_ipv4_index_reg == 0 );
+        end
+      end
+      else if (detect_ipv6) begin : emit_ipv6_headers
+        reg [8*64-1:0] header;
+        header = { tx_header_ethernet_ipv6_udp, 16'h0 };
+        if (response_done_reg == 1'b0) begin
+          tx_header_ipv6_index_we = 1;
+          tx_header_ipv6_index_new = tx_header_ipv6_index_reg - 1;
+          tx_response_helper( 1, header[ tx_header_ipv6_index_reg*64+:64 ], tx_header_ipv6_index_reg == 0 );
+        end
+      end
+    end
+
   end
 
   //----------------------------------------------------------------
@@ -3677,11 +3748,17 @@ module nts_parser_ctrl #(
   always @*
   begin : tx_control
     reg tx_from_rx;
-    reg update_length_icmp;
+    reg responder_update_length;
+    reg udp_checksum_addr;
+    reg udp_checksum_datagram;
+    reg udp_checksum_reset;
     reg [15:0] nonce_length;
 
     tx_from_rx = 0;
-    update_length_icmp = 0;
+    responder_update_length = 0;
+    udp_checksum_addr = 0;
+    udp_checksum_datagram = 0;
+    udp_checksum_reset = 0;
 
     nonce_length = BYTES_AUTH_NONCE; //typecast from length undefined to 16bit
 
@@ -3708,7 +3785,7 @@ module nts_parser_ctrl #(
             end
           ICMP_S_V6_UPDATE_LENGTH:
             begin
-              update_length_icmp = 1;
+              responder_update_length = 1;
             end
           ICMP_S_V6_CSUM_RESET:
             begin : icmpv6_csum_reset
@@ -3742,7 +3819,7 @@ module nts_parser_ctrl #(
             end
           ICMP_S_V4_UPDATE_LENGTH:
             begin
-              update_length_icmp = 1;
+              responder_update_length = 1;
             end
           ICMP_S_V4_CSUM_RESET:
             begin
@@ -3789,18 +3866,9 @@ module nts_parser_ctrl #(
               tx_sum_reset = 1;
               tx_sum_reset_value = 16'h0011; //Static pseudo header. 00: Zero pre-padding. 0x11/17: UDP protocol.
             end
-          NTS_S_UDP_CHECKSUM_PS_SRCADDR:
-            begin
-              tx_sum_en = 1;
-              if (detect_ipv4) begin
-                tx_address = OFFSET_ETH_IPV4_SRCADDR;
-                tx_sum_bytes = 8; //4 byte src + 4 bytes dst
-              end else if (detect_ipv6) begin
-                tx_address = OFFSET_ETH_IPV6_SRCADDR;
-                tx_sum_bytes = 32; //16 byte src + 16 bytes dst
-              end
-            end
+          NTS_S_UDP_CHECKSUM_PS_SRCADDR: udp_checksum_addr = 1;
           NTS_S_UDP_CHECKSUM_PS_UDPLLEN:
+            //TODO: simplify by merging into NTS_S_UDP_CHECKSUM_RESET
             if (i_tx_sum_done) begin
               tx_sum_en = 1;
               if (detect_ipv4) begin
@@ -3812,21 +3880,12 @@ module nts_parser_ctrl #(
               end
             end
           NTS_S_UDP_CHECKSUM_DATAGRAM:
-            if (i_tx_sum_done) begin
-              tx_sum_en = 1;
-              tx_sum_bytes = tx_udp_length_reg[ADDR_WIDTH+3-1:0]; //TODO: breaks if address space > 16 bits
-              if (detect_ipv4) begin
-                tx_address = OFFSET_ETH_IPV4_UDP;
-              end else if (detect_ipv6) begin
-                tx_address = OFFSET_ETH_IPV6_UDP;
-              end
-            end
-          NTS_S_WRITE_NEW_UDP_CSUM:
-            begin
-              tx_control_update_udp_header();
-              //tx_write_data = 64'hF0F0_F0F0_F0F0;
-              //$display("%s:%0d UDP_CSUM: TX[%h (%0d)] = [%h]", `__FILE__, `__LINE__, tx_address, tx_address, tx_write_data);
-            end
+             begin
+               if (i_tx_sum_done) begin //TODO remove if() when removing NTS_S_UDP_CHECKSUM_PS_UDPLLEN
+                 udp_checksum_datagram = 1;
+               end
+             end
+          NTS_S_WRITE_NEW_UDP_CSUM: tx_control_update_udp_header();
           NTS_S_WRITE_NEW_IP_HEADER_0:
             if (detect_ipv4) begin
               tx_address = HEADER_LENGTH_ETHERNET;
@@ -3851,17 +3910,57 @@ module nts_parser_ctrl #(
             end
           default: ;
         endcase
+      STATE_PROCESS_NTP:
+        case (basic_ntp_state_reg)
+          BASIC_NTP_S_TX_UPDATE_LENGTH: responder_update_length = 1;
+          BASIC_NTP_S_UDP_CSUM_RESET: udp_checksum_reset = 1;
+          BASIC_NTP_S_UDP_CSUM_ISSUE_0: udp_checksum_addr = 1;
+          BASIC_NTP_S_UDP_CSUM_ISSUE_1:
+            if (i_tx_sum_done) begin
+              udp_checksum_datagram = 1;
+            end
+          BASIC_NTP_S_UDP_CSUM_UPDATE: tx_control_update_udp_header();
+          default: ;
+        endcase
       default: ;
     endcase
+
     if (tx_from_rx) begin
       tx_address    = copy_tx_addr_reg;
       tx_write_en   = i_access_port_rd_dv;
       tx_write_data = i_access_port_rd_data;
-      //$display("%s:%0d COPY: TX[%h (%0d)] = [%h]", `__FILE__, `__LINE__, tx_address, tx_address, tx_write_data);
     end
 
-    if (update_length_icmp) begin
-       tx_address       = tx_icmp_total_length_reg;
+    if (udp_checksum_reset) begin
+      tx_sum_reset = 1;
+      tx_sum_reset_value = 16'h0011 //Static pseudo header. 00: Zero pre-padding. 0x11/17: UDP protocol.
+                         + tx_udp_length_reg;
+    end
+
+    if (udp_checksum_addr) begin
+      if (detect_ipv4) begin
+        tx_sum_en = 1;
+        tx_address = OFFSET_ETH_IPV4_SRCADDR;
+        tx_sum_bytes = 8; //4 byte src + 4 bytes dst
+      end else if (detect_ipv6) begin
+        tx_sum_en = 1;
+        tx_address = OFFSET_ETH_IPV6_SRCADDR;
+        tx_sum_bytes = 32; //16 byte src + 16 bytes dst
+      end
+    end
+
+    if (udp_checksum_datagram) begin
+      tx_sum_en = 1;
+      tx_sum_bytes = tx_udp_length_reg[ADDR_WIDTH+3-1:0]; //TODO: breaks if address space > 16 bits
+      if (detect_ipv4) begin
+        tx_address = OFFSET_ETH_IPV4_UDP;
+      end else if (detect_ipv6) begin
+        tx_address = OFFSET_ETH_IPV6_UDP;
+      end
+    end
+
+    if (responder_update_length) begin
+       tx_address       = response_packet_total_length_reg;
        tx_update_length = 1;
     end
 
@@ -4711,6 +4810,92 @@ module nts_parser_ctrl #(
     endcase
   end
 
+  //----------------------------------------------------------------
+  // NTP Basic - Finite State Machine
+  //----------------------------------------------------------------
+
+  always @*
+  begin : FSM_NTP
+    basic_ntp_state_we = 0;
+    basic_ntp_state_new = 0;
+
+    case (basic_ntp_state_reg)
+      BASIC_NTP_S_IDLE:
+        case (state_reg)
+          STATE_PROCESS_NTP:
+            begin
+              basic_ntp_state_we = 1;
+              basic_ntp_state_new = BASIC_NTP_S_WRITE_HEADER;
+            end
+          default: ;
+        endcase
+      BASIC_NTP_S_WRITE_HEADER:
+        if (response_done_reg) begin
+          basic_ntp_state_we = 1;
+          basic_ntp_state_new = BASIC_NTP_S_TIMESTAMP;
+        end
+      BASIC_NTP_S_TIMESTAMP:
+        begin
+          basic_ntp_state_we = 1;
+          basic_ntp_state_new = BASIC_NTP_S_TIMESTAMP_WAIT;
+        end
+      BASIC_NTP_S_TIMESTAMP_WAIT:
+        if (i_timestamp_busy == 'b0) begin
+          basic_ntp_state_we = 1;
+          basic_ntp_state_new = BASIC_NTP_S_TX_UPDATE_LENGTH;
+        end
+      BASIC_NTP_S_TX_UPDATE_LENGTH:
+        begin
+          basic_ntp_state_we = 1;
+          basic_ntp_state_new = BASIC_NTP_S_UDP_CSUM_RESET;
+        end
+      BASIC_NTP_S_UDP_CSUM_RESET:
+        begin
+          basic_ntp_state_we = 1;
+          basic_ntp_state_new = BASIC_NTP_S_UDP_CSUM_ISSUE_0;
+        end
+      BASIC_NTP_S_UDP_CSUM_ISSUE_0:
+        begin
+          basic_ntp_state_we = 1;
+          basic_ntp_state_new = BASIC_NTP_S_UDP_CSUM_ISSUE_1;
+        end
+      BASIC_NTP_S_UDP_CSUM_ISSUE_1:
+        if (i_tx_sum_done) begin
+          basic_ntp_state_we = 1;
+          basic_ntp_state_new = BASIC_NTP_S_UDP_CSUM_DELAY;
+        end
+      BASIC_NTP_S_UDP_CSUM_DELAY:
+        if (i_tx_sum_done) begin
+          basic_ntp_state_we = 1;
+          basic_ntp_state_new = BASIC_NTP_S_UDP_CSUM_UPDATE;
+        end
+      BASIC_NTP_S_UDP_CSUM_UPDATE:
+        begin
+          basic_ntp_state_we = 1;
+          basic_ntp_state_new = BASIC_NTP_S_UDP_CSUM_UPDATE_DELAY;
+        end
+      BASIC_NTP_S_UDP_CSUM_UPDATE_DELAY:
+        if (i_tx_busy == 1'b0) begin
+          basic_ntp_state_we = 1;
+          basic_ntp_state_new = BASIC_NTP_S_TRANSMIT_PACKET;
+        end
+      BASIC_NTP_S_ERROR:
+        begin
+          basic_ntp_state_we = 1;
+          basic_ntp_state_new = BASIC_NTP_S_IDLE;
+        end
+      BASIC_NTP_S_TRANSMIT_PACKET:
+        begin
+          basic_ntp_state_we = 1;
+          basic_ntp_state_new = BASIC_NTP_S_IDLE;
+        end
+      default:
+        begin
+          basic_ntp_state_we = 1;
+          basic_ntp_state_new = BASIC_NTP_S_ERROR;
+        end
+    endcase
+  end
 
   //----------------------------------------------------------------
   // Finite State Machine
@@ -4847,9 +5032,12 @@ module nts_parser_ctrl #(
           default: ;
         endcase
       STATE_SELECT_IPV4_HANDLER:
-        if (protocol_detect_nts_reg) begin
+        if (protocol_detect_nts_reg && config_ctrl_reg[CONFIG_BIT_SUPPORT_NTS]) begin
           state_we  = 'b1;
           state_new = STATE_PROCESS_NTS;
+        end else if (protocol_detect_ntp_reg && config_ctrl_reg[CONFIG_BIT_SUPPORT_NTP]) begin
+          state_we  = 'b1;
+          state_new = STATE_PROCESS_NTP;
         end else if (protocol_detect_ip4echo_reg) begin
           if (icmp_state_reg == ICMP_S_IDLE) begin
             state_we  = 'b1;
@@ -4894,9 +5082,12 @@ module nts_parser_ctrl #(
           default: ;
         endcase
       STATE_SELECT_IPV6_HANDLER:
-        if (protocol_detect_nts_reg) begin
+        if (protocol_detect_nts_reg && config_ctrl_reg[CONFIG_BIT_SUPPORT_NTS]) begin
           state_we  = 'b1;
           state_new = STATE_PROCESS_NTS;
+        end else if (protocol_detect_ntp_reg && config_ctrl_reg[CONFIG_BIT_SUPPORT_NTP]) begin
+          state_we  = 'b1;
+          state_new = STATE_PROCESS_NTP;
         end else if (protocol_detect_icmpv6_reg) begin
           if (icmp_state_reg == ICMP_S_IDLE) begin
             state_we = 'b1;
@@ -4942,6 +5133,20 @@ module nts_parser_ctrl #(
               state_new = STATE_DROP_PACKET; //Clear buffers on error
             end
           NTS_S_TRANSMIT_PACKET:
+            begin
+              state_we  = 'b1;
+              state_new = STATE_TRANSFER_PACKET;
+            end
+          default: ;
+        endcase
+      STATE_PROCESS_NTP:
+        case (basic_ntp_state_reg)
+          BASIC_NTP_S_ERROR:
+            begin
+              state_we  = 'b1;
+              state_new = STATE_DROP_PACKET; //Clear buffers on error
+            end
+          BASIC_NTP_S_TRANSMIT_PACKET:
             begin
               state_we  = 'b1;
               state_new = STATE_TRANSFER_PACKET;
@@ -5247,6 +5452,7 @@ module nts_parser_ctrl #(
   begin : protocol_detection
     reg traceroute_port_match;
     reg ntp_port_match;
+    reg ntp_length;
     reg nts_length;
     reg payload_length_sane_ipv4;
     reg payload_length_sane_ipv6;
@@ -5262,6 +5468,7 @@ module nts_parser_ctrl #(
     protocol_detect_ip6ns_new = 0;
     protocol_detect_ip6traceroute_new = 0;
 
+    protocol_detect_ntp_new = 0;
     protocol_detect_nts_new = 0;
 
     if (ipdecode_udp_port_dst_reg == config_udp_port_ntp0_reg) begin
@@ -5277,6 +5484,12 @@ module nts_parser_ctrl #(
       if (ipdecode_udp_port_dst_reg <= UDP_PORT_TR_LAST) begin
         traceroute_port_match = 1;
       end
+    end
+
+    if (ipdecode_udp_length_reg >= UDP_LENGTH_NTP_VANILLA) begin
+      ntp_length = 1;
+    end else begin
+      ntp_length = 0;
     end
 
     if (ipdecode_udp_length_reg >= UDP_LENGTH_NTS_MINIMUM) begin
@@ -5353,8 +5566,9 @@ module nts_parser_ctrl #(
               endcase
             IP_PROTO_UDP:
               if (udp_length_sane_ipv6) begin
-                if (ntp_port_match && nts_length) begin
-                  protocol_detect_nts_new = 1;
+                if (ntp_port_match) begin
+                  if (ntp_length) protocol_detect_ntp_new = 1;
+                  if (nts_length) protocol_detect_nts_new = 1;
                 end else if (traceroute_port_match) begin
                   protocol_detect_ip6traceroute_new = 1;
                 end
@@ -5370,8 +5584,9 @@ module nts_parser_ctrl #(
           case (ipdecode_ip4_protocol_reg)
             IP_PROTO_UDP:
               if (udp_length_sane_ipv4) begin
-                if (ntp_port_match && nts_length) begin
-                  protocol_detect_nts_new = 1;
+                if (ntp_port_match) begin
+                  if (ntp_length) protocol_detect_ntp_new = 1;
+                  if (nts_length) protocol_detect_nts_new = 1;
                 end else if (traceroute_port_match) begin
                   protocol_detect_ip4traceroute_new = 1;
                 end
@@ -5457,6 +5672,12 @@ module nts_parser_ctrl #(
 
   always @*
   begin : tx_ip_udp
+    reg reset;
+    reg update_udp_checksum;
+
+    reset = 0;
+    update_udp_checksum = 0;
+
     tx_ipv4_totlen_we = 0;
     tx_ipv4_totlen_new = 0;
     tx_udp_length_we = 0;
@@ -5464,35 +5685,64 @@ module nts_parser_ctrl #(
     tx_udp_checksum_we = 0;
     tx_udp_checksum_new = 0;
 
-    case (nts_state_reg)
-      NTS_S_IDLE:
-        begin
-          tx_ipv4_totlen_we = 1;  //zeroize
-          tx_udp_length_we  = 1;  //zeroize
-          tx_udp_checksum_we = 1; //zeroise
-        end
-      NTS_S_TX_UPDATE_LENGTH:
-        begin
-          tx_udp_length_we = 1;
-          tx_udp_length_new [15:ADDR_WIDTH+3] = 0;
-          tx_udp_length_new[ADDR_WIDTH+3-1:0] = copy_tx_addr_reg;
-          if (detect_ipv4) begin
-            tx_ipv4_totlen_we = 1;
-            tx_ipv4_totlen_new [15:ADDR_WIDTH+3] = 0;
-            tx_ipv4_totlen_new[ADDR_WIDTH+3-1:0] = copy_tx_addr_reg;
-            tx_ipv4_totlen_new = tx_ipv4_totlen_new - HEADER_LENGTH_ETHERNET;
-            tx_udp_length_new  = tx_udp_length_new - HEADER_LENGTH_ETHERNET - HEADER_LENGTH_IPV4;
-          end else if (detect_ipv6) begin
-            tx_udp_length_new = tx_udp_length_new - HEADER_LENGTH_ETHERNET - HEADER_LENGTH_IPV6;
-          end
-        end
-      NTS_S_UDP_CHECKSUM_WAIT:
-        if (i_tx_sum_done) begin
-          tx_udp_checksum_we = 1;
-          tx_udp_checksum_new = ~ i_tx_sum;
-        end
+    case (state_reg)
+      STATE_PROCESS_NTS:
+        case (nts_state_reg)
+          NTS_S_IDLE: reset = 1;
+          NTS_S_TX_UPDATE_LENGTH:
+            begin
+              tx_udp_length_we = 1;
+              tx_udp_length_new [15:ADDR_WIDTH+3] = 0;
+              tx_udp_length_new[ADDR_WIDTH+3-1:0] = copy_tx_addr_reg;
+              if (detect_ipv4) begin
+                tx_ipv4_totlen_we = 1;
+                tx_ipv4_totlen_new [15:ADDR_WIDTH+3] = 0;
+                tx_ipv4_totlen_new[ADDR_WIDTH+3-1:0] = copy_tx_addr_reg;
+                tx_ipv4_totlen_new = tx_ipv4_totlen_new - HEADER_LENGTH_ETHERNET;
+                tx_udp_length_new  = tx_udp_length_new - HEADER_LENGTH_ETHERNET - HEADER_LENGTH_IPV4;
+              end else if (detect_ipv6) begin
+                tx_udp_length_new = tx_udp_length_new - HEADER_LENGTH_ETHERNET - HEADER_LENGTH_IPV6;
+              end
+            end
+          NTS_S_UDP_CHECKSUM_WAIT: update_udp_checksum = 1;
+          default: ;
+        endcase
+
+      STATE_PROCESS_NTP:
+        case (basic_ntp_state_reg)
+          BASIC_NTP_S_IDLE:
+            begin
+              tx_ipv4_totlen_we   = 1;
+              tx_ipv4_totlen_new  = HEADER_LENGTH_IPV4 + UDP_LENGTH_NTP_VANILLA;
+              tx_udp_length_we    = 1;
+              tx_udp_length_new   = UDP_LENGTH_NTP_VANILLA;
+              tx_udp_checksum_we  = 1;
+              tx_udp_checksum_new = 0;
+            end
+          BASIC_NTP_S_UDP_CSUM_DELAY: update_udp_checksum = 1;
+          default: ;
+        endcase
       default: ;
     endcase
+
+    if (reset) begin
+      //Zeroize
+      tx_ipv4_totlen_we   = 1;
+      tx_ipv4_totlen_new  = 0;
+      tx_udp_length_we    = 1;
+      tx_udp_length_new   = 0;
+      tx_udp_checksum_we  = 1;
+      tx_udp_checksum_new = 0;
+    end
+
+    if (update_udp_checksum) begin
+      if (i_tx_sum_done) begin
+        tx_udp_checksum_we = 1;
+        tx_udp_checksum_new = ~ i_tx_sum;
+        $display("%s:%0d: csum: %h before not: %h", `__FILE__, `__LINE__, (~i_tx_sum), i_tx_sum);
+      end
+    end
+
   end
 
   //----------------------------------------------------------------

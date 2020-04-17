@@ -87,9 +87,6 @@ module nts_top_tb;
   localparam [11:0] API_ADDR_KEYMEM_ERROR_COUNTER_MSB = API_ADDR_KEYMEM_BASE + 'h38;
   localparam [11:0] API_ADDR_KEYMEM_ERROR_COUNTER_LSB = API_ADDR_KEYMEM_BASE + 'h39;
 
-  localparam ADDR_KEY0_START    = 8'h40;
-  localparam ADDR_KEY0_END      = 8'h47;
-
   localparam [11:0] API_ADDR_NONCEGEN_BASE     = 12'h020;
   localparam [11:0] API_ADDR_NONCEGEN_CTRL     = API_ADDR_NONCEGEN_BASE + 'h08;
   localparam [11:0] API_ADDR_NONCEGEN_KEY0     = API_ADDR_NONCEGEN_BASE + 'h10;
@@ -251,6 +248,25 @@ module nts_top_tb;
 	128'h0000_0000_0002_b334_829a_0028_1b6a_4041,
 	128'h4243_4445_4647_4849_4a4b_4c4d_4e4f_5051,
 	112'h5253_5455_5657_5859_5a5b_5c5d_5e5f
+  };
+
+  localparam [719:0] PACKET_IPV4_VANILLA_NTP = {
+     128'h52_5a_2c_18_2e_80_98_03_9b_3c_1c_66_08_00_45_00,
+     128'h00_4c_30_6a_40_00_40_11_38_d1_c0_a8_28_01_c0_a8,
+     128'h28_14_e8_aa_00_7b_00_38_d1_af_e3_00_03_fa_00_01,
+     128'h00_00_00_01_00_00_00_00_00_00_00_00_00_00_00_00,
+     128'h00_00_00_00_00_00_00_00_00_00_00_00_00_00_00_00,
+      80'h00_00_e2_1c_b6_45_c2_f8_ba_73
+  };
+
+  localparam [879:0] PACKET_IPV6_VANILLA_NTP = {
+       128'h52_5a_2c_18_2e_80_98_03_9b_3c_1c_66_86_dd_60_0c, //  RZ,......<.f.Ý`.
+       128'hae_6c_00_38_11_40_fd_75_50_2f_e2_21_dd_cf_00_00, //  ®l.8.@ýuP/â!ÝÏ..
+       128'h00_00_00_00_00_01_fd_75_50_2f_e2_21_dd_cf_00_00, //  ......ýuP/â!ÝÏ..
+       128'h00_00_00_00_00_02_9c_f8_00_7b_00_38_1b_7a_e3_00, //  .......ø.{.8.zã.
+       128'h03_fa_00_01_00_00_00_01_00_00_00_00_00_00_00_00, //  .ú..............
+       128'h00_00_00_00_00_00_00_00_00_00_00_00_00_00_00_00, //  ................
+       112'h00_00_00_00_00_00_e2_1c_b7_0f_39_b1_7d_e3        //  ......â.·.9±}ã
   };
 
   localparam DEBUG           = 1;
@@ -526,6 +542,12 @@ module nts_top_tb;
   task parser_disable_checksum_checks ( input [11:0] engine );
   begin
     set_parser_ctrl_bit( engine, 5'h0, 1'b0 );
+  end
+  endtask
+
+  task parser_enable_ntp ( input [11:0] engine );
+  begin
+    set_parser_ctrl_bit( engine, 5'h2, 1'b1 );
   end
   endtask
 
@@ -818,6 +840,7 @@ module nts_top_tb;
         for (engine = 0; engine < ENGINES; engine = engine + 1) begin
           case (i)
             2: init_address_resolution( engine );
+            3: parser_enable_ntp( engine );
             5: install_key_256bit( engine, NTS_TEST_REQUEST_MASTER_KEY_ID_1, NTS_TEST_REQUEST_MASTER_KEY_1, 0 );
             6: install_key_256bit( engine, NTS_TEST_REQUEST_MASTER_KEY_ID_2, NTS_TEST_REQUEST_MASTER_KEY_2, 1 );
             7: install_key_256bit( engine, TRACE_MASTER_KEY_ID, TRACE_MASTER_KEY, 2 );
@@ -855,6 +878,8 @@ module nts_top_tb;
           send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2}, 2160, 0);
           send_packet({63344'b0, NTS_TEST_REQUEST_UI36_WITH_KEY_IPV4}, 2192, 0);
           send_packet({63184'b0, NTS_TEST_REQUEST_UI36_WITH_KEY_IPV6}, 2352, 0);
+          send_packet({64816'b0, PACKET_IPV4_VANILLA_NTP}, 720, 0);
+          send_packet({64656'b0, PACKET_IPV6_VANILLA_NTP}, 880, 0);
         end
       end
     end
@@ -916,6 +941,12 @@ module nts_top_tb;
       #20000;
       $display("%s:%0d: ICMPv4 Trace Route", `__FILE__, `__LINE__);
       send_packet({64944'b0, PACKET_IP4_UDP_TRACEROUTE}, 592, 0);
+      #20000;
+      $display("%s:%0d: IPv4 Vanilla NTP", `__FILE__, `__LINE__);
+      send_packet({64816'b0, PACKET_IPV4_VANILLA_NTP}, 720, 0);
+      #20000;
+      $display("%s:%0d: IPv6 Vanilla NTP", `__FILE__, `__LINE__);
+      send_packet({64656'b0, PACKET_IPV6_VANILLA_NTP}, 880, 0);
       #20000;
       begin : ping
         integer i;
@@ -1701,29 +1732,35 @@ module nts_top_tb;
   //----------------------------------------------------------------
 
   if (BENCHMARK) begin : benchmark
+
     reg [63:0] tick_counter;
+    reg [63:0] old_tick_counter_packet;
+
     reg [63:0] old_tick_counter;
     reg [63:0] old_tick_counter_crypto;
     reg [63:0] old_tick_counter_icmp;
-    reg [63:0] old_tick_counter_packet;
+    reg [63:0] old_tick_counter_ntp;
     reg  [4:0] old_parser_state;
     reg  [4:0] old_parser_state_crypto;
     reg  [5:0] old_parser_state_icmp;
+    reg  [3:0] old_parser_state_ntp;
 
-    always  @(posedge i_clk or posedge i_areset)
+    always @(posedge i_clk or posedge i_areset)
     begin
       if (i_areset) begin
         tick_counter <= 1;
-        old_tick_counter <= 1;
-        old_tick_counter_crypto <= 1;
-        old_tick_counter_icmp <= 1;
-        old_tick_counter_packet <= 1;
-        old_parser_state <= 0;
-        old_parser_state_crypto <= 0;
-        old_parser_state_icmp <= 0;
       end else begin
         tick_counter <= tick_counter + 1;
+      end
+    end
 
+    always @(posedge i_clk or posedge i_areset)
+    begin
+      if (i_areset) begin
+        old_tick_counter_packet <= 1;
+        old_tick_counter <= 1;
+        old_parser_state <= 0;
+      end else begin
         if (old_parser_state == 0)
           old_tick_counter_packet <= tick_counter;
 
@@ -1737,6 +1774,15 @@ module nts_top_tb;
           if (dut.genblk1[0].engine.parser.state_reg == 0)
             $display("%s:%0d BENCHMARK: Packet took %0d ticks to process", `__FILE__, `__LINE__, tick_counter - old_tick_counter_packet);
         end
+      end
+    end
+
+    always @(posedge i_clk or posedge i_areset)
+    begin
+      if (i_areset) begin
+        old_tick_counter_crypto <= 1;
+        old_parser_state_crypto <= 0;
+      end else begin
 
         if (old_parser_state_crypto != dut.genblk1[0].engine.parser.crypto_fsm_reg) begin
           old_tick_counter_crypto <= tick_counter;
@@ -1744,6 +1790,15 @@ module nts_top_tb;
           $display("%s:%0d BENCHMARK: dut.genblk1[0].engine.parser.crypto_fsm_reg %h -> %h (hex): %0d ticks", `__FILE__, `__LINE__,
             old_parser_state_crypto, dut.genblk1[0].engine.parser.crypto_fsm_reg, tick_counter - old_tick_counter_crypto);
         end
+      end
+    end
+
+    always @(posedge i_clk or posedge i_areset)
+    begin
+      if (i_areset) begin
+        old_tick_counter_icmp <= 1;
+        old_parser_state_icmp <= 0;
+      end else begin
 
         if (old_parser_state_icmp != dut.genblk1[0].engine.parser.icmp_state_reg) begin
           old_tick_counter_icmp <= tick_counter;
@@ -1751,10 +1806,24 @@ module nts_top_tb;
           $display("%s:%0d BENCHMARK: dut.genblk1[0].engine.parser.icmp_state_reg %h -> %h (hex): %0d ticks", `__FILE__, `__LINE__,
             old_parser_state_icmp, dut.genblk1[0].engine.parser.icmp_state_reg, tick_counter - old_tick_counter_icmp);
         end
-
       end
     end
-  end
 
+    always @(posedge i_clk or posedge i_areset)
+    begin
+      if (i_areset) begin
+        old_tick_counter_ntp <= 1;
+        old_parser_state_ntp <= 0;
+      end else begin
+        if (old_parser_state_ntp != dut.genblk1[0].engine.parser.basic_ntp_state_reg) begin
+          old_tick_counter_ntp <= tick_counter;
+          old_parser_state_ntp <= dut.genblk1[0].engine.parser.basic_ntp_state_reg;
+          $display("%s:%0d BENCHMARK: dut.genblk1[0].engine.parser.basic_ntp_state_reg %h -> %h (hex): %0d ticks", `__FILE__, `__LINE__,
+            old_parser_state_ntp, dut.genblk1[0].engine.parser.basic_ntp_state_reg, tick_counter - old_tick_counter_ntp);
+        end
+      end
+    end
+
+  end
 
 endmodule

@@ -30,7 +30,7 @@
 
 module nts_api_tb;
   parameter verbose = 0;
-  localparam PORTS = 6;
+  localparam PORTS = 7;
 
 
   reg         i_clk;
@@ -64,7 +64,10 @@ module nts_api_tb;
   wire [31:0] i_internal_debug_api_read_data;
 
   wire        o_internal_parser_api_cs;
-  reg  [31:0] i_internal_parser_api_read_data;
+  reg  [31:0] i_internal_parser_api_read_data; //Reg because much more advanced test bench model on parser
+
+  wire        o_internal_ntpauth_keymem_api_cs;
+  wire [31:0] i_internal_ntpauth_keymem_api_read_data;
 
   wire [PORTS-1:0]  cs;
 
@@ -106,7 +109,10 @@ module nts_api_tb;
     .i_internal_debug_api_read_data(i_internal_debug_api_read_data),
 
     .o_internal_parser_api_cs(o_internal_parser_api_cs),
-    .i_internal_parser_api_read_data(i_internal_parser_api_read_data)
+    .i_internal_parser_api_read_data(i_internal_parser_api_read_data),
+
+    .o_internal_ntpauth_keymem_api_cs(o_internal_ntpauth_keymem_api_cs),
+    .i_internal_ntpauth_keymem_api_read_data(i_internal_ntpauth_keymem_api_read_data)
   );
 
   //----------------------------------------------------------------
@@ -182,6 +188,21 @@ module nts_api_tb;
       end
     end
 
+    api(1, 1, 12'h300, 'hE);
+    `assert( o_external_api_read_data_valid === 1'b1 );
+    `assert( o_external_api_read_data == 32'h0 );
+    #10 `assert( o_external_api_read_data_valid === 1'b0 );
+
+    api(1, 0, 12'h300, 'hf001);
+    `assert( o_external_api_read_data_valid === 1'b1 );
+    `assert( o_external_api_read_data == 32'h0F000000 );
+    #10 `assert( o_external_api_read_data_valid === 1'b0 );
+
+    api(1, 0, 12'h333, 'hf001);
+    `assert( o_external_api_read_data_valid === 1'b1 );
+    `assert( o_external_api_read_data == 32'h0F000033 );
+    #10 `assert( o_external_api_read_data_valid === 1'b0 );
+
     $display("Test end %s:%0d ", `__FILE__, `__LINE__);
     $finish;
   end
@@ -195,8 +216,9 @@ module nts_api_tb;
   assign      i_internal_cookie_api_read_data = { 8'h0C, 7'h0, o_internal_api_we, i_external_api_write_data[7:0], o_internal_api_address };
   assign      i_internal_keymem_api_read_data = { 8'h0D, 7'h0, o_internal_api_we, i_external_api_write_data[7:0], o_internal_api_address };
   assign      i_internal_debug_api_read_data  = { 8'h0E, 7'h0, o_internal_api_we, i_external_api_write_data[7:0], o_internal_api_address };
+  assign      i_internal_ntpauth_keymem_api_read_data  = { 8'h0F, 7'h0, o_internal_api_we, i_external_api_write_data[7:0], o_internal_api_address };
 
-  assign      cs = { o_internal_engine_api_cs, o_internal_clock_api_cs, o_internal_cookie_api_cs, o_internal_keymem_api_cs, o_internal_debug_api_cs, o_internal_parser_api_cs };
+  assign      cs = { o_internal_engine_api_cs, o_internal_clock_api_cs, o_internal_cookie_api_cs, o_internal_keymem_api_cs, o_internal_debug_api_cs, o_internal_parser_api_cs, o_internal_ntpauth_keymem_api_cs };
 
   //----------------------------------------------------------------
   // Testbench model: Parser register write

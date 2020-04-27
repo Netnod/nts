@@ -40,7 +40,9 @@ module nts_api #(
   parameter [11:0] ADDR_DEBUG_BASE  = 12'h180,
   parameter [11:0] ADDR_DEBUG_STOP  = 12'h1F0,
   parameter [11:0] ADDR_PARSER_BASE = 12'h200,
-  parameter [11:0] ADDR_PARSER_STOP = 12'h2FF
+  parameter [11:0] ADDR_PARSER_STOP = 12'h2FF,
+  parameter [11:0] ADDR_NTPAUTH_KEYMEM_BASE = 12'h300,
+  parameter [11:0] ADDR_NTPAUTH_KEYMEM_STOP = 12'h3FF
 ) (
 
   input  wire        i_clk,
@@ -74,7 +76,10 @@ module nts_api #(
   input  wire [31:0] i_internal_debug_api_read_data,
 
   output wire        o_internal_parser_api_cs,
-  input  wire [31:0] i_internal_parser_api_read_data
+  input  wire [31:0] i_internal_parser_api_read_data,
+
+  output wire        o_internal_ntpauth_keymem_api_cs,
+  input  wire [31:0] i_internal_ntpauth_keymem_api_read_data
 );
 
   //----------------------------------------------------------------
@@ -108,6 +113,7 @@ module nts_api #(
   reg        p1_cs_keymem_reg;
   reg        p1_cs_debug_reg;
   reg        p1_cs_parser_reg;
+  reg        p1_cs_ntpauth_keymem_reg;
 
   //----------------------------------------------------------------
   // Pipeline stage 2. Capture API endpoint read_data.
@@ -121,12 +127,14 @@ module nts_api #(
   reg        p2_cs_keymem_reg;
   reg        p2_cs_debug_reg;
   reg        p2_cs_parser_reg;
+  reg        p2_cs_ntpauth_keymem_reg;
   reg [31:0] p2_data_engine_reg;
   reg [31:0] p2_data_clock_reg;
   reg [31:0] p2_data_cookie_reg;
   reg [31:0] p2_data_keymem_reg;
   reg [31:0] p2_data_debug_reg;
   reg [31:0] p2_data_parser_reg;
+  reg [31:0] p2_data_ntpauth_keymem_reg;
 
   //Pipleline stage 2 helper wires. Comintatorial logic, does not synthesis to wire registers.
   reg [7:0] addr_calculated;
@@ -136,6 +144,7 @@ module nts_api #(
   reg       select_keymem;
   reg       select_debug;
   reg       select_parser;
+  reg       select_ntpauth_keymem;
 
   //----------------------------------------------------------------
   // Pipeline stage 3. Mux p2_data_*_reg into p3_api_read_data_reg
@@ -159,6 +168,7 @@ module nts_api #(
   assign o_internal_keymem_api_cs  = p1_cs_keymem_reg;
   assign o_internal_debug_api_cs   = p1_cs_debug_reg;
   assign o_internal_parser_api_cs  = p1_cs_parser_reg;
+  assign o_internal_ntpauth_keymem_api_cs  = p1_cs_ntpauth_keymem_reg;
 
   assign o_busy = busy_reg;
 
@@ -207,6 +217,7 @@ module nts_api #(
       p1_cs_keymem_reg      <= 0;
       p1_cs_debug_reg       <= 0;
       p1_cs_parser_reg      <= 0;
+      p1_cs_ntpauth_keymem_reg      <= 0;
 
       p2_api_cs_reg      <= 0;
       p2_api_we_reg      <= 0;
@@ -216,12 +227,14 @@ module nts_api #(
       p2_cs_keymem_reg   <= 0;
       p2_cs_debug_reg    <= 0;
       p2_cs_parser_reg   <= 0;
+      p2_cs_ntpauth_keymem_reg   <= 0;
       p2_data_engine_reg <= 0;
       p2_data_clock_reg  <= 0;
       p2_data_cookie_reg <= 0;
       p2_data_keymem_reg <= 0;
       p2_data_debug_reg  <= 0;
       p2_data_parser_reg <= 0;
+      p2_data_ntpauth_keymem_reg <= 0;
 
       p3_api_read_data_reg       <= 0;
       p3_api_read_data_valid_reg <= 0;
@@ -248,6 +261,7 @@ module nts_api #(
       p1_cs_keymem_reg      <= p0_api_cs_reg && select_keymem;
       p1_cs_debug_reg       <= p0_api_cs_reg && select_debug;
       p1_cs_parser_reg      <= p0_api_cs_reg && select_parser;
+      p1_cs_ntpauth_keymem_reg      <= p0_api_cs_reg && select_ntpauth_keymem;
 
       // Pipeline stage 2: capture API endpoints read_data
 
@@ -259,12 +273,14 @@ module nts_api #(
       p2_cs_keymem_reg   <= p1_cs_keymem_reg;
       p2_cs_debug_reg    <= p1_cs_debug_reg;
       p2_cs_parser_reg   <= p1_cs_parser_reg;
+      p2_cs_ntpauth_keymem_reg   <= p1_cs_ntpauth_keymem_reg;
       p2_data_engine_reg <= i_internal_engine_api_read_data;
       p2_data_clock_reg  <= i_internal_clock_api_read_data;
       p2_data_cookie_reg <= i_internal_cookie_api_read_data;
       p2_data_keymem_reg <= i_internal_keymem_api_read_data;
       p2_data_debug_reg  <= i_internal_debug_api_read_data;
       p2_data_parser_reg <= i_internal_parser_api_read_data;
+      p2_data_ntpauth_keymem_reg <= i_internal_ntpauth_keymem_api_read_data;
 
       // Pipeline stage 3: output results
 
@@ -294,6 +310,7 @@ module nts_api #(
     select_keymem = 0;
     select_debug = 0;
     select_parser = 0;
+    select_ntpauth_keymem = 0;
 
     if (addr <= ADDR_ENGINE_STOP) begin
       select_engine = 1;
@@ -313,6 +330,9 @@ module nts_api #(
     end else if ((addr >= ADDR_PARSER_BASE) && (addr <= ADDR_PARSER_STOP)) begin
       select_parser = 1;
       addr_offset = ADDR_PARSER_BASE;
+    end else if ((addr >= ADDR_NTPAUTH_KEYMEM_BASE) && (addr <= ADDR_NTPAUTH_KEYMEM_STOP)) begin
+      select_ntpauth_keymem = 1;
+      addr_offset = ADDR_NTPAUTH_KEYMEM_BASE;
     end
 
     addr_tmp = addr - addr_offset;
@@ -330,22 +350,24 @@ module nts_api #(
 
   always @*
   begin : pipeline3_mux
-    reg [5:0] mux_ctrl;
+    reg [6:0] mux_ctrl;
     p3_api_read_data_new = 0;
     mux_ctrl = { p2_cs_engine_reg,
                  p2_cs_clock_reg,
                  p2_cs_cookie_reg,
                  p2_cs_keymem_reg,
                  p2_cs_debug_reg,
-                 p2_cs_parser_reg };
+                 p2_cs_parser_reg,
+                 p2_cs_ntpauth_keymem_reg };
     if (p2_api_cs_reg && p2_api_we_reg == 'b0) begin
       case (mux_ctrl)
-        6'b100_000: p3_api_read_data_new = p2_data_engine_reg;
-        6'b010_000: p3_api_read_data_new = p2_data_clock_reg;
-        6'b001_000: p3_api_read_data_new = p2_data_cookie_reg;
-        6'b000_100: p3_api_read_data_new = p2_data_keymem_reg;
-        6'b000_010: p3_api_read_data_new = p2_data_debug_reg;
-        6'b000_001: p3_api_read_data_new = p2_data_parser_reg;
+        7'b100_0000: p3_api_read_data_new = p2_data_engine_reg;
+        7'b010_0000: p3_api_read_data_new = p2_data_clock_reg;
+        7'b001_0000: p3_api_read_data_new = p2_data_cookie_reg;
+        7'b000_1000: p3_api_read_data_new = p2_data_keymem_reg;
+        7'b000_0100: p3_api_read_data_new = p2_data_debug_reg;
+        7'b000_0010: p3_api_read_data_new = p2_data_parser_reg;
+        7'b000_0001: p3_api_read_data_new = p2_data_ntpauth_keymem_reg;
         default: ;
       endcase
     end

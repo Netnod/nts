@@ -83,7 +83,7 @@ module nts_engine #(
 
   localparam CORE_NAME0   = 32'h4e_54_53_5f; // "NTS_"
   localparam CORE_NAME1   = 32'h45_4e_47_4e; // "ENGN"
-  localparam CORE_VERSION = 32'h30_2e_30_35; // "0.05"
+  localparam CORE_VERSION = 32'h30_2e_30_36; // "0.06"
 
   localparam ADDR_NAME0         = 'h00;
   localparam ADDR_NAME1         = 'h01;
@@ -159,14 +159,15 @@ module nts_engine #(
   wire                         api_cs_engine;
   wire                         api_cs_keymem;
   wire                         api_cs_parser;
+  wire                         api_cs_ntpauth_keymem;
 
   reg                 [31 : 0] api_read_data_engine;
   wire                [31 : 0] api_read_data_cookie;
   reg                 [31 : 0] api_read_data_debug;
-
   wire                [31 : 0] api_read_data_clock;
   wire                [31 : 0] api_read_data_keymem;
   wire                [31 : 0] api_read_data_parser;
+  wire                [31 : 0] api_read_data_ntpauth_keymem;
 
   wire                         api_we;
   wire                 [7 : 0] api_address;
@@ -180,6 +181,17 @@ module nts_engine #(
   wire                [31 : 0] keymem_internal_key_id;
   wire                [31 : 0] keymem_internal_key_data;
   wire                         keymem_internal_ready;
+
+  wire                         parser_ntpkeymem_get_key_md5;
+  wire                         parser_ntpkeymem_get_key_sha1;
+  wire                [31 : 0] parser_ntpkeymem_keyid;
+
+  /* verilator lint_off UNUSED */
+  wire                 [2 : 0] ntpkeymem_key_word;
+  wire                         ntpkeymem_key_valid;
+  wire                [31 : 0] ntpkeymem_key_data;
+  wire                         ntpkeymem_ready;
+  /* verilator lint_on UNUSED */
 
   wire                         busy;
   wire                         parser_busy;
@@ -539,7 +551,10 @@ module nts_engine #(
     .i_internal_debug_api_read_data(api_read_data_debug),
 
     .o_internal_parser_api_cs(api_cs_parser),
-    .i_internal_parser_api_read_data(api_read_data_parser)
+    .i_internal_parser_api_read_data(api_read_data_parser),
+
+    .o_internal_ntpauth_keymem_api_cs(api_cs_ntpauth_keymem),
+    .i_internal_ntpauth_keymem_api_read_data(api_read_data_ntpauth_keymem)
   );
 
   //----------------------------------------------------------------
@@ -857,6 +872,33 @@ module nts_engine #(
     .key_id(keymem_internal_key_id),
     .key_data(keymem_internal_key_data),
     .ready(keymem_internal_ready)
+  );
+
+  //----------------------------------------------------------------
+  // Server Key Memory instantiation.
+  //----------------------------------------------------------------
+
+  assign parser_ntpkeymem_get_key_md5 = 0; //TODO
+  assign parser_ntpkeymem_get_key_sha1 = 0; //TODO
+  assign parser_ntpkeymem_keyid = 0; //TODO
+
+  ntp_auth_keymem ntp_auth (
+    .i_clk       ( i_clk    ),
+    .i_areset    ( i_areset ),
+
+    .i_cs        ( api_cs_ntpauth_keymem ),
+    .i_we        ( api_we                ),
+    .i_address   ( api_address           ),
+    .i_write_data( api_write_data        ),
+    .o_read_data ( api_read_data_ntpauth_keymem  ),
+
+    .i_get_key_md5  ( parser_ntpkeymem_get_key_md5  ),
+    .i_get_key_sha1 ( parser_ntpkeymem_get_key_sha1 ),
+    .i_keyid        ( parser_ntpkeymem_keyid        ),
+    .o_key_word     ( ntpkeymem_key_word  ),
+    .o_key_valid    ( ntpkeymem_key_valid ),
+    .o_key_data     ( ntpkeymem_key_data  ),
+    .o_ready        ( ntpkeymem_ready     )
   );
 
   //----------------------------------------------------------------

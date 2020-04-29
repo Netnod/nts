@@ -36,7 +36,8 @@ AES_SRC_PATH = ../sub/aes/src/rtl
 AES_SRC = $(AES_SRC_PATH)/aes_core.v $(AES_SRC_PATH)/aes_encipher_block.v $(AES_SRC_PATH)/aes_key_mem.v $(AES_SRC_PATH)/aes_sbox.v
 CMAC_SRC = ../sub/cmac/src/rtl/cmac_core.v $(AES_SRC)
 SIV_SRC = ../sub/aes-siv/src/rtl/aes_siv_core.v $(CMAC_SRC)
-KEYMEM_SRC = ../sub/keymem/src/rtl/nts_keymem.v
+KEYMEM_SRC = ../sub/keymem/src/rtl/nts_keymem.v ../sub/keymem/src/rtl/ntp_auth_keymem.v
+MD5_SRC = ../sub/md5/src/rtl/md5_core.v
 SIPHASH_SRC = ../sub/siphash/src/rtl/siphash_core.v
 NONCEGEN_SRC = ../sub/nts_noncegen/src/rtl/nts_noncegen.v $(SIPHASH_SRC)
 ENGINE_SRC = ../src/rtl/nts_engine/nts_engine.v \
@@ -111,6 +112,8 @@ sim-txbuf: $(OUTPUT)/nts_tx_buffer_tb.vvp
 sim-secure: $(OUTPUT)/nts_verify_secure_tb.vvp
 	vvp $^
 
+sim-ntpauth: $(OUTPUT)/ntp_auth_tb.vvp
+	vvp $^
 
 sim: sim-api sim-engine sim-parser sim-rxbuf sim-secure sim-txbuf
 
@@ -305,5 +308,13 @@ ifeq (,$(NO_VLINT))
 endif
 	iverilog -o $@ $^
 
+$(OUTPUT)/ntp_auth_tb.vvp: \
+ ../src/tb/nts_engine/tb_ntp_auth.v \
+ ../src/rtl/nts_engine/ntp_auth.v \
+ $(MD5_SRC)
+ifeq (,$(NO_VLINT))
+	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY -Wno-UNOPTFLAT $^
+endif
+	iverilog -o $@ $^
 
 

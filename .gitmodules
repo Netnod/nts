@@ -22,3 +22,7 @@
 	path = sub/siphash
 	url = ../siphash.git
         ignore = dirty
+[submodule "sub/md5"]
+	path = sub/md5
+	url = ../md5
+        ignore = dirty

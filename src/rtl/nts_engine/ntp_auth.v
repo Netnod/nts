@@ -35,16 +35,15 @@ module ntp_auth (
   input wire          i_auth_md5,
   output wire         o_auth_md5_ready,
   output wire         o_auth_md5_good,
+  input wire          i_auth_md5_tx,
 
   input wire          i_rx_reset,
   input wire          i_rx_valid,
   input wire   [63:0] i_rx_data,
 
-  /* verilator lint_off UNUSED */
   input wire          i_timestamp_wr_en,
   input wire [ 2 : 0] i_timestamp_ntp_header_block,
   input wire [63 : 0] i_timestamp_ntp_header_data,
-  /* verilator lint_on UNUSED */
 
   output wire          o_keymem_get_key_md5,
   output wire          o_keymem_get_key_sha1,
@@ -52,19 +51,31 @@ module ntp_auth (
   input wire   [2 : 0] i_keymem_key_word,
   input wire           i_keymem_key_valid,
   input wire  [31 : 0] i_keymem_key_data,
-  input wire           i_keymem_ready
+  input wire           i_keymem_ready,
+
+  output wire          o_tx_wr_en,
+  output wire  [6 : 0] o_tx_addr,
+  output wire [63 : 0] o_tx_data
 );
 
   localparam FSM_MD5_BITS = 4;
-  localparam [FSM_MD5_BITS-1:0] FSM_MD5_IDLE        = 0;
-  localparam [FSM_MD5_BITS-1:0] FSM_MD5_KEYWAIT     = 1;
-  localparam [FSM_MD5_BITS-1:0] FSM_MD5_AUTH_INIT   = 2;
-  localparam [FSM_MD5_BITS-1:0] FSM_MD5_AUTH_BLOCK0 = 3;
-  localparam [FSM_MD5_BITS-1:0] FSM_MD5_AUTH_WAIT0  = 4;
-  localparam [FSM_MD5_BITS-1:0] FSM_MD5_AUTH_BLOCK1 = 5;
-  localparam [FSM_MD5_BITS-1:0] FSM_MD5_AUTH_WAIT1  = 6;
-  localparam [FSM_MD5_BITS-1:0] FSM_MD5_AUTH_FINAL  = 7;
-  localparam [FSM_MD5_BITS-1:0] FSM_MD5_ERROR       = 15;
+
+  localparam [FSM_MD5_BITS-1:0] FSM_MD5_IDLE          = 0;
+  localparam [FSM_MD5_BITS-1:0] FSM_MD5_KEYWAIT       = 1;
+  localparam [FSM_MD5_BITS-1:0] FSM_MD5_RXAUTH_INIT   = 2;
+  localparam [FSM_MD5_BITS-1:0] FSM_MD5_RXAUTH_BLOCK0 = 3;
+  localparam [FSM_MD5_BITS-1:0] FSM_MD5_RXAUTH_WAIT0  = 4;
+  localparam [FSM_MD5_BITS-1:0] FSM_MD5_RXAUTH_BLOCK1 = 5;
+  localparam [FSM_MD5_BITS-1:0] FSM_MD5_RXAUTH_WAIT1  = 6;
+
+  localparam [FSM_MD5_BITS-1:0] FSM_MD5_TXAUTH_INIT   = 7;
+  localparam [FSM_MD5_BITS-1:0] FSM_MD5_TXAUTH_BLOCK0 = 8;
+  localparam [FSM_MD5_BITS-1:0] FSM_MD5_TXAUTH_WAIT0  = 9;
+  localparam [FSM_MD5_BITS-1:0] FSM_MD5_TXAUTH_BLOCK1 = 10;
+  localparam [FSM_MD5_BITS-1:0] FSM_MD5_TXAUTH_WAIT1  = 11;
+  localparam [FSM_MD5_BITS-1:0] FSM_MD5_TXAUTH_OUT    = 12;
+
+  localparam [FSM_MD5_BITS-1:0] FSM_MD5_ERROR         = 15;
 
   localparam FSM_KEY_BITS = 4;
   localparam [FSM_KEY_BITS-1:0] FSM_KEY_IDLE    = 0;
@@ -77,6 +88,13 @@ module ntp_auth (
   localparam [FSM_KEY_BITS-1:0] FSM_KEY_WAIT4   = 7;
   localparam [FSM_KEY_BITS-1:0] FSM_KEY_SUCCESS = 8;
   localparam [FSM_KEY_BITS-1:0] FSM_KEY_ERROR   = 15;
+
+  localparam FSM_TXOUT_BITS = 3;
+  localparam [FSM_TXOUT_BITS-1:0] FSM_TXOUT_IDLE        = 0;
+  localparam [FSM_TXOUT_BITS-1:0] FSM_TXOUT_MD5_0       = 1;
+  localparam [FSM_TXOUT_BITS-1:0] FSM_TXOUT_MD5_1       = 2;
+  localparam [FSM_TXOUT_BITS-1:0] FSM_TXOUT_CRYPTO_NAK = 3;
+  localparam [FSM_TXOUT_BITS-1:0] FSM_TXOUT_FINAL       = 4;
 
   localparam [15:0] E_TYPE_IPV4 = 16'h08_00;
   localparam [15:0] E_TYPE_IPV6 = 16'h86_DD;
@@ -101,6 +119,14 @@ module ntp_auth (
   reg ready_md5_new;
   reg ready_md5_reg;
 
+  reg          tx_we;
+  reg          tx_wr_new;
+  reg          tx_wr_reg;
+  reg  [6 : 0] tx_addr_new;
+  reg  [6 : 0] tx_addr_reg;
+  reg [63 : 0] tx_data_new;
+  reg [63 : 0] tx_data_reg;
+
   //----------------------------------------------------------------
   // Output Wires
   //----------------------------------------------------------------
@@ -113,9 +139,22 @@ module ntp_auth (
 
   assign o_auth_md5_ready = ready_md5_reg;
   assign o_auth_md5_good = good_md5_reg;
+
   assign o_keymem_get_key_md5 = keymem_get_md5;
   assign o_keymem_get_key_sha1 = 0;
   assign o_keymem_keyid = keyid_reg;
+
+  assign o_tx_addr = tx_addr_reg;
+  assign o_tx_data = tx_data_reg;
+  assign o_tx_wr_en = tx_wr_reg;
+
+  //----------------------------------------------------------------
+  // Input Registers (only here to relax timing / routing)
+  //----------------------------------------------------------------
+
+  reg           timestamp_wr_en_reg;
+  reg  [ 2 : 0] timestamp_ntp_header_block_reg;
+  reg  [63 : 0] timestamp_ntp_header_data_reg;
 
   //----------------------------------------------------------------
   // Registers
@@ -129,6 +168,10 @@ module ntp_auth (
   reg [FSM_MD5_BITS-1:0] fsm_md5_new;
   reg [FSM_MD5_BITS-1:0] fsm_md5_reg;
 
+  reg                      fsm_txout_we;
+  reg [FSM_TXOUT_BITS-1:0] fsm_txout_new;
+  reg [FSM_TXOUT_BITS-1:0] fsm_txout_reg;
+
   reg         key_we;
   reg  [31:0] key_new;
   reg   [2:0] key_addr;
@@ -136,9 +179,7 @@ module ntp_auth (
 
   reg key_good_we;
   reg key_good_new;
-  /* verilator lint_off UNUSED */
   reg key_good_reg;
-  /* verilator lint_on UNUSED */
 
 
   reg         ntp_digest_we;
@@ -155,6 +196,11 @@ module ntp_auth (
   reg      [2:0] ntp_rx_addr;
   reg     [63:0] ntp_rx_new;
   reg [6*64-1:0] ntp_rx_reg;
+
+  reg            ntp_tx_we;
+  reg      [2:0] ntp_tx_addr;
+  reg     [63:0] ntp_tx_new;
+  reg [6*64-1:0] ntp_tx_reg;
 
   reg        rx_counter_we;
   reg [15:0] rx_counter_new;
@@ -177,13 +223,13 @@ module ntp_auth (
 
   reg rx_ipv6_we;
   reg rx_ipv6_new;
-  /* verilator lint_off UNUSED */
   reg rx_ipv6_reg;
-  /* verilator lint_on UNUSED */
 
   //----------------------------------------------------------------
   // Wires
   //----------------------------------------------------------------
+
+  reg          txout_done;
 
   reg          md5_init;
   reg          md5_next;
@@ -283,7 +329,12 @@ module ntp_auth (
           fsm_md5_we = 1;
           fsm_md5_new = FSM_MD5_KEYWAIT;
           good_md5_we = 1;
-          good_md5_new = 1;
+          good_md5_new = 0;
+          ready_md5_we = 1;
+          ready_md5_new = 0;
+        end else if (i_auth_md5_tx) begin
+          fsm_md5_we = 1;
+          fsm_md5_new = FSM_MD5_TXAUTH_INIT;
           ready_md5_we = 1;
           ready_md5_new = 0;
         end
@@ -297,42 +348,39 @@ module ntp_auth (
           FSM_KEY_SUCCESS:
             begin
               fsm_md5_we = 1;
-              fsm_md5_new = FSM_MD5_AUTH_INIT;
+              fsm_md5_new = FSM_MD5_RXAUTH_INIT;
             end
           default: ;
         endcase
-      FSM_MD5_AUTH_INIT:
+      FSM_MD5_RXAUTH_INIT:
         if (md5_ready) begin
           fsm_md5_we = 1;
-          fsm_md5_new = FSM_MD5_AUTH_BLOCK0;
+          fsm_md5_new = FSM_MD5_RXAUTH_BLOCK0;
           md5_block_we = 1;
           md5_block_new = md5_encode_512( { key_reg, ntp_rx_reg[6*64-1:32] } );
           md5_init = 1;
         end
-      FSM_MD5_AUTH_BLOCK0:
+      FSM_MD5_RXAUTH_BLOCK0:
         if (md5_ready) begin
           fsm_md5_we = 1;
-          fsm_md5_new = FSM_MD5_AUTH_WAIT0;
+          fsm_md5_new = FSM_MD5_RXAUTH_WAIT0;
           md5_next = 1;
         end
-      FSM_MD5_AUTH_WAIT0:
+      FSM_MD5_RXAUTH_WAIT0:
         if (md5_ready) begin
           fsm_md5_we = 1;
-          fsm_md5_new = FSM_MD5_AUTH_BLOCK1;
+          fsm_md5_new = FSM_MD5_RXAUTH_BLOCK1;
           md5_block_we = 1;
-          md5_block_new[511:64] = md5_encode_448( { ntp_rx_reg[31:0], MD5_PAD } ); 
+          md5_block_new[511:64] = md5_encode_448( { ntp_rx_reg[31:0], MD5_PAD } );
           md5_block_new[63:0] = { MD5_MESSAGE_BITLENGTH[31:0], MD5_MESSAGE_BITLENGTH[63:32] };
-          //md5_block_new[479:0] = MD5_PAD;
-          //md5_block_new[511:480] = md5_encode( ntp_rx_reg[31:0] ) ;
-          //md5_block_new[479:0] = MD5_PAD;
         end
-      FSM_MD5_AUTH_BLOCK1:
+      FSM_MD5_RXAUTH_BLOCK1:
         if (md5_ready) begin
           fsm_md5_we = 1;
-          fsm_md5_new = FSM_MD5_AUTH_WAIT1;
+          fsm_md5_new = FSM_MD5_RXAUTH_WAIT1;
           md5_next = 1;
         end
-      FSM_MD5_AUTH_WAIT1:
+      FSM_MD5_RXAUTH_WAIT1:
         if (md5_ready) begin
           fsm_md5_we = 1;
           fsm_md5_new = FSM_MD5_IDLE;
@@ -343,6 +391,54 @@ module ntp_auth (
             good_md5_we = 1;
             good_md5_new = 0;
           end
+          ready_md5_we = 1;
+          ready_md5_new = 1;
+        end
+      FSM_MD5_TXAUTH_INIT:
+        if (key_good_reg == 1'b0) begin
+           //Crypto-NACK
+          fsm_md5_we = 1;
+          fsm_md5_new = FSM_MD5_TXAUTH_OUT;
+        end else if (good_md5_reg == 1'b0) begin
+           //Crypto-NACK
+          fsm_md5_we = 1;
+          fsm_md5_new = FSM_MD5_TXAUTH_OUT;
+        end else begin
+          fsm_md5_we = 1;
+          fsm_md5_new = FSM_MD5_TXAUTH_BLOCK0;
+          md5_block_we = 1;
+          md5_block_new = md5_encode_512( { key_reg, ntp_tx_reg[6*64-1:32] } );
+          md5_init = 1;
+        end
+      FSM_MD5_TXAUTH_BLOCK0:
+        if (md5_ready) begin
+          fsm_md5_we = 1;
+          fsm_md5_new = FSM_MD5_TXAUTH_WAIT0;
+          md5_next = 1;
+        end
+      FSM_MD5_TXAUTH_WAIT0:
+        if (md5_ready) begin
+          fsm_md5_we = 1;
+          fsm_md5_new = FSM_MD5_TXAUTH_BLOCK1;
+          md5_block_we = 1;
+          md5_block_new[511:64] = md5_encode_448( { ntp_tx_reg[31:0], MD5_PAD } );
+          md5_block_new[63:0] = { MD5_MESSAGE_BITLENGTH[31:0], MD5_MESSAGE_BITLENGTH[63:32] };
+        end
+      FSM_MD5_TXAUTH_BLOCK1:
+        if (md5_ready) begin
+          fsm_md5_we = 1;
+          fsm_md5_new = FSM_MD5_TXAUTH_WAIT1;
+          md5_next = 1;
+        end
+      FSM_MD5_TXAUTH_WAIT1:
+        if (md5_ready) begin
+          fsm_md5_we = 1;
+          fsm_md5_new = FSM_MD5_TXAUTH_OUT;
+        end
+      FSM_MD5_TXAUTH_OUT:
+        if (txout_done) begin
+          fsm_md5_we = 1;
+          fsm_md5_new = FSM_MD5_IDLE;
           ready_md5_we = 1;
           ready_md5_new = 1;
         end
@@ -439,6 +535,10 @@ module ntp_auth (
     endcase
   end
 
+  //----------------------------------------------------------------
+  // Key Capture. Records keys sent from Key Mem
+  //----------------------------------------------------------------
+
   always @*
   begin : key_capture
     reg capture;
@@ -493,6 +593,7 @@ module ntp_auth (
     if (i_areset) begin
       fsm_key_reg <= FSM_KEY_IDLE;
       fsm_md5_reg <= FSM_MD5_IDLE;
+      fsm_txout_reg <= FSM_TXOUT_IDLE;
       good_md5_reg <= 0;
       key_reg <= 0;
       key_good_reg <= 0;
@@ -501,6 +602,7 @@ module ntp_auth (
       ntp_counter_reg <= 0;
       ntp_digest_reg <= 0;
       ntp_rx_reg <= 0;
+      ntp_tx_reg <= 0;
       ready_md5_reg <= 1;
       rx_counter_reg <= 0;
       rx_ipv4_current_reg <= 0;
@@ -509,12 +611,21 @@ module ntp_auth (
       rx_ipv4_previous_valid_reg <= 0;
       rx_ipv4_reg <= 0;
       rx_ipv6_reg <= 0;
+      timestamp_wr_en_reg <= 0;
+      timestamp_ntp_header_block_reg <= 0;
+      timestamp_ntp_header_data_reg <= 0;
+      tx_addr_reg <= 0;
+      tx_data_reg <= 0;
+      tx_wr_reg <= 0;
     end else begin
       if (fsm_key_we)
         fsm_key_reg <= fsm_key_new;
 
       if (fsm_md5_we)
         fsm_md5_reg <= fsm_md5_new;
+
+      if (fsm_txout_we)
+        fsm_txout_reg <= fsm_txout_new;
 
       if (good_md5_we)
         good_md5_reg <= good_md5_new;
@@ -534,11 +645,14 @@ module ntp_auth (
       if (ntp_counter_we)
         ntp_counter_reg <= ntp_counter_new;
 
+      if (ntp_digest_we)
+        ntp_digest_reg <= ntp_digest_new;
+
       if (ntp_rx_we)
         ntp_rx_reg[ ntp_rx_addr*64+:64 ] <= ntp_rx_new;
 
-      if (ntp_digest_we)
-        ntp_digest_reg <= ntp_digest_new;
+      if (ntp_tx_we)
+        ntp_tx_reg[ ntp_tx_addr*64+:64 ] <= ntp_tx_new;
 
       if (ready_md5_we)
         ready_md5_reg <= ready_md5_new;
@@ -557,6 +671,16 @@ module ntp_auth (
 
       if (rx_ipv6_we)
         rx_ipv6_reg <= rx_ipv6_new;
+
+      timestamp_wr_en_reg <= i_timestamp_wr_en;
+      timestamp_ntp_header_block_reg <= i_timestamp_ntp_header_block;
+      timestamp_ntp_header_data_reg <= i_timestamp_ntp_header_data;
+
+      if (tx_we) begin
+        tx_addr_reg <= tx_addr_new;
+        tx_data_reg <= tx_data_new;
+        tx_wr_reg <= tx_wr_new;
+      end
     end
   end
 
@@ -694,5 +818,112 @@ module ntp_auth (
       endcase
     end
   end
+
+  //----------------------------------------------------------------
+  // TX NTP
+  //----------------------------------------------------------------
+
+  always @*
+  begin : tx
+    ntp_tx_we = 0;
+    ntp_tx_addr = 0;
+    ntp_tx_new = 0;
+    if (timestamp_wr_en_reg) begin
+      ntp_tx_we = 1;
+      ntp_tx_addr = 5 - timestamp_ntp_header_block_reg;
+      ntp_tx_new = timestamp_ntp_header_data_reg;
+    end
+  end
+
+  //----------------------------------------------------------------
+  // TX out
+  //----------------------------------------------------------------
+
+  always @*
+  begin : txout
+    reg         bad_state;
+    reg [6 : 0] base_addr;
+
+    if (rx_ipv4_reg) begin
+      bad_state = 0;
+      base_addr = 7'h52;
+    end else if (rx_ipv6_reg) begin
+      bad_state = 0;
+      base_addr = 7'h6e;
+    end else begin
+      bad_state = 1;
+      base_addr = 0;
+    end
+
+    txout_done = 0;
+
+    fsm_txout_we = 0;
+    fsm_txout_new = 0;
+
+    tx_we = 0;
+    tx_addr_new = 0;
+    tx_data_new = 0;
+    tx_wr_new = 0;
+
+    case (fsm_txout_reg)
+      FSM_TXOUT_IDLE:
+        if (fsm_md5_reg == FSM_MD5_TXAUTH_OUT) begin
+          if (bad_state) begin
+            fsm_txout_we = 1;
+            fsm_txout_new = FSM_TXOUT_FINAL;
+          end else if (good_md5_reg) begin
+            fsm_txout_we = 1;
+            fsm_txout_new = FSM_TXOUT_MD5_0;
+          end else begin
+            fsm_txout_we = 1;
+            fsm_txout_new = FSM_TXOUT_CRYPTO_NAK;
+          end
+        end
+      FSM_TXOUT_MD5_0:
+        begin
+          tx_we = 1;
+          tx_addr_new = base_addr;
+          tx_data_new = md5_digest[127:64];
+          tx_wr_new = 1;
+          fsm_txout_we = 1;
+          fsm_txout_new = FSM_TXOUT_MD5_1;
+        end
+      FSM_TXOUT_MD5_1:
+        begin
+          tx_we = 1;
+          tx_addr_new = base_addr + 8;
+          tx_data_new = md5_digest[63:0];
+          tx_wr_new = 1;
+          fsm_txout_we = 1;
+          fsm_txout_new = FSM_TXOUT_FINAL;
+        end
+      FSM_TXOUT_CRYPTO_NAK:
+        begin
+          tx_we = 1;
+          tx_addr_new = base_addr;
+          tx_data_new = 0;
+          tx_wr_new = 1;
+          fsm_txout_we = 1;
+          fsm_txout_new = FSM_TXOUT_FINAL;
+        end
+      FSM_TXOUT_FINAL:
+        begin
+          tx_we = 1;
+          tx_addr_new = 0;
+          tx_data_new = 0;
+          tx_wr_new = 0;
+          txout_done = 1;
+          fsm_txout_we = 1;
+          fsm_txout_new = FSM_TXOUT_IDLE;
+        end
+      default:
+        begin
+          txout_done = 1;
+          fsm_txout_we = 1;
+          fsm_txout_new = FSM_TXOUT_IDLE;
+        end
+    endcase
+  end
+
 
 endmodule

@@ -26,3 +26,7 @@
 	path = sub/md5
 	url = ../md5
         ignore = dirty
+[submodule "sub/sha1"]
+	path = sub/sha1
+	url = ../sha1
+	ignore = dirty

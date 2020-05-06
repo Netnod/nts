@@ -83,7 +83,7 @@ module nts_engine #(
 
   localparam CORE_NAME0   = 32'h4e_54_53_5f; // "NTS_"
   localparam CORE_NAME1   = 32'h45_4e_47_4e; // "ENGN"
-  localparam CORE_VERSION = 32'h30_2e_30_36; // "0.06"
+  localparam CORE_VERSION = 32'h30_2e_30_37; // "0.07"
 
   localparam ADDR_NAME0         = 'h00;
   localparam ADDR_NAME1         = 'h01;
@@ -182,16 +182,23 @@ module nts_engine #(
   wire                [31 : 0] keymem_internal_key_data;
   wire                         keymem_internal_ready;
 
-  wire                         parser_ntpkeymem_get_key_md5;
-  wire                         parser_ntpkeymem_get_key_sha1;
-  wire                [31 : 0] parser_ntpkeymem_keyid;
+  wire                         ntpauth_ntpkeymem_get_key_md5;
+  wire                         ntpauth_ntpkeymem_get_key_sha1;
+  wire                [31 : 0] ntpauth_ntpkeymem_keyid;
 
-  /* verilator lint_off UNUSED */
-  wire                 [2 : 0] ntpkeymem_key_word;
-  wire                         ntpkeymem_key_valid;
-  wire                [31 : 0] ntpkeymem_key_data;
-  wire                         ntpkeymem_ready;
-  /* verilator lint_on UNUSED */
+  wire                 [2 : 0] ntpkeymem_ntpauth_key_word;
+  wire                         ntpkeymem_ntpauth_key_valid;
+  wire                [31 : 0] ntpkeymem_ntpauth_key_data;
+  wire                         ntpkeymem_ntpauth_ready;
+
+  wire                   [6:0] ntpauth_txbuf_address;
+  wire                         ntpauth_txbuf_write_en;
+  wire                  [63:0] ntpauth_txbuf_write_data;
+
+  wire                         parser_ntpauth_md5;
+  wire                         ntpauth_parser_md5_ready;
+  wire                         ntpauth_parser_md5_good;
+  wire                         parser_ntpauth_md5_transmit;
 
   wire                         busy;
   wire                         parser_busy;
@@ -228,6 +235,7 @@ module nts_engine #(
   wire                [63 : 0] timestamp_tx_header_data;
 
   wire                         parser_muxctrl_crypto;
+  wire                         parser_muxctrl_ntpauth;
   wire                         parser_muxctrl_timestamp_ipv4;
   wire                         parser_muxctrl_timestamp_ipv6;
 
@@ -642,9 +650,9 @@ module nts_engine #(
 
   always @*
   begin : tx_mux_vars
-    reg [2:0] muxctrl;
+    reg [3:0] muxctrl;
 
-    muxctrl = { parser_muxctrl_crypto, parser_muxctrl_timestamp_ipv6, parser_muxctrl_timestamp_ipv4 };
+    muxctrl = { parser_muxctrl_ntpauth, parser_muxctrl_crypto, parser_muxctrl_timestamp_ipv6, parser_muxctrl_timestamp_ipv4 };
 
     mux_tx_address_internal = 1;
     mux_tx_address_hi       = 0;
@@ -653,7 +661,7 @@ module nts_engine #(
     mux_tx_write_data       = 0;
 
     case (muxctrl)
-      3'b000:
+      4'b0000:
         begin
           mux_tx_address_internal = parser_txbuf_address_internal;
           mux_tx_address_hi       = parser_txbuf_address[ADDR_WIDTH+3-1:3];
@@ -661,7 +669,7 @@ module nts_engine #(
           mux_tx_write_en         = parser_txbuf_write_en;
           mux_tx_write_data       = parser_txbuf_write_data;
         end
-      3'b001: //IPv4 timestamp
+      4'b0001: //IPv4 timestamp
         begin
           mux_tx_address_internal = 0;
           mux_tx_address_hi       = 0;
@@ -671,7 +679,7 @@ module nts_engine #(
           mux_tx_write_en         = timestamp_tx_wr_en;
           mux_tx_write_data       = timestamp_tx_header_data;
         end
-      3'b010: //IPv6 timestamp
+      4'b0010: //IPv6 timestamp
         begin
           mux_tx_address_internal = 0;
           mux_tx_address_hi       = 0;
@@ -681,7 +689,7 @@ module nts_engine #(
           mux_tx_write_en         = timestamp_tx_wr_en;
           mux_tx_write_data       = timestamp_tx_header_data;
         end
-      3'b100:
+      4'b0100:
         begin
           mux_tx_address_internal = 0;
           mux_tx_address_hi       = crypto_txbuf_address[ADDR_WIDTH+3-1:3];
@@ -689,11 +697,18 @@ module nts_engine #(
           mux_tx_write_en         = crypto_txbuf_write_en;
           mux_tx_write_data       = crypto_txbuf_write_data;
         end
+      4'b1000:
+        begin
+          mux_tx_address_internal = 0;
+          mux_tx_address_hi[3:0]  = ntpauth_txbuf_address[6:3];
+          mux_tx_address_lo       = ntpauth_txbuf_address[2:0];
+          mux_tx_write_en         = ntpauth_txbuf_write_en;
+          mux_tx_write_data       = ntpauth_txbuf_write_data;
+        end
       default: ;
     endcase;
 
   end
-
 
   //----------------------------------------------------------------
   // Transmit Buffer instantiation.
@@ -834,7 +849,14 @@ module nts_engine #(
    .o_crypto_op_c2s_verify_auth(parser_crypto_op_c2s_verify_auth),
    .o_crypto_op_s2c_generate_auth(parser_crypto_op_s2c_generate_auth),
 
+   .o_ntpauth_md5          ( parser_ntpauth_md5          ),
+   .i_ntpauth_md5_ready    ( ntpauth_parser_md5_ready    ),
+   .i_ntpauth_md5_good     ( ntpauth_parser_md5_good     ),
+   .o_ntpauth_md5_transmit ( parser_ntpauth_md5_transmit ),
+
    .o_muxctrl_crypto(parser_muxctrl_crypto),
+
+   .o_muxctrl_ntpauth(parser_muxctrl_ntpauth),
 
    .o_muxctrl_timestamp_ipv4(parser_muxctrl_timestamp_ipv4),
    .o_muxctrl_timestamp_ipv6(parser_muxctrl_timestamp_ipv6),
@@ -875,14 +897,10 @@ module nts_engine #(
   );
 
   //----------------------------------------------------------------
-  // Server Key Memory instantiation.
+  // NTP AUTH (MD5, SHA1) 160bit Key Memory instantiation.
   //----------------------------------------------------------------
 
-  assign parser_ntpkeymem_get_key_md5 = 0; //TODO
-  assign parser_ntpkeymem_get_key_sha1 = 0; //TODO
-  assign parser_ntpkeymem_keyid = 0; //TODO
-
-  ntp_auth_keymem ntp_auth (
+  ntp_auth_keymem ntpkeymem (
     .i_clk       ( i_clk    ),
     .i_areset    ( i_areset ),
 
@@ -892,13 +910,47 @@ module nts_engine #(
     .i_write_data( api_write_data        ),
     .o_read_data ( api_read_data_ntpauth_keymem  ),
 
-    .i_get_key_md5  ( parser_ntpkeymem_get_key_md5  ),
-    .i_get_key_sha1 ( parser_ntpkeymem_get_key_sha1 ),
-    .i_keyid        ( parser_ntpkeymem_keyid        ),
-    .o_key_word     ( ntpkeymem_key_word  ),
-    .o_key_valid    ( ntpkeymem_key_valid ),
-    .o_key_data     ( ntpkeymem_key_data  ),
-    .o_ready        ( ntpkeymem_ready     )
+    .i_get_key_md5  ( ntpauth_ntpkeymem_get_key_md5  ),
+    .i_get_key_sha1 ( ntpauth_ntpkeymem_get_key_sha1 ),
+    .i_keyid        ( ntpauth_ntpkeymem_keyid        ),
+    .o_key_word     ( ntpkeymem_ntpauth_key_word     ),
+    .o_key_valid    ( ntpkeymem_ntpauth_key_valid    ),
+    .o_key_data     ( ntpkeymem_ntpauth_key_data     ),
+    .o_ready        ( ntpkeymem_ntpauth_ready        )
+  );
+
+  //----------------------------------------------------------------
+  // NTP AUTH (MD5, SHA1) module.
+  //----------------------------------------------------------------
+
+  ntp_auth ntpauth (
+    .i_areset ( i_areset ),
+    .i_clk    ( i_clk    ),
+
+    .i_auth_md5       ( parser_ntpauth_md5          ),
+    .o_auth_md5_ready ( ntpauth_parser_md5_ready    ),
+    .o_auth_md5_good  ( ntpauth_parser_md5_good     ),
+    .i_auth_md5_tx    ( parser_ntpauth_md5_transmit ),
+
+    .i_rx_reset ( o_dispatch_rx_fifo_rd_start ),
+    .i_rx_valid ( i_dispatch_rx_fifo_rd_valid ),
+    .i_rx_data  ( i_dispatch_rx_fifo_rd_data  ),
+
+    .i_timestamp_wr_en            ( timestamp_tx_wr_en        ),
+    .i_timestamp_ntp_header_block ( timestamp_tx_header_block ),
+    .i_timestamp_ntp_header_data  ( timestamp_tx_header_data  ),
+
+    .o_keymem_get_key_md5  ( ntpauth_ntpkeymem_get_key_md5  ),
+    .o_keymem_get_key_sha1 ( ntpauth_ntpkeymem_get_key_sha1 ),
+    .o_keymem_keyid        ( ntpauth_ntpkeymem_keyid        ),
+    .i_keymem_key_word     ( ntpkeymem_ntpauth_key_word     ),
+    .i_keymem_key_valid    ( ntpkeymem_ntpauth_key_valid    ),
+    .i_keymem_key_data     ( ntpkeymem_ntpauth_key_data     ),
+    .i_keymem_ready        ( ntpkeymem_ntpauth_ready        ),
+
+    .o_tx_wr_en ( ntpauth_txbuf_write_en   ),
+    .o_tx_addr  ( ntpauth_txbuf_address    ),
+    .o_tx_data  ( ntpauth_txbuf_write_data )
   );
 
   //----------------------------------------------------------------

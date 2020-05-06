@@ -40,19 +40,22 @@ KEYMEM_SRC = ../sub/keymem/src/rtl/nts_keymem.v ../sub/keymem/src/rtl/ntp_auth_k
 MD5_SRC = ../sub/md5/src/rtl/md5_core.v
 SIPHASH_SRC = ../sub/siphash/src/rtl/siphash_core.v
 NONCEGEN_SRC = ../sub/nts_noncegen/src/rtl/nts_noncegen.v $(SIPHASH_SRC)
-ENGINE_SRC = ../src/rtl/nts_engine/nts_engine.v \
- ../src/rtl/nts_engine/nts_verify_secure.v \
- ../src/rtl/nts_engine/nts_tx_buffer.v \
- ../src/rtl/nts_engine/nts_rx_buffer.v \
- ../src/rtl/nts_engine/nts_parser_ctrl.v \
+ENGINE_SRC = \
+ ../src/rtl/nts_engine/ntp_auth.v \
  ../src/rtl/nts_engine/nts_api.v \
+ ../src/rtl/nts_engine/nts_engine.v \
+ ../src/rtl/nts_engine/nts_parser_ctrl.v \
+ ../src/rtl/nts_engine/nts_rx_buffer.v \
  ../src/rtl/nts_engine/nts_timestamp.v \
+ ../src/rtl/nts_engine/nts_tx_buffer.v \
+ ../src/rtl/nts_engine/nts_verify_secure.v \
  ../src/rtl/memory/memory_ctrl.v \
  ../src/rtl/memory/bram.v \
  ../src/rtl/memory/bram_dpge.v \
  ../src/rtl/memory/bram_dp2w.v \
  ../src/rtl/misc/counter64.v \
  $(KEYMEM_SRC) \
+ $(MD5_SRC) \
  $(NONCEGEN_SRC) \
  $(SIV_SRC)
 

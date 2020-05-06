@@ -93,8 +93,9 @@ module ntp_auth (
   localparam [FSM_TXOUT_BITS-1:0] FSM_TXOUT_IDLE        = 0;
   localparam [FSM_TXOUT_BITS-1:0] FSM_TXOUT_MD5_0       = 1;
   localparam [FSM_TXOUT_BITS-1:0] FSM_TXOUT_MD5_1       = 2;
-  localparam [FSM_TXOUT_BITS-1:0] FSM_TXOUT_CRYPTO_NAK = 3;
-  localparam [FSM_TXOUT_BITS-1:0] FSM_TXOUT_FINAL       = 4;
+  localparam [FSM_TXOUT_BITS-1:0] FSM_TXOUT_MD5_2       = 3;
+  localparam [FSM_TXOUT_BITS-1:0] FSM_TXOUT_CRYPTO_NAK  = 4;
+  localparam [FSM_TXOUT_BITS-1:0] FSM_TXOUT_FINAL       = 5;
 
   localparam [15:0] E_TYPE_IPV4 = 16'h08_00;
   localparam [15:0] E_TYPE_IPV6 = 16'h86_DD;
@@ -224,6 +225,16 @@ module ntp_auth (
   reg rx_ipv6_we;
   reg rx_ipv6_new;
   reg rx_ipv6_reg;
+
+  reg        rx_ipv6_current_valid_new;
+  reg        rx_ipv6_current_valid_reg;
+  reg [63:0] rx_ipv6_current_new;
+  reg [63:0] rx_ipv6_current_reg;
+
+  reg        rx_ipv6_previous_valid_new;
+  reg        rx_ipv6_previous_valid_reg;
+  reg [15:0] rx_ipv6_previous_new;
+  reg [15:0] rx_ipv6_previous_reg;
 
   //----------------------------------------------------------------
   // Wires
@@ -605,12 +616,16 @@ module ntp_auth (
       ntp_tx_reg <= 0;
       ready_md5_reg <= 1;
       rx_counter_reg <= 0;
+      rx_ipv4_reg <= 0;
       rx_ipv4_current_reg <= 0;
       rx_ipv4_current_valid_reg <= 0;
       rx_ipv4_previous_reg <= 0;
       rx_ipv4_previous_valid_reg <= 0;
-      rx_ipv4_reg <= 0;
       rx_ipv6_reg <= 0;
+      rx_ipv6_current_reg <= 0;
+      rx_ipv6_current_valid_reg <= 0;
+      rx_ipv6_previous_reg <= 0;
+      rx_ipv6_previous_valid_reg <= 0;
       timestamp_wr_en_reg <= 0;
       timestamp_ntp_header_block_reg <= 0;
       timestamp_ntp_header_data_reg <= 0;
@@ -665,6 +680,12 @@ module ntp_auth (
 
       rx_ipv4_previous_reg <= rx_ipv4_previous_new;
       rx_ipv4_previous_valid_reg <= rx_ipv4_previous_valid_new;
+
+      rx_ipv6_current_reg <= rx_ipv6_current_new;
+      rx_ipv6_current_valid_reg <= rx_ipv6_current_valid_new;
+
+      rx_ipv6_previous_reg <= rx_ipv6_previous_new;
+      rx_ipv6_previous_valid_reg <= rx_ipv6_previous_valid_new;
 
       if (rx_ipv4_we)
         rx_ipv4_reg <= rx_ipv4_new;
@@ -732,10 +753,19 @@ module ntp_auth (
 
   always @*
   begin
+    ntp_counter_we = 0;
+    ntp_counter_new = 0;
+
     rx_ipv4_previous_valid_new = 0;
     rx_ipv4_previous_new = i_rx_data[47:0];
     rx_ipv4_current_valid_new = 0;
     rx_ipv4_current_new = 0;
+
+    rx_ipv6_previous_valid_new = 0;
+    rx_ipv6_previous_new = i_rx_data[15:0];
+    rx_ipv6_current_valid_new = 0;
+    rx_ipv6_current_new = 0;
+
 
     if (rx_ipv4_reg) begin
 
@@ -758,8 +788,30 @@ module ntp_auth (
       end
     end
 
+    if (rx_ipv6_reg) begin
+      if (rx_counter_reg >= 7) begin
+        if (i_rx_valid) begin
+          rx_ipv6_previous_valid_new = 1;
+          rx_ipv6_current_new = { rx_ipv6_previous_reg, i_rx_data[63:16] };
+        end else begin
+          rx_ipv6_current_new = { rx_ipv6_previous_reg, 48'h0 };
+        end
+
+        rx_ipv6_current_valid_new = rx_ipv6_previous_valid_reg;
+
+        if (rx_ipv6_current_valid_reg) begin
+          if (ntp_counter_reg != 16'hffff) begin
+            ntp_counter_we = 1;
+            ntp_counter_new = ntp_counter_reg + 1;
+          end
+        end
+      end
+    end
+
     if (i_rx_reset) begin
       rx_ipv4_previous_new = 0;
+      rx_ipv4_current_new = 0;
+      rx_ipv6_previous_new = 0;
       rx_ipv4_current_new = 0;
       ntp_counter_we = 1;
       ntp_counter_new = 0;
@@ -781,6 +833,9 @@ module ntp_auth (
     keyid_we = 0;
     keyid_new = 0;
 
+    ntp_digest_we = 0;
+    ntp_digest_new = 0;
+
     ntp_rx_we = 0;
     ntp_rx_addr = 0;
     ntp_rx_new = 0;
@@ -789,6 +844,13 @@ module ntp_auth (
       if (rx_ipv4_current_valid_reg) begin
         process = 1;
         process_data = rx_ipv4_current_reg;
+      end
+    end
+
+    if (rx_ipv6_reg) begin
+      if (rx_ipv6_current_valid_reg) begin
+        process = 1;
+        process_data = rx_ipv6_current_reg;
       end
     end
 
@@ -846,10 +908,10 @@ module ntp_auth (
 
     if (rx_ipv4_reg) begin
       bad_state = 0;
-      base_addr = 7'h52;
+      base_addr = 7'h5a; //14 + 20 + 8 + 48
     end else if (rx_ipv6_reg) begin
       bad_state = 0;
-      base_addr = 7'h6e;
+      base_addr = 7'h6e; //14 + 40 + 8 + 48
     end else begin
       bad_state = 1;
       base_addr = 0;
@@ -883,7 +945,7 @@ module ntp_auth (
         begin
           tx_we = 1;
           tx_addr_new = base_addr;
-          tx_data_new = md5_digest[127:64];
+          tx_data_new = { keyid_reg, md5_digest[127:96] };
           tx_wr_new = 1;
           fsm_txout_we = 1;
           fsm_txout_new = FSM_TXOUT_MD5_1;
@@ -892,7 +954,16 @@ module ntp_auth (
         begin
           tx_we = 1;
           tx_addr_new = base_addr + 8;
-          tx_data_new = md5_digest[63:0];
+          tx_data_new = md5_digest[95:32];
+          tx_wr_new = 1;
+          fsm_txout_we = 1;
+          fsm_txout_new = FSM_TXOUT_MD5_2;
+        end
+      FSM_TXOUT_MD5_2:
+        begin
+          tx_we = 1;
+          tx_addr_new = base_addr + 16;
+          tx_data_new = { md5_digest[31:0], 32'h0 };
           tx_wr_new = 1;
           fsm_txout_we = 1;
           fsm_txout_new = FSM_TXOUT_FINAL;

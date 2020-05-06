@@ -103,6 +103,18 @@ module tb_ntp_auth;
     { PACKET_IPV6_VANILLA_NTP, TESTKEYMD5_1_KEYID, MD5_VANILLA_IPV6_NTP_MD5TESTKEY1 };
 
 
+  localparam  [31:0] TESTKEYMD5_2_KEYID = 32'h1;
+  localparam [159:0] TESTKEYMD5_2_KEY = 160'h7e_64_41_58_74_29_30_65_4d_7a_61_7b_67_74_65_74_4d_60_5c_35; //~dAXt)0eMza{gtetM`\5
+  localparam [879:0] PACKET_NTP_AUTH_MD5TESTKEY2 = {
+      128'h00_1c_42_a6_21_1a_00_1c_42_71_99_e6_08_00_45_00, //  ..B¦!...Bq.æ..E.
+      128'h00_60_ed_45_40_00_40_11_37_0f_0a_00_01_1d_0a_00, //  .`íE@.@.7.......
+      128'h01_1c_00_7b_00_7b_00_4c_16_96_e3_00_03_fa_00_01, //  ...{.{.L..ã..ú..
+      128'h00_00_00_01_00_00_00_00_00_00_00_00_00_00_00_00, //  ................
+      128'h00_00_00_00_00_00_00_00_00_00_00_00_00_00_00_00, //  ................
+      128'h00_00_d9_c1_40_f2_43_f2_a5_f6_00_00_00_01_87_5f, //  ..ÙÁ@òCò¥ö....._
+      112'h94_63_f6_35_d2_4d_42_c0_07_15_a4_2e_0f_93        //  .cö5ÒMBÀ..¤...
+  };
+
   //----------------------------------------------------------------
   // Test registers
   //----------------------------------------------------------------
@@ -505,6 +517,47 @@ module tb_ntp_auth;
   end
   endtask
 
+  task test_ipv4_good_md5_digest2;
+  begin : test_good_md5_digest2_
+    reg [3*64-1:0] expect4;
+    reg [3*64-1:0] expect6;
+
+    //MD5( 7e644158742930654d7a617b677465744d605c35
+    //     a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3
+    //     b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7
+    //     c8c9cacbcccdcecf ) =
+    // 55a80ef71927f51c8914cfcd880267e4
+
+    expect4 = { TESTKEYMD5_2_KEYID, 128'h55a80ef71927f51c8914cfcd880267e4, 32'h0 };
+    expect6 = { 64'he1, 64'he2, 64'he3 };
+
+    $display("%s:%0d TEST: test_ipv4_good_md5_digest2", `__FILE__, `__LINE__);
+
+    test_clear_tx = 1;
+    #( CLOCK_PERIOD );
+    test_clear_tx = 0;
+
+    send_ip4_md5( PACKET_NTP_AUTH_MD5TESTKEY2 );
+
+    md5_busy_wait();
+    i_auth_md5 = 1;
+    #( CLOCK_PERIOD );
+    i_auth_md5 = 0;
+    md5_busy_wait();
+    `test( "test_ipv4_good_md5_digest", o_auth_md5_good === 1'b1 );
+
+    timestamp( 8'ha0 );
+
+    i_auth_md5_tx = 1;
+    #( CLOCK_PERIOD );
+    i_auth_md5_tx = 0;
+    md5_busy_wait();
+
+    `test( "test_ipv4_good_md5_digest", expect4 === testbench_tx_ipv4 );
+    `test( "test_ipv4_good_md5_digest", expect6 === testbench_tx_ipv6 );
+  end
+  endtask
+
   //----------------------------------------------------------------
   // test_main {
   //   init
@@ -540,6 +593,7 @@ module tb_ntp_auth;
     test_good_md5_digest();
     test_wrong_keyid();
     test_ipv6_good_md5_digest();
+    test_ipv4_good_md5_digest2();
 
     $display("Test stop: %s:%0d SUCCESS: %0d FAILURES: %0d", `__FILE__, `__LINE__, test_counter_success, test_counter_fail);
     $finish;
@@ -572,6 +626,7 @@ module tb_ntp_auth;
           i_keymem_ready <= 0;
           case (o_keymem_keyid)
             TESTKEYMD5_1_KEYID: { keyfound, key } <= { 1'b1, TESTKEYMD5_1_KEY };
+            TESTKEYMD5_2_KEYID: { keyfound, key } <= { 1'b1, TESTKEYMD5_2_KEY };
             default: if (DEBUG_KEYMEM) $display("%s:%0d Unknown MD5 key: %h", `__FILE__, `__LINE__, o_keymem_keyid);
           endcase
         end

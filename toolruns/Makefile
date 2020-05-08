@@ -38,6 +38,7 @@ CMAC_SRC = ../sub/cmac/src/rtl/cmac_core.v $(AES_SRC)
 SIV_SRC = ../sub/aes-siv/src/rtl/aes_siv_core.v $(CMAC_SRC)
 KEYMEM_SRC = ../sub/keymem/src/rtl/nts_keymem.v ../sub/keymem/src/rtl/ntp_auth_keymem.v
 MD5_SRC = ../sub/md5/src/rtl/md5_core.v
+SHA1_SRC = ../sub/sha1/src/rtl/sha1_core.v ../sub/sha1/src/rtl/sha1_w_mem.v
 SIPHASH_SRC = ../sub/siphash/src/rtl/siphash_core.v
 NONCEGEN_SRC = ../sub/nts_noncegen/src/rtl/nts_noncegen.v $(SIPHASH_SRC)
 ENGINE_SRC = \
@@ -314,7 +315,7 @@ endif
 $(OUTPUT)/ntp_auth_tb.vvp: \
  ../src/tb/nts_engine/tb_ntp_auth.v \
  ../src/rtl/nts_engine/ntp_auth.v \
- $(MD5_SRC)
+ $(MD5_SRC) $(SHA1_SRC)
 ifeq (,$(NO_VLINT))
 	$(VLINT) $(VLINT_FLAGS) -Wno-STMTDLY -Wno-UNOPTFLAT $^
 endif

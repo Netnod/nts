@@ -42,6 +42,7 @@ module nts_parser_ctrl #(
   parameter  [0:0] DEFAULT_SUPPORT_NTS        = 1'b1,
   parameter  [0:0] DEFAULT_SUPPORT_NTP        = 1'b0,
   parameter  [0:0] DEFAULT_SUPPORT_NTP_MD5    = 1'b0,
+  parameter  [0:0] DEFAULT_SUPPORT_NTP_SHA1   = 1'b0,
   parameter        DEBUG_BUFFER = 1
 ) (
   input  wire                         i_areset, // async reset
@@ -128,9 +129,10 @@ module nts_parser_ctrl #(
   output wire                         o_crypto_op_s2c_generate_auth,
 
   output wire                         o_ntpauth_md5,
-  input  wire                         i_ntpauth_md5_ready,
-  input  wire                         i_ntpauth_md5_good,
-  output wire                         o_ntpauth_md5_transmit,
+  output wire                         o_ntpauth_sha1,
+  output wire                         o_ntpauth_transmit,
+  input  wire                         i_ntpauth_ready,
+  input  wire                         i_ntpauth_good,
 
   output wire                         o_muxctrl_timestamp_ipv4,
   output wire                         o_muxctrl_timestamp_ipv6,
@@ -349,28 +351,20 @@ module nts_parser_ctrl #(
   localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_IDLE                    = 5'h00;
   localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_WRITE_HEADER            = 5'h01;
   localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_RXAUTH_MD5              = 5'h02;
-  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_RXAUTH_MD5_WAIT         = 5'h03;
   localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_RXAUTH_SHA1             = 5'h04;
-  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_RXAUTH_SHA1_WAIT        = 5'h05;
+  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_RXAUTH_WAIT             = 5'h05;
   localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_TIMESTAMP               = 5'h06;
   localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_TIMESTAMP_WAIT          = 5'h07;
-  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_TXAUTH_MD5              = 5'h08;
-  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_TXAUTH_MD5_WAIT         = 5'h09;
-  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_TXAUTH_SHA1             = 5'h0a;
-  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_TXAUTH_SHA15_WAIT       = 5'h0b;
-  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_TX_UPDATE_LENGTH        = 5'h0c;
-  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_UDP_LENGTH_UPDATE       = 5'h0d;
-  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_UDP_LENGTH_UPDATE_DELAY = 5'h0e;
-  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_UDP_CSUM_RESET          = 5'h0f;
-  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_UDP_CSUM_ISSUE_0        = 5'h10;
-  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_UDP_CSUM_ISSUE_1        = 5'h11;
-  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_UDP_CSUM_DELAY          = 5'h12;
-  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_UDP_CSUM_UPDATE         = 5'h13;
-  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_UDP_CSUM_UPDATE_DELAY   = 5'h14;
-  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_WRITE_NEW_IP_HEADER_0   = 5'h15;
-  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_WRITE_NEW_IP_HEADER_1   = 5'h16;
-  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_WRITE_NEW_IP_DELAY      = 5'h17;
-  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_ERROR                   = 5'h18;
+  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_TXAUTH_TRANSMIT         = 5'h08;
+  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_TXAUTH_WAIT             = 5'h09;
+  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_TX_UPDATE_LENGTH        = 5'h0a;
+  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_UDP_CSUM_RESET          = 5'h0b;
+  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_UDP_CSUM_ISSUE_0        = 5'h0c;
+  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_UDP_CSUM_ISSUE_1        = 5'h0d;
+  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_UDP_CSUM_DELAY          = 5'h0e;
+  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_UDP_CSUM_UPDATE         = 5'h0f;
+  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_UDP_CSUM_UPDATE_DELAY   = 5'h10;
+  localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_ERROR                   = 5'h1e;
   localparam [BITS_BASIC_NTP_STATE-1:0] BASIC_NTP_S_TRANSMIT_PACKET         = 5'h1f;
 
   localparam [1:0] BASIC_NTP_TYPE_NTP        = 0;
@@ -430,11 +424,12 @@ module nts_parser_ctrl #(
   localparam [BITS_VERIFIER_STATE-1:0] VERIFIER_BAD     = 6;
   localparam [BITS_VERIFIER_STATE-1:0] VERIFIER_GOOD    = 7;
 
-  localparam CONFIG_BITS = 4;
+  localparam CONFIG_BITS = 5;
   localparam CONFIG_BIT_VERIFY_IP_CHECKSUMS = 0;
   localparam CONFIG_BIT_SUPPORT_NTS         = 1;
   localparam CONFIG_BIT_SUPPORT_NTP         = 2;
   localparam CONFIG_BIT_SUPPORT_NTP_MD5     = 3;
+  localparam CONFIG_BIT_SUPPORT_NTP_SHA1    = 4;
 
   localparam BYTES_TAG_LEN           = 4;
 
@@ -969,6 +964,8 @@ module nts_parser_ctrl #(
 
   reg                          protocol_detect_ntpauth_md5_new;
   reg                          protocol_detect_ntpauth_md5_reg;
+  reg                          protocol_detect_ntpauth_sha1_new;
+  reg                          protocol_detect_ntpauth_sha1_reg;
 
 
   reg                          detect_unique_identifier_reg;
@@ -1102,7 +1099,8 @@ module nts_parser_ctrl #(
 
   reg muxctrl_crypto;
   reg ntpauth_md5;
-  reg ntpauth_md5_transmit;
+  reg ntpauth_sha1;
+  reg ntpauth_transmit;
 
 
   reg                    tx_icmp_csum_bytes_we;
@@ -1181,6 +1179,7 @@ module nts_parser_ctrl #(
   assign config_ctrl_default[CONFIG_BIT_SUPPORT_NTS]         = DEFAULT_SUPPORT_NTS;
   assign config_ctrl_default[CONFIG_BIT_SUPPORT_NTP]         = DEFAULT_SUPPORT_NTP;
   assign config_ctrl_default[CONFIG_BIT_SUPPORT_NTP_MD5]     = DEFAULT_SUPPORT_NTP_MD5;
+  assign config_ctrl_default[CONFIG_BIT_SUPPORT_NTP_SHA1]    = DEFAULT_SUPPORT_NTP_SHA1;
 
   assign detect_arp      = ipdecode_ethernet_protocol_reg == E_TYPE_ARP;
 
@@ -1263,8 +1262,9 @@ module nts_parser_ctrl #(
   assign o_crypto_op_c2s_verify_auth   = crypto_op_c2s_verify_auth;
   assign o_crypto_op_s2c_generate_auth = crypto_op_s2c_generate_auth;
 
-  assign o_ntpauth_md5          = ntpauth_md5;
-  assign o_ntpauth_md5_transmit = ntpauth_md5_transmit;
+  assign o_ntpauth_md5      = ntpauth_md5;
+  assign o_ntpauth_sha1     = ntpauth_sha1;
+  assign o_ntpauth_transmit = ntpauth_transmit;
 
   wire muxctrl_timestamp;
   assign muxctrl_timestamp =  (nts_state_reg == NTS_S_TIMESTAMP)
@@ -2113,9 +2113,10 @@ module nts_parser_ctrl #(
       protocol_detect_ip6ns_reg         <= 'b0;
       protocol_detect_ip6traceroute_reg <= 'b0;
 
-      protocol_detect_ntp_reg         <= 'b0;
-      protocol_detect_ntpauth_md5_reg <= 'b0;
-      protocol_detect_nts_reg         <= 'b0;
+      protocol_detect_ntp_reg          <= 'b0;
+      protocol_detect_ntpauth_md5_reg  <= 'b0;
+      protocol_detect_ntpauth_sha1_reg <= 'b0;
+      protocol_detect_nts_reg          <= 'b0;
 
       response_en_reg   <= 'b0;
       response_data_reg <= 'b0;
@@ -2493,9 +2494,10 @@ module nts_parser_ctrl #(
       protocol_detect_ip6ns_reg         <= protocol_detect_ip6ns_new;
       protocol_detect_ip6traceroute_reg <= protocol_detect_ip6traceroute_new;
 
-      protocol_detect_ntp_reg         <= protocol_detect_ntp_new;
-      protocol_detect_ntpauth_md5_reg <= protocol_detect_ntpauth_md5_new;
-      protocol_detect_nts_reg         <= protocol_detect_nts_new;
+      protocol_detect_ntp_reg          <= protocol_detect_ntp_new;
+      protocol_detect_ntpauth_md5_reg  <= protocol_detect_ntpauth_md5_new;
+      protocol_detect_ntpauth_sha1_reg <= protocol_detect_ntpauth_sha1_new;
+      protocol_detect_nts_reg          <= protocol_detect_nts_new;
 
       response_en_reg   <= response_en_new;
       response_data_reg <= response_data_new;
@@ -3731,22 +3733,32 @@ module nts_parser_ctrl #(
       STATE_PROCESS_NTP:
         case (basic_ntp_state_reg)
           BASIC_NTP_S_IDLE:
-            if (detect_ipv4) begin
-              response_packet_total_length_we  = 1;
-              response_packet_total_length_new = OFFSET_ETH_IPV4_DATA + UDP_LENGTH_NTP_VANILLA;
-            end else if (detect_ipv6) begin
-              response_packet_total_length_we  = 1;
-              response_packet_total_length_new = OFFSET_ETH_IPV6_DATA + UDP_LENGTH_NTP_VANILLA;
-           end
-          BASIC_NTP_S_RXAUTH_MD5_WAIT:
-            if (i_ntpauth_md5_ready) begin
-              if (i_ntpauth_md5_good) begin
-                response_packet_total_length_we  = 1;
-                response_packet_total_length_new = response_packet_total_length_reg + 4 /* keyid */ + 16 /* md5 */;
-              end else begin
-                //Crypto-NAK
-                response_packet_total_length_we  = 1;
-                response_packet_total_length_new = response_packet_total_length_reg + 4 /* keyid */;
+            begin : packet_length_ntp
+              reg is_ip;
+              reg [ADDR_WIDTH+3-1:0] len;
+              len = 0;
+              if (detect_ipv4) begin
+                is_ip = 1;
+                len = OFFSET_ETH_IPV4_DATA;
+              end else if (detect_ipv6) begin
+                is_ip = 1;
+                len = OFFSET_ETH_IPV6_DATA;
+              end
+              if (is_ip) begin
+                if (protocol_detect_ntp_reg) begin
+                  response_packet_total_length_we  = 1;
+                  response_packet_total_length_new = len + UDP_LENGTH_NTP_VANILLA;
+
+                end else if (protocol_detect_ntpauth_md5_reg) begin
+                  response_packet_total_length_we  = 1;
+                  response_packet_total_length_new = len + UDP_LENGTH_NTP_VANILLA + 4 /* keyid */ + 16 /* md5 */;
+
+                end else if (protocol_detect_ntpauth_sha1_reg) begin
+                  response_packet_total_length_we  = 1;
+                  response_packet_total_length_new = len + UDP_LENGTH_NTP_VANILLA + 4 /* keyid */ + 20 /* sha1 */;
+                end else begin
+                  //Not NTP, not MD5, not SHA1? This should never happen
+                end
               end
             end
           BASIC_NTP_S_WRITE_HEADER: respond_ip_udp = 1;
@@ -3957,7 +3969,6 @@ module nts_parser_ctrl #(
       STATE_PROCESS_NTP:
         case (basic_ntp_state_reg)
           BASIC_NTP_S_TX_UPDATE_LENGTH: responder_update_length = 1;
-          BASIC_NTP_S_UDP_LENGTH_UPDATE: tx_control_update_udp_header();
           BASIC_NTP_S_UDP_CSUM_RESET: udp_checksum_reset = 1;
           BASIC_NTP_S_UDP_CSUM_ISSUE_0: udp_checksum_addr = 1;
           BASIC_NTP_S_UDP_CSUM_ISSUE_1:
@@ -3965,8 +3976,6 @@ module nts_parser_ctrl #(
               udp_checksum_datagram = 1;
             end
           BASIC_NTP_S_UDP_CSUM_UPDATE: tx_control_update_udp_header();
-          BASIC_NTP_S_WRITE_NEW_IP_HEADER_0: ip_update_header0 = 1;
-          BASIC_NTP_S_WRITE_NEW_IP_HEADER_1: ip_update_header1 = 1;
           default: ;
         endcase
       default: ;
@@ -4894,7 +4903,8 @@ module nts_parser_ctrl #(
     muxctrl_ntpauth_we = 0;
     muxctrl_ntpauth_new = 0;
     ntpauth_md5 = 0;
-    ntpauth_md5_transmit = 0;
+    ntpauth_sha1 = 0;
+    ntpauth_transmit = 0;
 
     case (basic_ntp_state_reg)
       BASIC_NTP_S_IDLE:
@@ -4911,19 +4921,30 @@ module nts_parser_ctrl #(
           if (protocol_detect_ntpauth_md5_reg) begin
             basic_ntp_state_we = 1;
             basic_ntp_state_new = BASIC_NTP_S_RXAUTH_MD5;
+
+          end else if (protocol_detect_ntpauth_sha1_reg) begin
+            basic_ntp_state_we = 1;
+            basic_ntp_state_new = BASIC_NTP_S_RXAUTH_SHA1;
+
           end else begin
             basic_ntp_state_we = 1;
             basic_ntp_state_new = BASIC_NTP_S_TIMESTAMP;
           end
         end
       BASIC_NTP_S_RXAUTH_MD5:
-        if (i_ntpauth_md5_ready) begin
+        if (i_ntpauth_ready) begin
           basic_ntp_state_we = 1;
-          basic_ntp_state_new = BASIC_NTP_S_RXAUTH_MD5_WAIT;
+          basic_ntp_state_new = BASIC_NTP_S_RXAUTH_WAIT;
           ntpauth_md5 = 1;
         end
-      BASIC_NTP_S_RXAUTH_MD5_WAIT:
-        if (i_ntpauth_md5_ready) begin
+      BASIC_NTP_S_RXAUTH_SHA1:
+        if (i_ntpauth_ready) begin
+          basic_ntp_state_we = 1;
+          basic_ntp_state_new = BASIC_NTP_S_RXAUTH_WAIT;
+          ntpauth_sha1 = 1;
+        end
+      BASIC_NTP_S_RXAUTH_WAIT:
+        if (i_ntpauth_ready) begin
           basic_ntp_state_we = 1;
           basic_ntp_state_new = BASIC_NTP_S_TIMESTAMP;
         end
@@ -4934,44 +4955,38 @@ module nts_parser_ctrl #(
         end
       BASIC_NTP_S_TIMESTAMP_WAIT:
         if (i_timestamp_busy == 'b0) begin
-          if (protocol_detect_ntpauth_md5_reg) begin
+          if (protocol_detect_ntpauth_md5_reg || protocol_detect_ntpauth_sha1_reg) begin
             basic_ntp_state_we = 1;
-            basic_ntp_state_new = BASIC_NTP_S_TXAUTH_MD5;
+            basic_ntp_state_new = BASIC_NTP_S_TXAUTH_TRANSMIT;
           end else begin
             basic_ntp_state_we = 1;
             basic_ntp_state_new = BASIC_NTP_S_TX_UPDATE_LENGTH;
           end
         end
-     BASIC_NTP_S_TXAUTH_MD5:
-        if (i_ntpauth_md5_ready) begin
+     BASIC_NTP_S_TXAUTH_TRANSMIT:
+        if (i_ntpauth_ready) begin
           basic_ntp_state_we = 1;
-          basic_ntp_state_new = BASIC_NTP_S_TXAUTH_MD5_WAIT;
+          basic_ntp_state_new = BASIC_NTP_S_TXAUTH_WAIT;
           muxctrl_ntpauth_we = 1;
           muxctrl_ntpauth_new = 1;
-          ntpauth_md5_transmit = 1;
+          ntpauth_transmit = 1;
         end
-     BASIC_NTP_S_TXAUTH_MD5_WAIT:
-        if (i_ntpauth_md5_ready) begin
+     BASIC_NTP_S_TXAUTH_WAIT:
+        if (i_ntpauth_ready) begin
           muxctrl_ntpauth_we = 1;
           muxctrl_ntpauth_new = 0;
-          basic_ntp_state_we = 1;
-          basic_ntp_state_new = BASIC_NTP_S_TX_UPDATE_LENGTH;
+          if (i_ntpauth_good) begin
+            basic_ntp_state_we = 1;
+            basic_ntp_state_new = BASIC_NTP_S_TX_UPDATE_LENGTH;
+          end else begin
+            //Design desicion: Drop packets on authentication failures instead of replying.
+            //Previous design behaved in same manner, so consitent behaivor
+            basic_ntp_state_we = 1;
+            basic_ntp_state_new = BASIC_NTP_S_ERROR;
+          end
         end
       BASIC_NTP_S_TX_UPDATE_LENGTH:
-        if (protocol_detect_ntpauth_md5_reg) begin
-          basic_ntp_state_we = 1;
-          basic_ntp_state_new = BASIC_NTP_S_UDP_LENGTH_UPDATE;
-        end else begin
-          basic_ntp_state_we = 1;
-          basic_ntp_state_new = BASIC_NTP_S_UDP_CSUM_RESET;
-        end
-      BASIC_NTP_S_UDP_LENGTH_UPDATE:
         begin
-          basic_ntp_state_we = 1;
-          basic_ntp_state_new = BASIC_NTP_S_UDP_LENGTH_UPDATE_DELAY;
-        end
-      BASIC_NTP_S_UDP_LENGTH_UPDATE_DELAY:
-        if (i_tx_busy == 1'b0) begin
           basic_ntp_state_we = 1;
           basic_ntp_state_new = BASIC_NTP_S_UDP_CSUM_RESET;
         end
@@ -5001,27 +5016,6 @@ module nts_parser_ctrl #(
           basic_ntp_state_new = BASIC_NTP_S_UDP_CSUM_UPDATE_DELAY;
         end
       BASIC_NTP_S_UDP_CSUM_UPDATE_DELAY:
-        if (i_tx_busy == 1'b0) begin
-          if (protocol_detect_ntpauth_md5_reg) begin
-            //Total Length, Payload Length, etc needs updating
-            basic_ntp_state_we = 1;
-            basic_ntp_state_new = BASIC_NTP_S_WRITE_NEW_IP_HEADER_0;
-          end else begin
-            basic_ntp_state_we = 1;
-            basic_ntp_state_new = BASIC_NTP_S_TRANSMIT_PACKET;
-          end
-        end
-      BASIC_NTP_S_WRITE_NEW_IP_HEADER_0:
-        begin
-          basic_ntp_state_we = 1;
-          basic_ntp_state_new = BASIC_NTP_S_WRITE_NEW_IP_HEADER_1;
-        end
-      BASIC_NTP_S_WRITE_NEW_IP_HEADER_1:
-        begin
-          basic_ntp_state_we = 1;
-          basic_ntp_state_new = BASIC_NTP_S_WRITE_NEW_IP_DELAY;
-        end
-      BASIC_NTP_S_WRITE_NEW_IP_DELAY:
         if (i_tx_busy == 1'b0) begin
           basic_ntp_state_we = 1;
           basic_ntp_state_new = BASIC_NTP_S_TRANSMIT_PACKET;
@@ -5186,6 +5180,9 @@ module nts_parser_ctrl #(
           state_we  = 'b1;
           state_new = STATE_PROCESS_NTP;
         end else if (protocol_detect_ntpauth_md5_reg && config_ctrl_reg[CONFIG_BIT_SUPPORT_NTP_MD5]) begin
+          state_we  = 'b1;
+          state_new = STATE_PROCESS_NTP;
+        end else if (protocol_detect_ntpauth_sha1_reg && config_ctrl_reg[CONFIG_BIT_SUPPORT_NTP_SHA1]) begin
           state_we  = 'b1;
           state_new = STATE_PROCESS_NTP;
         end else if (protocol_detect_ip4echo_reg) begin
@@ -5607,6 +5604,7 @@ module nts_parser_ctrl #(
     reg ntp_port_match;
     reg ntp_length;
     reg ntp_md5_length;
+    reg ntp_sha1_length;
     reg nts_length;
     reg payload_length_sane_ipv4;
     reg payload_length_sane_ipv6;
@@ -5624,6 +5622,7 @@ module nts_parser_ctrl #(
 
     protocol_detect_ntp_new = 0;
     protocol_detect_ntpauth_md5_new = 0;
+    protocol_detect_ntpauth_sha1_new = 0;
     protocol_detect_nts_new = 0;
 
     if (ipdecode_udp_port_dst_reg == config_udp_port_ntp0_reg) begin
@@ -5651,6 +5650,12 @@ module nts_parser_ctrl #(
       ntp_md5_length = 1;
     end else begin
       ntp_md5_length = 0;
+    end
+
+    if (ipdecode_udp_length_reg == UDP_LENGTH_NTP_VANILLA + 4 + 20) begin
+      ntp_sha1_length = 1;
+    end else begin
+      ntp_sha1_length = 0;
     end
 
     if (ipdecode_udp_length_reg >= UDP_LENGTH_NTS_MINIMUM) begin
@@ -5730,6 +5735,7 @@ module nts_parser_ctrl #(
                 if (ntp_port_match) begin
                   if (ntp_length) protocol_detect_ntp_new = 1;
                   if (ntp_md5_length) protocol_detect_ntpauth_md5_new = 1;
+                  if (ntp_sha1_length) protocol_detect_ntpauth_sha1_new = 1;
                   if (nts_length) protocol_detect_nts_new = 1;
                 end else if (traceroute_port_match) begin
                   protocol_detect_ip6traceroute_new = 1;
@@ -5749,6 +5755,7 @@ module nts_parser_ctrl #(
                 if (ntp_port_match) begin
                   if (ntp_length) protocol_detect_ntp_new = 1;
                   if (ntp_md5_length) protocol_detect_ntpauth_md5_new = 1;
+                  if (ntp_sha1_length) protocol_detect_ntpauth_sha1_new = 1;
                   if (nts_length) protocol_detect_nts_new = 1;
                 end else if (traceroute_port_match) begin
                   protocol_detect_ip4traceroute_new = 1;
@@ -5875,26 +5882,24 @@ module nts_parser_ctrl #(
         case (basic_ntp_state_reg)
           BASIC_NTP_S_IDLE:
             begin
-              tx_ipv4_totlen_we   = 1;
-              tx_ipv4_totlen_new  = HEADER_LENGTH_IPV4 + UDP_LENGTH_NTP_VANILLA;
-              tx_udp_length_we    = 1;
-              tx_udp_length_new   = UDP_LENGTH_NTP_VANILLA;
-              tx_udp_checksum_we  = 1;
-              tx_udp_checksum_new = 0;
-            end
-          BASIC_NTP_S_RXAUTH_MD5_WAIT:
-            if (i_ntpauth_md5_ready) begin
-              if (i_ntpauth_md5_good) begin
+              if (protocol_detect_ntp_reg) begin
                 tx_ipv4_totlen_we   = 1;
-                tx_ipv4_totlen_new  = tx_ipv4_totlen_reg + 4 + 16;
+                tx_ipv4_totlen_new  = HEADER_LENGTH_IPV4 + UDP_LENGTH_NTP_VANILLA;
                 tx_udp_length_we    = 1;
-                tx_udp_length_new   = tx_udp_length_reg + 4 + 16;
-              end else begin
+                tx_udp_length_new   = UDP_LENGTH_NTP_VANILLA;
+             end else if (protocol_detect_ntpauth_md5_reg) begin
                 tx_ipv4_totlen_we   = 1;
-                tx_ipv4_totlen_new  = tx_ipv4_totlen_reg + 4; //Crypto-NAK
+                tx_ipv4_totlen_new  = HEADER_LENGTH_IPV4 + UDP_LENGTH_NTP_VANILLA + 4 + 16;
                 tx_udp_length_we    = 1;
-                tx_udp_length_new   = tx_udp_length_reg + 4; //Crypto-NAK
-              end
+                tx_udp_length_new   = UDP_LENGTH_NTP_VANILLA + 4 + 16;
+             end else if (protocol_detect_ntpauth_sha1_reg) begin
+                tx_ipv4_totlen_we   = 1;
+                tx_ipv4_totlen_new  = HEADER_LENGTH_IPV4 + UDP_LENGTH_NTP_VANILLA + 4 + 20;
+                tx_udp_length_we    = 1;
+                tx_udp_length_new   = UDP_LENGTH_NTP_VANILLA + 4 + 20;
+             end
+             tx_udp_checksum_we  = 1;
+             tx_udp_checksum_new = 0;
             end
           BASIC_NTP_S_UDP_CSUM_DELAY: update_udp_checksum = 1;
           default: ;

@@ -297,6 +297,19 @@ module nts_top_tb;
   localparam [127:0] MD5_VANILLA_NTP_MD5TESTKEY1 = 128'h24cbed6d24f8bae9af1142b860288314;
 
 
+  localparam  [31:0] TESTKEYSHA_1_KEYID = 12;
+  localparam [159:0] TESTKEYSHA_1_KEY = 160'h6dea311109529e436c2b4fccae9bc753c16d1b48;
+  localparam [911:0] PACKET_NTP_AUTH_TESTKEYSHA_1 =  {
+      128'h00_1c_42_a6_21_1a_00_1c_42_71_99_e6_08_00_45_00, //   ..B¦!...Bq.æ..E.
+      128'h00_64_8d_27_40_00_40_11_97_29_0a_00_01_1d_0a_00, //   .d.'@.@..)......
+      128'h01_1c_00_7b_00_7b_00_50_16_9a_e3_00_03_fa_00_01, //   ...{.{.P..ã..ú..
+      128'h00_00_00_01_00_00_00_00_00_00_00_00_00_00_00_00, //   ................
+      128'h00_00_00_00_00_00_00_00_00_00_00_00_00_00_00_00, //   ................
+      128'h00_00_d9_c1_24_9c_49_81_79_2f_00_00_00_0c_6b_94, //   ..ÙÁ$.I.y/....k.
+      128'h4d_ce_3f_05_51_0d_20_6f_61_5f_36_e9_00_fa_53_25, //   MÎ?.Q. oa_6é.úS%
+       16'h94_c8                                            // .È
+  };
+
   localparam DEBUG           = 3;
   localparam BENCHMARK       = 1;
   localparam ENGINES         = 1;
@@ -581,6 +594,7 @@ module nts_top_tb;
   begin
     set_parser_ctrl_bit( engine, 5'h2, 1'b1 ); //NTP
     set_parser_ctrl_bit( engine, 5'h3, 1'b1 ); //NTP AUTH MD5
+    set_parser_ctrl_bit( engine, 5'h4, 1'b1 ); //NTP AUTH SHA1
   end
   endtask
 
@@ -618,6 +632,7 @@ module nts_top_tb;
     $display("%s:%0d Init NTP AUTH engine: %0d", `__FILE__, `__LINE__, engine);
     api_read32(slots, engine, API_ADDR_NTPAUTH_KEYMEM_SLOTS);
     $display("%s:%0d  * Slots: %0d", `__FILE__, `__LINE__, slots);
+
     api_write32(0, engine, API_ADDR_NTPAUTH_KEYMEM_ACTIVE_SLOT);
     api_write32(0, engine, API_ADDR_NTPAUTH_KEYMEM_MD5_SHA1);
     api_write32(TESTKEYMD5_1_KEYID, engine, API_ADDR_NTPAUTH_KEYMEM_KEYID );
@@ -626,7 +641,17 @@ module nts_top_tb;
     api_write32(TESTKEYMD5_1_KEY[95:64],   engine, API_ADDR_NTPAUTH_KEYMEM_KEY2 );
     api_write32(TESTKEYMD5_1_KEY[63:32],   engine, API_ADDR_NTPAUTH_KEYMEM_KEY1 );
     api_write32(TESTKEYMD5_1_KEY[31:0],    engine, API_ADDR_NTPAUTH_KEYMEM_KEY0 );
+
     api_write32(1, engine, API_ADDR_NTPAUTH_KEYMEM_MD5_SHA1);
+    api_write32(1, engine, API_ADDR_NTPAUTH_KEYMEM_ACTIVE_SLOT);
+    api_write32(0, engine, API_ADDR_NTPAUTH_KEYMEM_MD5_SHA1);
+    api_write32(TESTKEYSHA_1_KEYID, engine, API_ADDR_NTPAUTH_KEYMEM_KEYID );
+    api_write32(TESTKEYSHA_1_KEY[159:128], engine, API_ADDR_NTPAUTH_KEYMEM_KEY4 );
+    api_write32(TESTKEYSHA_1_KEY[127:96],  engine, API_ADDR_NTPAUTH_KEYMEM_KEY3 );
+    api_write32(TESTKEYSHA_1_KEY[95:64],   engine, API_ADDR_NTPAUTH_KEYMEM_KEY2 );
+    api_write32(TESTKEYSHA_1_KEY[63:32],   engine, API_ADDR_NTPAUTH_KEYMEM_KEY1 );
+    api_write32(TESTKEYSHA_1_KEY[31:0],    engine, API_ADDR_NTPAUTH_KEYMEM_KEY0 );
+    api_write32(2, engine, API_ADDR_NTPAUTH_KEYMEM_MD5_SHA1);
   end
   endtask
 
@@ -946,6 +971,7 @@ module nts_top_tb;
           send_packet({64816'b0, PACKET_IPV4_VANILLA_NTP}, 720, 0);
           send_packet({64656'b0, PACKET_IPV6_VANILLA_NTP}, 880, 0);
           send_ipv4_ntpauth_md5( PACKET_IPV4_VANILLA_NTP, TESTKEYMD5_1_KEYID, MD5_VANILLA_NTP_MD5TESTKEY1 );
+          send_packet( { 64624'b0, PACKET_NTP_AUTH_TESTKEYSHA_1 }, 912, 0 );
         end
       end
     end
@@ -1016,6 +1042,9 @@ module nts_top_tb;
       #20000;
       $display("%s:%0d: IPv4 NTP AUTH MD5", `__FILE__, `__LINE__);
       send_ipv4_ntpauth_md5( PACKET_IPV4_VANILLA_NTP, TESTKEYMD5_1_KEYID, MD5_VANILLA_NTP_MD5TESTKEY1 );
+      #20000;
+      $display("%s:%0d: IPv4 NTP AUTH SHA1", `__FILE__, `__LINE__);
+      send_packet( { 64624'b0, PACKET_NTP_AUTH_TESTKEYSHA_1 }, 912, 0 );
       #20000;
       begin : ping
         integer i;
@@ -1345,6 +1374,14 @@ module nts_top_tb;
   end
   endfunction
 
+  function [159:0] tx_read_word160(input integer i);
+  begin
+    tx_read_word160[159:96] = tx_read_word64(i);
+    tx_read_word160[95:32]  = tx_read_word64(i + 8);
+    tx_read_word160[31:0]   = tx_read_word32(i + 16);
+  end
+  endfunction
+
   function [15:0] internet_checksum(input  [15:0] init,
                                     input integer start,
                                     input integer length);
@@ -1552,6 +1589,7 @@ module nts_top_tb;
     reg  [63:0] ntp_transmit_time;
     reg  [31:0] ntpauth_keyid;
     reg [127:0] ntpauth_md5;
+    reg [159:0] ntpauth_sha1;
     garbage = 0;
 
     ethernet_protocol = tx_read_word16( 12 );
@@ -1601,6 +1639,7 @@ module nts_top_tb;
       ntp_transmit_time = tx_read_word64( ntp_offset + 40 );
       ntpauth_keyid = tx_read_word32( ntp_offset + 48 );
       ntpauth_md5 = tx_read_word128( ntp_offset + 52 );
+      ntpauth_sha1 = tx_read_word160( ntp_offset + 52 );
       $display("%s:%0d * TX * NTP LI: %h, VN: %h, mode: %h, stratum: %h, poll: %h, precision: %h", `__FILE__, `__LINE__, ntp_li, ntp_vn, ntp_mode, ntp_stratum, ntp_poll, ntp_precision );
       $display("%s:%0d * TX * NTP Root Delay: %h", `__FILE__, `__LINE__, ntp_root_delay);
       $display("%s:%0d * TX * NTP Root Dispersion: %h", `__FILE__, `__LINE__, ntp_root_dispersion);
@@ -1625,6 +1664,9 @@ module nts_top_tb;
         garbage = 1;
       end else if (payload_length == 8+6*8 + 4 + 16) begin
         $display("%s:%0d * TX * NTP Payload Length: (%0d) (%0d) - NTP MD5 KeyID: %h md5: %h", `__FILE__, `__LINE__, payload_length, payload_length-8, ntpauth_keyid, ntpauth_md5);
+       garbage = 1;
+      end else if (payload_length == 8+6*8 + 4 + 20) begin
+        $display("%s:%0d * TX * NTP Payload Length: (%0d) (%0d) - NTP SHA1 KeyID: %h sha1: %h", `__FILE__, `__LINE__, payload_length, payload_length-8, ntpauth_keyid, ntpauth_sha1);
        garbage = 1;
       end else if (payload_length > 8+6*8+32+10) begin
         $display("%s:%0d * TX * NTP Payload Length: (%0d) (%0d) - Probably NTS", `__FILE__, `__LINE__, payload_length, payload_length-8);
@@ -1794,7 +1836,9 @@ module nts_top_tb;
     always @*
      $display("%s:%0d dut.genblk1[0].engine.parser_ntpauth_md5: %h", `__FILE__, `__LINE__, dut.genblk1[0].engine.parser_ntpauth_md5);
     always @*
-     $display("%s:%0d dut.genblk1[0].engine.parser_ntpauth_md5_transmit: %h", `__FILE__, `__LINE__, dut.genblk1[0].engine.parser_ntpauth_md5_transmit);
+     $display("%s:%0d dut.genblk1[0].engine.parser_ntpauth_sha1: %h", `__FILE__, `__LINE__, dut.genblk1[0].engine.parser_ntpauth_sha1);
+    always @*
+     $display("%s:%0d dut.genblk1[0].engine.parser_ntpauth_transmit: %h", `__FILE__, `__LINE__, dut.genblk1[0].engine.parser_ntpauth_transmit);
     always @*
      $display("%s:%0d dut.genblk1[0].engine.ntpauth_txbuf_address: %h", `__FILE__, `__LINE__, dut.genblk1[0].engine.ntpauth_txbuf_address);
     always @*

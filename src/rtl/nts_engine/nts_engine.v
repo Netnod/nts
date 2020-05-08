@@ -83,7 +83,7 @@ module nts_engine #(
 
   localparam CORE_NAME0   = 32'h4e_54_53_5f; // "NTS_"
   localparam CORE_NAME1   = 32'h45_4e_47_4e; // "ENGN"
-  localparam CORE_VERSION = 32'h30_2e_30_37; // "0.07"
+  localparam CORE_VERSION = 32'h30_2e_30_38; // "0.08"
 
   localparam ADDR_NAME0         = 'h00;
   localparam ADDR_NAME1         = 'h01;
@@ -196,9 +196,10 @@ module nts_engine #(
   wire                  [63:0] ntpauth_txbuf_write_data;
 
   wire                         parser_ntpauth_md5;
-  wire                         ntpauth_parser_md5_ready;
-  wire                         ntpauth_parser_md5_good;
-  wire                         parser_ntpauth_md5_transmit;
+  wire                         parser_ntpauth_sha1;
+  wire                         ntpauth_parser_ready;
+  wire                         ntpauth_parser_good;
+  wire                         parser_ntpauth_transmit;
 
   wire                         busy;
   wire                         parser_busy;
@@ -849,10 +850,11 @@ module nts_engine #(
    .o_crypto_op_c2s_verify_auth(parser_crypto_op_c2s_verify_auth),
    .o_crypto_op_s2c_generate_auth(parser_crypto_op_s2c_generate_auth),
 
-   .o_ntpauth_md5          ( parser_ntpauth_md5          ),
-   .i_ntpauth_md5_ready    ( ntpauth_parser_md5_ready    ),
-   .i_ntpauth_md5_good     ( ntpauth_parser_md5_good     ),
-   .o_ntpauth_md5_transmit ( parser_ntpauth_md5_transmit ),
+   .o_ntpauth_md5      ( parser_ntpauth_md5      ),
+   .o_ntpauth_sha1     ( parser_ntpauth_sha1     ),
+   .o_ntpauth_transmit ( parser_ntpauth_transmit ),
+   .i_ntpauth_ready    ( ntpauth_parser_ready    ),
+   .i_ntpauth_good     ( ntpauth_parser_good     ),
 
    .o_muxctrl_crypto(parser_muxctrl_crypto),
 
@@ -927,10 +929,12 @@ module nts_engine #(
     .i_areset ( i_areset ),
     .i_clk    ( i_clk    ),
 
-    .i_auth_md5       ( parser_ntpauth_md5          ),
-    .o_auth_md5_ready ( ntpauth_parser_md5_ready    ),
-    .o_auth_md5_good  ( ntpauth_parser_md5_good     ),
-    .i_auth_md5_tx    ( parser_ntpauth_md5_transmit ),
+    .i_auth_md5  ( parser_ntpauth_md5      ),
+    .i_auth_sha1 ( parser_ntpauth_sha1     ),
+    .i_tx        ( parser_ntpauth_transmit ),
+
+    .o_ready ( ntpauth_parser_ready    ),
+    .o_good  ( ntpauth_parser_good     ),
 
     .i_rx_reset ( o_dispatch_rx_fifo_rd_start ),
     .i_rx_valid ( i_dispatch_rx_fifo_rd_valid ),

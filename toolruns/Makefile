@@ -58,6 +58,7 @@ ENGINE_SRC = \
  $(KEYMEM_SRC) \
  $(MD5_SRC) \
  $(NONCEGEN_SRC) \
+ $(SHA1_SRC) \
  $(SIV_SRC)
 
 OUTPUT = ../output/vvp

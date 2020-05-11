@@ -1906,10 +1906,14 @@ module nts_top_tb;
     reg [63:0] old_tick_counter_crypto;
     reg [63:0] old_tick_counter_icmp;
     reg [63:0] old_tick_counter_ntp;
+    reg [63:0] old_tick_counter_nts;
+    reg [63:0] old_tick_counter_siv;
     reg  [4:0] old_parser_state;
     reg  [4:0] old_parser_state_crypto;
     reg  [5:0] old_parser_state_icmp;
     reg  [4:0] old_parser_state_ntp;
+    reg  [5:0] old_parser_state_nts;
+    reg  [4:0] old_parser_state_siv;
 
     always @(posedge i_clk or posedge i_areset)
     begin
@@ -1986,6 +1990,36 @@ module nts_top_tb;
           old_parser_state_ntp <= dut.genblk1[0].engine.parser.basic_ntp_state_reg;
           $display("%s:%0d BENCHMARK: dut.genblk1[0].engine.parser.basic_ntp_state_reg %h -> %h (hex): %0d ticks", `__FILE__, `__LINE__,
             old_parser_state_ntp, dut.genblk1[0].engine.parser.basic_ntp_state_reg, tick_counter - old_tick_counter_ntp);
+        end
+      end
+    end
+
+    always @(posedge i_clk or posedge i_areset)
+    begin
+      if (i_areset) begin
+        old_tick_counter_nts <= 1;
+        old_parser_state_nts <= 0;
+      end else begin
+        if (old_parser_state_nts != dut.genblk1[0].engine.parser.nts_state_reg) begin
+          old_tick_counter_nts <= tick_counter;
+          old_parser_state_nts <= dut.genblk1[0].engine.parser.nts_state_reg;
+          $display("%s:%0d BENCHMARK: dut.genblk1[0].engine.parser.nts_state_reg %h -> %h (hex): %0d ticks", `__FILE__, `__LINE__,
+            old_parser_state_nts, dut.genblk1[0].engine.parser.nts_state_reg, tick_counter - old_tick_counter_nts);
+        end
+      end
+    end
+
+    always @(posedge i_clk or posedge i_areset)
+    begin
+      if (i_areset) begin
+        old_tick_counter_siv <= 1;
+        old_parser_state_siv <= 0;
+      end else begin
+        if (old_parser_state_siv != dut.genblk1[0].engine.crypto.core.core_ctrl_reg) begin
+          old_tick_counter_siv <= tick_counter;
+          old_parser_state_siv <= dut.genblk1[0].engine.crypto.core.core_ctrl_reg;
+          $display("%s:%0d BENCHMARK: dut.genblk1[0].engine.crypto.core_ctrl_reg %h -> %h (hex): %0d ticks", `__FILE__, `__LINE__,
+            old_parser_state_siv, dut.genblk1[0].engine.crypto.core.core_ctrl_reg, tick_counter - old_tick_counter_siv);
         end
       end
     end

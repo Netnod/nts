@@ -3736,6 +3736,7 @@ module nts_parser_ctrl #(
             begin : packet_length_ntp
               reg is_ip;
               reg [ADDR_WIDTH+3-1:0] len;
+              is_ip = 0;
               len = 0;
               if (detect_ipv4) begin
                 is_ip = 1;

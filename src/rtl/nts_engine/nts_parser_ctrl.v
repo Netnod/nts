@@ -5238,6 +5238,9 @@ module nts_parser_ctrl #(
         end else if (protocol_detect_ntpauth_md5_reg && config_ctrl_reg[CONFIG_BIT_SUPPORT_NTP_MD5]) begin
           state_we  = 'b1;
           state_new = STATE_PROCESS_NTP;
+        end else if (protocol_detect_ntpauth_sha1_reg && config_ctrl_reg[CONFIG_BIT_SUPPORT_NTP_SHA1]) begin
+          state_we  = 'b1;
+          state_new = STATE_PROCESS_NTP;
         end else if (protocol_detect_icmpv6_reg) begin
           if (icmp_state_reg == ICMP_S_IDLE) begin
             state_we = 'b1;

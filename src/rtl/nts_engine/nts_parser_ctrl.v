@@ -893,6 +893,11 @@ module nts_parser_ctrl #(
   reg                   [31:0] keymem_server_id_new;
   reg                   [31:0] keymem_server_id_reg;
 
+  reg                          muxctrl_timestamp_ipv4_new;
+  reg                          muxctrl_timestamp_ipv4_reg;
+  reg                          muxctrl_timestamp_ipv6_new;
+  reg                          muxctrl_timestamp_ipv6_reg;
+
   reg                          muxctrl_ntpauth_we;
   reg                          muxctrl_ntpauth_new;
   reg                          muxctrl_ntpauth_reg;
@@ -1108,6 +1113,8 @@ module nts_parser_ctrl #(
   reg ntpauth_sha1;
   reg ntpauth_transmit;
 
+  reg timestamp_ntp;
+  reg timestamp_nts;
 
   reg                    tx_icmp_csum_bytes_we;
   reg [ADDR_WIDTH+3-1:0] tx_icmp_csum_bytes_new;
@@ -1267,14 +1274,8 @@ module nts_parser_ctrl #(
   assign o_ntpauth_sha1     = ntpauth_sha1;
   assign o_ntpauth_transmit = ntpauth_transmit;
 
-  wire muxctrl_timestamp;
-  assign muxctrl_timestamp =  (nts_state_reg == NTS_S_TIMESTAMP)
-                           || (nts_state_reg == NTS_S_TIMESTAMP_WAIT)
-                           || (basic_ntp_state_reg == BASIC_NTP_S_TIMESTAMP)
-                           || (basic_ntp_state_reg == BASIC_NTP_S_TIMESTAMP_WAIT);
-
-  assign o_muxctrl_timestamp_ipv4 = muxctrl_timestamp && detect_ipv4_reg;
-  assign o_muxctrl_timestamp_ipv6 = muxctrl_timestamp && detect_ipv6_reg;
+  assign o_muxctrl_timestamp_ipv4 = muxctrl_timestamp_ipv4_reg;
+  assign o_muxctrl_timestamp_ipv6 = muxctrl_timestamp_ipv6_reg;
 
   assign o_muxctrl_crypto = muxctrl_crypto;
   assign o_muxctrl_ntpauth = muxctrl_ntpauth_reg;
@@ -2099,7 +2100,9 @@ module nts_parser_ctrl #(
       memory_address_reg         <= 'b0;
       memory_bound_reg           <= 'b0;
 
-      muxctrl_ntpauth_reg <= 'b0;
+      muxctrl_ntpauth_reg        <= 'b0;
+      muxctrl_timestamp_ipv4_reg <= 'b0;
+      muxctrl_timestamp_ipv6_reg <= 'b0;
 
       ntp_extension_counter_reg            <= 'b0;
       nts_authenticator_start_addr_reg     <= 'b0;
@@ -2469,6 +2472,9 @@ module nts_parser_ctrl #(
 
       if (muxctrl_ntpauth_we)
         muxctrl_ntpauth_reg <= muxctrl_ntpauth_new;
+
+      muxctrl_timestamp_ipv4_reg <= muxctrl_timestamp_ipv4_new;
+      muxctrl_timestamp_ipv6_reg <= muxctrl_timestamp_ipv6_new;
 
       if (ntp_extension_reset) begin : ntp_extension_reset_sync
         integer i;
@@ -2898,6 +2904,28 @@ module nts_parser_ctrl #(
       ntp_extension_tag_new    = i_access_port_rd_data[31:16];
     end
   end
+
+
+  //----------------------------------------------------------------
+  // Timestamp mux ctrl
+  //----------------------------------------------------------------
+
+  always @*
+  begin : timestamp_mux_control
+    muxctrl_timestamp_ipv4_new = 0;
+    muxctrl_timestamp_ipv6_new = 0;
+
+    if (timestamp_ntp || timestamp_nts) begin
+
+      if (detect_ipv4_reg) begin
+        muxctrl_timestamp_ipv4_new = 1;
+
+      end else if (detect_ipv6_reg) begin
+        muxctrl_timestamp_ipv6_new = 1;
+      end
+    end
+  end
+
 
   //----------------------------------------------------------------
   // RX buffer Access Port control
@@ -4623,6 +4651,8 @@ module nts_parser_ctrl #(
     nts_state_we = 0;
     nts_state_new = 0;
 
+    timestamp_nts = 0;
+
     case (nts_state_reg)
       NTS_S_IDLE:
         if (state_reg == STATE_PROCESS_NTS) begin
@@ -4741,9 +4771,12 @@ module nts_parser_ctrl #(
         begin
           nts_state_we  = 'b1;
           nts_state_new = NTS_S_TIMESTAMP_WAIT;
+          timestamp_nts = 1;
         end
       NTS_S_TIMESTAMP_WAIT:
-        if (i_timestamp_busy == 'b0) begin
+        if (i_timestamp_busy) begin
+          timestamp_nts = 1;
+        end else begin
           if (nts_kiss_of_death_reg) begin
             nts_state_we  = 'b1;
             nts_state_new = NTS_S_TX_UPDATE_LENGTH; //Kiss-o'-Death
@@ -4918,6 +4951,7 @@ module nts_parser_ctrl #(
     basic_ntp_state_new = 0;
     muxctrl_ntpauth_we = 0;
     muxctrl_ntpauth_new = 0;
+    timestamp_ntp = 0;
     ntpauth_md5 = 0;
     ntpauth_sha1 = 0;
     ntpauth_transmit = 0;
@@ -4968,9 +5002,13 @@ module nts_parser_ctrl #(
         begin
           basic_ntp_state_we = 1;
           basic_ntp_state_new = BASIC_NTP_S_TIMESTAMP_WAIT;
+          timestamp_ntp = 1;
         end
       BASIC_NTP_S_TIMESTAMP_WAIT:
-        if (i_timestamp_busy == 'b0) begin
+        if (i_timestamp_busy) begin
+          timestamp_ntp = 1;
+
+        end else begin
           if (protocol_detect_ntpauth_md5_reg || protocol_detect_ntpauth_sha1_reg) begin
             basic_ntp_state_we = 1;
             basic_ntp_state_new = BASIC_NTP_S_TXAUTH_TRANSMIT;

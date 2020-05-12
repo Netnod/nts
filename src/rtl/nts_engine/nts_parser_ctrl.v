@@ -713,6 +713,13 @@ module nts_parser_ctrl #(
   reg                   [4:0] crypto_fsm_new;
   reg                   [4:0] crypto_fsm_reg;
 
+  reg detect_ipv4_we;
+  reg detect_ipv4_new;
+  reg detect_ipv4_reg;
+  reg detect_ipv6_we;
+  reg detect_ipv6_new;
+  reg detect_ipv6_reg;
+
   reg                         icmp_state_we;
   reg   [BITS_ICMP_STATE-1:0] icmp_state_new;
   reg   [BITS_ICMP_STATE-1:0] icmp_state_reg;
@@ -855,6 +862,9 @@ module nts_parser_ctrl #(
   reg                          ipdecode_icmp_ta_we;
   reg                  [127:0] ipdecode_icmp_ta_new;
   reg                  [127:0] ipdecode_icmp_ta_reg;
+
+  reg       [ADDR_WIDTH+3-1:0] ipdecode_offset_ntp_ext_new;
+  reg       [ADDR_WIDTH+3-1:0] ipdecode_offset_ntp_ext_reg;
 
   reg                          ipdecode_udp_length_we;
   reg                   [15:0] ipdecode_udp_length_new;
@@ -1091,11 +1101,7 @@ module nts_parser_ctrl #(
 
   wire detect_arp;
   wire detect_arp_good;
-  wire detect_ipv4;
   wire detect_ipv4_bad;
-  wire detect_ipv6;
-
-  wire [ADDR_WIDTH+3-1:0] ipdecode_offset_ntp_ext;
 
   reg muxctrl_crypto;
   reg ntpauth_md5;
@@ -1191,13 +1197,8 @@ module nts_parser_ctrl #(
                            ipdecode_arp_pln_reg == ARP_PLN_IPV4;
 
 
-  assign detect_ipv4     = (ipdecode_ethernet_protocol_reg == E_TYPE_IPV4) && (ipdecode_ip_version_reg == IP_V4);
-  assign detect_ipv4_bad = detect_ipv4 && ipdecode_ip4_ihl_reg != 5;
+  assign detect_ipv4_bad = detect_ipv4_reg && ipdecode_ip4_ihl_reg != 5;
 
-  assign detect_ipv6     = (ipdecode_ethernet_protocol_reg == E_TYPE_IPV6) && (ipdecode_ip_version_reg == IP_V6);
-
-  assign ipdecode_offset_ntp_ext[ADDR_WIDTH+3-1:3] = (detect_ipv4 && ipdecode_ip4_ihl_reg == 5) ? (5+6) : (detect_ipv6) ? (7+6) : 0;
-  assign ipdecode_offset_ntp_ext[2:0]              = (detect_ipv4 && ipdecode_ip4_ihl_reg == 5) ? 2 : (detect_ipv6) ? 6 : 0;
 
   assign o_busy                 = (i_tx_empty == 'b0) || (state_reg != STATE_IDLE);
 
@@ -1272,8 +1273,8 @@ module nts_parser_ctrl #(
                            || (basic_ntp_state_reg == BASIC_NTP_S_TIMESTAMP)
                            || (basic_ntp_state_reg == BASIC_NTP_S_TIMESTAMP_WAIT);
 
-  assign o_muxctrl_timestamp_ipv4 = muxctrl_timestamp && detect_ipv4;
-  assign o_muxctrl_timestamp_ipv6 = muxctrl_timestamp && detect_ipv6;
+  assign o_muxctrl_timestamp_ipv4 = muxctrl_timestamp && detect_ipv4_reg;
+  assign o_muxctrl_timestamp_ipv6 = muxctrl_timestamp && detect_ipv6_reg;
 
   assign o_muxctrl_crypto = muxctrl_crypto;
   assign o_muxctrl_ntpauth = muxctrl_ntpauth_reg;
@@ -1288,7 +1289,7 @@ module nts_parser_ctrl #(
   assign o_statistics_nts_bad_auth   = statistics_nts_bad_auth_reg;
   assign o_statistics_nts_bad_keyid  = statistics_nts_bad_keyid_reg;
 
-  assign tx_ethernet_type = detect_ipv4 ? E_TYPE_IPV4 : (detect_ipv6 ? E_TYPE_IPV6 : 16'hFFFF);
+  assign tx_ethernet_type = detect_ipv4_reg ? E_TYPE_IPV4 : (detect_ipv6_reg ? E_TYPE_IPV6 : 16'hFFFF);
   assign tx_header_ethernet = {
                                 ipdecode_ethernet_mac_src_reg,
                                 ipdecode_ethernet_mac_dst_reg,
@@ -2034,6 +2035,9 @@ module nts_parser_ctrl #(
 
       crypto_fsm_reg             <= CRYPTO_FSM_IDLE;
 
+      detect_ipv4_reg <= 0;
+      detect_ipv6_reg <= 0;
+
       error_cause_reg            <= 'b0;
       error_count_reg            <= 'b0;
       error_size_reg             <= 'b0;
@@ -2076,6 +2080,9 @@ module nts_parser_ctrl #(
       ipdecode_icmp_echo_seq_reg <= 'b0;
       ipdecode_icmp_echo_d0_reg  <= 'b0;
       ipdecode_icmp_ta_reg       <= 'b0;
+
+
+      ipdecode_offset_ntp_ext_reg <= 'b0;
 
       ipdecode_udp_length_reg    <= 'b0;
       ipdecode_udp_port_dst_reg  <= 'b0;
@@ -2316,6 +2323,12 @@ module nts_parser_ctrl #(
       if (crypto_fsm_we)
         crypto_fsm_reg <= crypto_fsm_new;
 
+      if (detect_ipv4_we)
+        detect_ipv4_reg <= detect_ipv4_new;
+
+      if (detect_ipv6_we)
+        detect_ipv6_reg <= detect_ipv6_new;
+
       if (error_cause_we)
         error_cause_reg <= error_cause_new;
 
@@ -2420,6 +2433,8 @@ module nts_parser_ctrl #(
 
       if (ipdecode_ip4_protocol_we)
         ipdecode_ip4_protocol_reg <= ipdecode_ip4_protocol_new;
+
+      ipdecode_offset_ntp_ext_reg <= ipdecode_offset_ntp_ext_new;
 
       if (ipdecode_udp_length_we)
         ipdecode_udp_length_reg <= ipdecode_udp_length_new;
@@ -3166,14 +3181,14 @@ module nts_parser_ctrl #(
               //Kiss-o'-Death requires copy_tx_addr_reg set earlier, ahead of jump
               //from STATE_TIMESTAMP_WAIT to TX_UPDATE_LENGTH
               copy_tx_addr_we   = 1;
-              copy_tx_addr_new  = ipdecode_offset_ntp_ext;
+              copy_tx_addr_new  = ipdecode_offset_ntp_ext_reg;
             end
           NTS_S_UNIQUE_IDENTIFIER_COPY_0:
             begin
               copy_bytes_we     = 1;
               copy_bytes_new    = nts_unique_identifier_length_reg;
               copy_tx_addr_we   = 1;
-              copy_tx_addr_new  = ipdecode_offset_ntp_ext;
+              copy_tx_addr_new  = ipdecode_offset_ntp_ext_reg;
             end
           NTS_S_UNIQUE_IDENTIFIER_COPY_1:
             begin
@@ -3325,7 +3340,7 @@ module nts_parser_ctrl #(
 
     if (nts_state_reg == NTS_S_LENGTH_CHECKS) begin
       memory_address_we  = 'b1;
-      memory_address_new = ipdecode_offset_ntp_ext;
+      memory_address_new = ipdecode_offset_ntp_ext_reg;
     end
 
     if (nts_state_reg == NTS_S_EXTRACT_EXT_FROM_RAM) begin
@@ -3738,10 +3753,10 @@ module nts_parser_ctrl #(
               reg [ADDR_WIDTH+3-1:0] len;
               is_ip = 0;
               len = 0;
-              if (detect_ipv4) begin
+              if (detect_ipv4_reg) begin
                 is_ip = 1;
                 len = OFFSET_ETH_IPV4_DATA;
-              end else if (detect_ipv6) begin
+              end else if (detect_ipv6_reg) begin
                 is_ip = 1;
                 len = OFFSET_ETH_IPV6_DATA;
               end
@@ -3769,7 +3784,7 @@ module nts_parser_ctrl #(
     endcase
 
     if (respond_ip_udp) begin
-      if (detect_ipv4) begin : emit_ipv4_headers
+      if (detect_ipv4_reg) begin : emit_ipv4_headers
         reg [6*64-1:0] header;
         header = { tx_header_ethernet_ipv4_udp, 48'h0 };
         if (response_done_reg == 1'b0) begin
@@ -3778,7 +3793,7 @@ module nts_parser_ctrl #(
           tx_response_helper( 1, header[ tx_header_ipv4_index_reg*64+:64 ], tx_header_ipv4_index_reg == 0 );
         end
       end
-      else if (detect_ipv6) begin : emit_ipv6_headers
+      else if (detect_ipv6_reg) begin : emit_ipv6_headers
         reg [8*64-1:0] header;
         header = { tx_header_ethernet_ipv6_udp, 16'h0 };
         if (response_done_reg == 1'b0) begin
@@ -3797,9 +3812,9 @@ module nts_parser_ctrl #(
 
   task tx_control_update_udp_header;
   begin
-    if (detect_ipv4) begin
+    if (detect_ipv4_reg) begin
       tx_address    = OFFSET_ETH_IPV4_UDP;
-    end else if (detect_ipv6) begin
+    end else if (detect_ipv6_reg) begin
       tx_address    = OFFSET_ETH_IPV6_UDP;
     end
     tx_write_en   = 1;
@@ -3948,10 +3963,10 @@ module nts_parser_ctrl #(
             //TODO: simplify by merging into NTS_S_UDP_CHECKSUM_RESET
             if (i_tx_sum_done) begin
               tx_sum_en = 1;
-              if (detect_ipv4) begin
+              if (detect_ipv4_reg) begin
                 tx_address = OFFSET_ETH_IPV4_UDP_LENGTH;
                 tx_sum_bytes = 2;
-              end else if (detect_ipv6) begin
+              end else if (detect_ipv6_reg) begin
                 tx_address = OFFSET_ETH_IPV6_UDP_LENGTH;
                 tx_sum_bytes = 2;
               end
@@ -3983,13 +3998,13 @@ module nts_parser_ctrl #(
     endcase
 
     if (ip_update_header0) begin
-            if (detect_ipv4) begin
+            if (detect_ipv4_reg) begin
               tx_address = HEADER_LENGTH_ETHERNET;
               tx_write_en = 1;
               tx_write_data = tx_header_ipv4[159-:64];
               //tx_write_data = 64'hdead_f00d_dead_f00d;
               //$display("%s:%0d IP_HEADER_0: TX[%h (%0d)] = [%h]", `__FILE__, `__LINE__, tx_address,tx_address, tx_write_data);
-            end else if (detect_ipv6) begin
+            end else if (detect_ipv6_reg) begin
               tx_address = HEADER_LENGTH_ETHERNET;
               tx_write_en = 1;
               tx_write_data = tx_header_ipv6[40*8-1-:64];
@@ -3999,7 +4014,7 @@ module nts_parser_ctrl #(
     end
 
     if (ip_update_header1) begin
-            if (detect_ipv4) begin
+            if (detect_ipv4_reg) begin
               tx_address = HEADER_LENGTH_ETHERNET + 8;
               tx_write_en = 1;
               tx_write_data = tx_header_ipv4[95-:64];
@@ -4021,11 +4036,11 @@ module nts_parser_ctrl #(
     end
 
     if (udp_checksum_addr) begin
-      if (detect_ipv4) begin
+      if (detect_ipv4_reg) begin
         tx_sum_en = 1;
         tx_address = OFFSET_ETH_IPV4_SRCADDR;
         tx_sum_bytes = 8; //4 byte src + 4 bytes dst
-      end else if (detect_ipv6) begin
+      end else if (detect_ipv6_reg) begin
         tx_sum_en = 1;
         tx_address = OFFSET_ETH_IPV6_SRCADDR;
         tx_sum_bytes = 32; //16 byte src + 16 bytes dst
@@ -4035,9 +4050,9 @@ module nts_parser_ctrl #(
     if (udp_checksum_datagram) begin
       tx_sum_en = 1;
       tx_sum_bytes = tx_udp_length_reg[ADDR_WIDTH+3-1:0]; //TODO: breaks if address space > 16 bits
-      if (detect_ipv4) begin
+      if (detect_ipv4_reg) begin
         tx_address = OFFSET_ETH_IPV4_UDP;
-      end else if (detect_ipv6) begin
+      end else if (detect_ipv6_reg) begin
         tx_address = OFFSET_ETH_IPV6_UDP;
       end
     end
@@ -4221,11 +4236,11 @@ module nts_parser_ctrl #(
           crypto_fsm_we = 1;
           crypto_fsm_new = CRYPTO_FSM_RX_AUTH_PACKET_W2;
           crypto_rx_op_copy_ad = 1;
-          if (detect_ipv4) begin
+          if (detect_ipv4_reg) begin
             crypto_rx_addr = ADDR_IPV4_START_NTP; //6*8 + 2 ?
             crypto_rx_bytes = nts_authenticator_start_addr_reg - ADDR_IPV4_START_NTP;
           end
-          else if (detect_ipv6) begin
+          else if (detect_ipv6_reg) begin
             crypto_rx_addr = ADDR_IPV6_START_NTP; //8*8 + 6 ?
             crypto_rx_bytes = nts_authenticator_start_addr_reg - ADDR_IPV6_START_NTP;
           end
@@ -4302,7 +4317,7 @@ module nts_parser_ctrl #(
       CRYPTO_FSM_COPY_TX_TO_AD:
         if (i_crypto_busy == 1'b0) begin : crypto_fsm_copy_tx_to_ad
           reg [ADDR_WIDTH+3-1:0] ntp_start;
-          ntp_start = (detect_ipv4) ? ADDR_IPV4_START_NTP : ADDR_IPV6_START_NTP;
+          ntp_start = (detect_ipv4_reg) ? ADDR_IPV4_START_NTP : ADDR_IPV6_START_NTP;
 
           crypto_fsm_we  = 1;
           crypto_fsm_new = CRYPTO_FSM_WAIT_THEN_SUCCESS;
@@ -4622,7 +4637,7 @@ module nts_parser_ctrl #(
             nts_set_error_state( ERROR_CAUSE_PKT_LONG );
           else if (ipdecode_udp_length_reg[1:0] != 0) /* NTP packets are 7*8 + M(4+4n), always 4 byte aligned */
             nts_set_error_state( ERROR_CAUSE_PKT_UDP_ALIGN );
-          else if (func_address_within_memory_bounds (ipdecode_offset_ntp_ext, 4) == 'b0)
+          else if (func_address_within_memory_bounds (ipdecode_offset_ntp_ext_reg, 4) == 'b0)
             nts_set_error_state( ERROR_CAUSE_NTP_OUT_OF_MEM );
           else begin
             nts_state_we = 'b1;
@@ -4709,12 +4724,12 @@ module nts_parser_ctrl #(
           default: ;
         endcase
       NTS_S_WRITE_HEADER_IPV4_IPV6:
-        if (detect_ipv4) begin
+        if (detect_ipv4_reg) begin
           if (tx_header_ipv4_index_reg == 0) begin
             nts_state_we  = 'b1;
             nts_state_new = NTS_S_TIMESTAMP;
           end
-        end else if (detect_ipv6) begin
+        end else if (detect_ipv6_reg) begin
           if (tx_header_ipv6_index_reg == 0) begin
             nts_state_we  = 'b1;
             nts_state_new = NTS_S_TIMESTAMP;
@@ -5079,7 +5094,7 @@ module nts_parser_ctrl #(
         end else if (detect_arp) begin
           state_we  = 'b1;
           state_new = STATE_ARP_INIT;
-        end else if (detect_ipv4) begin
+        end else if (detect_ipv4_reg) begin
           if (config_ctrl_reg[CONFIG_BIT_VERIFY_IP_CHECKSUMS]) begin
             state_we  = 'b1;
             state_new = STATE_VERIFY_IPV4;
@@ -5087,7 +5102,7 @@ module nts_parser_ctrl #(
             state_we  = 'b1;
             state_new = STATE_SELECT_IPV4_HANDLER;
           end
-        end else if (detect_ipv6) begin
+        end else if (detect_ipv6_reg) begin
           case (ipdecode_ip6_next_reg)
             IP_PROTO_ICMPV6:
               if (config_ctrl_reg[CONFIG_BIT_VERIFY_IP_CHECKSUMS]) begin
@@ -5360,6 +5375,11 @@ module nts_parser_ctrl #(
 
   always @*
   begin : ipdecode_proc
+    detect_ipv4_we = 0;
+    detect_ipv4_new = 0;
+    detect_ipv6_we = 0;
+    detect_ipv6_new = 0;
+
     ipdecode_arp_hrd_we  = 0;
     ipdecode_arp_hrd_new = 0;
     ipdecode_arp_pro_we  = 0;
@@ -5465,6 +5485,10 @@ module nts_parser_ctrl #(
         ipdecode_ip6_priority_new      = i_data[11:4];
         ipdecode_ip6_flowlabel_we      = 1;
         ipdecode_ip6_flowlabel_new     = { i_data[3:0], 16'h0000 };;
+        detect_ipv4_we = 1;
+        detect_ipv4_new = (ipdecode_ethernet_protocol_new == E_TYPE_IPV4) && (ipdecode_ip_version_new == IP_V4);
+        detect_ipv6_we = 1;
+        detect_ipv6_new = (ipdecode_ethernet_protocol_new == E_TYPE_IPV6) && (ipdecode_ip_version_new == IP_V6);
 
       end else if (detect_arp) begin
         case (word_counter_reg)
@@ -5498,7 +5522,7 @@ module nts_parser_ctrl #(
              end
           default: ;
         endcase
-      end else if (detect_ipv4 && ipdecode_ip4_ihl_reg == 5) begin
+      end else if (detect_ipv4_reg && ipdecode_ip4_ihl_reg == 5) begin
         case (word_counter_reg)
           1: begin
                ipdecode_ip4_total_length_we  = 1;
@@ -5528,7 +5552,7 @@ module nts_parser_ctrl #(
              end
           default: ;
         endcase
-      end else if (detect_ipv6) begin
+      end else if (detect_ipv6_reg) begin
         case (word_counter_reg)
           1: begin
                ipdecode_ip6_flowlabel_we       = 1;
@@ -5596,6 +5620,27 @@ module nts_parser_ctrl #(
         endcase
       end
     end
+  end
+
+  //----------------------------------------------------------------
+  // IP Decode - NTP extension offset
+  //----------------------------------------------------------------
+
+  always @*
+  begin : ipdecode_ntp_extensions_offset_calc
+    ipdecode_offset_ntp_ext_new[ADDR_WIDTH+3-1:3] = 0;
+    ipdecode_offset_ntp_ext_new[2:0]              = 0;
+
+    if (detect_ipv4_reg) begin
+      if (ipdecode_ip4_ihl_reg == 5) begin
+        ipdecode_offset_ntp_ext_new[ADDR_WIDTH+3-1:3] = 5 + 6;
+        ipdecode_offset_ntp_ext_new[2:0]              = 2;
+      end
+    end else if (detect_ipv6_reg) begin
+      ipdecode_offset_ntp_ext_new[ADDR_WIDTH+3-1:3] = 7 + 6;
+      ipdecode_offset_ntp_ext_new[2:0]              = 6;
+    end
+
   end
 
   //----------------------------------------------------------------
@@ -5715,7 +5760,7 @@ module nts_parser_ctrl #(
 
     if (word_counter_overflow_reg == 1'b0) begin
 
-      if (detect_ipv6) begin
+      if (detect_ipv6_reg) begin
         if (payload_length_sane_ipv6) begin
           case (ipdecode_ip6_next_reg)
             IP_PROTO_ICMPV6:
@@ -5751,7 +5796,7 @@ module nts_parser_ctrl #(
       end
       protocol_detect_icmpv6_new = protocol_detect_ip6echo_new || protocol_detect_ip6ns_new || protocol_detect_ip6traceroute_new;
 
-      if (detect_ipv4 && !detect_ipv4_bad) begin
+      if (detect_ipv4_reg && !detect_ipv4_bad) begin
         if (payload_length_sane_ipv4) begin
           case (ipdecode_ip4_protocol_reg)
             IP_PROTO_UDP:
@@ -5799,7 +5844,7 @@ module nts_parser_ctrl #(
       timestamp_version_number_we   = 1;
 
     end else if (i_process_initial) begin
-      if (detect_ipv4 && detect_ipv4_bad == 'b0) begin
+      if (detect_ipv4_reg && detect_ipv4_bad == 'b0) begin
         if (word_counter_reg == 4) begin
           // 47:46 LI (2bit)
           // 45:43 VN (3bit)
@@ -5818,7 +5863,7 @@ module nts_parser_ctrl #(
           timestamp_origin_timestamp_we  = 1;
           timestamp_origin_timestamp_new = { timestamp_origin_timestamp_reg[63:16], i_data[63:48] };
         end
-      end if (detect_ipv6) begin
+      end if (detect_ipv6_reg) begin
         if (word_counter_reg == 6) begin
           // 15:14 LI (2bit)
           // 13:11 VN (3bit)
@@ -5868,13 +5913,13 @@ module nts_parser_ctrl #(
               tx_udp_length_we = 1;
               tx_udp_length_new [15:ADDR_WIDTH+3] = 0;
               tx_udp_length_new[ADDR_WIDTH+3-1:0] = copy_tx_addr_reg;
-              if (detect_ipv4) begin
+              if (detect_ipv4_reg) begin
                 tx_ipv4_totlen_we = 1;
                 tx_ipv4_totlen_new [15:ADDR_WIDTH+3] = 0;
                 tx_ipv4_totlen_new[ADDR_WIDTH+3-1:0] = copy_tx_addr_reg;
                 tx_ipv4_totlen_new = tx_ipv4_totlen_new - HEADER_LENGTH_ETHERNET;
                 tx_udp_length_new  = tx_udp_length_new - HEADER_LENGTH_ETHERNET - HEADER_LENGTH_IPV4;
-              end else if (detect_ipv6) begin
+              end else if (detect_ipv6_reg) begin
                 tx_udp_length_new = tx_udp_length_new - HEADER_LENGTH_ETHERNET - HEADER_LENGTH_IPV6;
               end
             end

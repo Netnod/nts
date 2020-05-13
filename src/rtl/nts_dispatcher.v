@@ -265,6 +265,33 @@ module nts_dispatcher #(
   reg                bus_read_data_mux_valid;
 
   //----------------------------------------------------------------
+  // Engine(s) data bus wires
+  //----------------------------------------------------------------
+
+  reg  [4 * ENGINES - 1 : 0] engine_out_data_last_valid;
+  reg      [ENGINES - 1 : 0] engine_out_fifo_empty;
+  reg      [ENGINES - 1 : 0] engine_out_packet_available;
+  reg      [ENGINES - 1 : 0] engine_out_fifo_rd_valid;
+  reg [64 * ENGINES - 1 : 0] engine_out_fifo_rd_data;
+
+  //----------------------------------------------------------------
+  // Dispatcher MUX. Used to select one engine from many.
+  //----------------------------------------------------------------
+
+  reg             mux_ctrl_we;
+  reg             mux_ctrl_new;
+  reg             mux_ctrl_reg;
+  reg             mux_index_we;
+  integer         mux_index_new;
+  integer         mux_index_reg;
+  reg             mux_search_counter_we;
+  integer         mux_search_counter_new;
+  integer         mux_search_counter_reg;
+
+  reg             mux_in_packet_read_discard; //selected engine wants to discard current packet
+  reg             mux_in_fifo_rd_start;       //selected engine wants FIFO to stard sending data
+
+  //----------------------------------------------------------------
   // Output wiring
   //----------------------------------------------------------------
 
@@ -288,27 +315,6 @@ module nts_dispatcher #(
   //----------------------------------------------------------------
   // Dispatcher MUX
   //----------------------------------------------------------------
-
-  reg             mux_ctrl_we;
-  reg             mux_ctrl_new;
-  reg             mux_ctrl_reg;
-  reg             mux_index_we;
-  integer         mux_index_new;
-  integer         mux_index_reg;
-  reg             mux_search_counter_we;
-  integer         mux_search_counter_new;
-  integer         mux_search_counter_reg;
-
-
-  reg             mux_in_packet_read_discard;
-  reg             mux_in_fifo_rd_start;
-
-  reg  [4 * ENGINES - 1 : 0] engine_out_data_last_valid;
-  reg      [ENGINES - 1 : 0] engine_out_fifo_empty;
-  reg      [ENGINES - 1 : 0] engine_out_packet_available;
-  reg      [ENGINES - 1 : 0] engine_out_fifo_rd_valid;
-  reg [64 * ENGINES - 1 : 0] engine_out_fifo_rd_data;
-
 
   always @*
   begin : dispatcher_mux

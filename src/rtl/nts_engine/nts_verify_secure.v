@@ -76,6 +76,7 @@ module nts_verify_secure #(
 
   input  wire                         i_rx_wait,
   output wire      [ADDR_WIDTH+3-1:0] o_rx_addr,
+  output wire      [ADDR_WIDTH+3-1:0] o_rx_burstsize,
   output wire                   [2:0] o_rx_wordsize,
   output wire                         o_rx_rd_en,
   input  wire                         i_rx_rd_dv,
@@ -225,13 +226,16 @@ module nts_verify_secure #(
   reg   [BRAM_WIDTH-1:0] ramrx_addr_new;
   reg   [BRAM_WIDTH-1:0] ramrx_addr_reg; //Memory address in internal mem.
 
-  reg                    rx_addr_last_we;
-  reg [ADDR_WIDTH+3-1:0] rx_addr_last_new;
-  reg [ADDR_WIDTH+3-1:0] rx_addr_last_reg; //Memory address in RX buffer.
+  reg                    rx_addr_we;
+  reg [ADDR_WIDTH+3-1:0] rx_addr_new;
+  reg [ADDR_WIDTH+3-1:0] rx_addr_reg; //Memory address in RX buffer.
 
-  reg                    rx_addr_next_we;
-  reg [ADDR_WIDTH+3-1:0] rx_addr_next_new;
-  reg [ADDR_WIDTH+3-1:0] rx_addr_next_reg; //Memory address in RX buffer.
+  reg                    rx_burstsize_we;
+  reg [ADDR_WIDTH+3-1:0] rx_burstsize_new;
+  reg [ADDR_WIDTH+3-1:0] rx_burstsize_reg; //Amount of memory to copy from RX
+
+  reg                    rx_rd_en_new; //Read enable out
+  reg                    rx_rd_en_reg; //Read enable out
 
   reg                    rx_tag_we;
   reg                    rx_tag_new;
@@ -353,16 +357,6 @@ module nts_verify_secure #(
   reg [63:0] ramcookie_wdata;
 
   //----------------------------------------------------------------
-  // Wires - RX-Buff related
-  //----------------------------------------------------------------
-
-  reg [ADDR_WIDTH+3-1:0] rx_addr;  //Address out
-  reg                    rx_rd_en; //Read enable out
-
-  reg [ADDR_WIDTH+3-1:0] rx_addr_reg;  //Address out
-  reg                    rx_rd_en_reg; //Read enable out
-
-  //----------------------------------------------------------------
   // Wires - TX-Buff related
   //----------------------------------------------------------------
 
@@ -461,7 +455,8 @@ module nts_verify_secure #(
 
   assign o_rx_addr = rx_addr_reg;
   assign o_rx_rd_en = rx_rd_en_reg;
-  assign o_rx_wordsize = 3; // 3: 64bit, 2: 32bit, 1: 16bit, 0: 8bit
+  assign o_rx_wordsize = 4; // 4: burst, 3: 64bit, 2: 32bit, 1: 16bit, 0: 8bit
+  assign o_rx_burstsize = rx_burstsize_reg;
 
   assign o_tx_read_en = tx_rd_en;
   assign o_tx_write_en = tx_wr_en;
@@ -585,9 +580,8 @@ module nts_verify_secure #(
       ramcookie_addr_load_reg <= MEM8_ADDR_NONCE;
       ramcookie_addr_write_reg <= MEM8_ADDR_COOKIES;
       rx_addr_reg <= 0;
+      rx_burstsize_reg <= 0;
       rx_rd_en_reg <= 0;
-      rx_addr_last_reg <= 0;
-      rx_addr_next_reg <= 0;
       rx_tag_reg <= 0;
       state_reg <= 0;
       tx_addr_next_reg <= 0;
@@ -676,17 +670,16 @@ module nts_verify_secure #(
       if (ramtx_addr_we)
         ramtx_addr_reg <= ramtx_addr_new;
 
-      if (rx_addr_last_we)
-        rx_addr_last_reg <= rx_addr_last_new;
+      if (rx_addr_we)
+        rx_addr_reg <= rx_addr_new;
 
-      if (rx_addr_next_we)
-        rx_addr_next_reg <= rx_addr_next_new;
+      if (rx_burstsize_we)
+        rx_burstsize_reg <= rx_burstsize_new;
+
+      rx_rd_en_reg <= rx_rd_en_new;
 
       if (rx_tag_we)
         rx_tag_reg <= rx_tag_new;
-
-      rx_addr_reg <= rx_addr;
-      rx_rd_en_reg <= rx_rd_en;
 
       if (state_we)
         state_reg <= state_new;
@@ -999,87 +992,59 @@ module nts_verify_secure #(
     ramrx_addr_we = 0;
     ramrx_addr_new = 0;
     ramrx_wdata = 0;
-    rx_addr = 0;
-    rx_rd_en = 0;
-    rx_addr_last_we = 0;
-    rx_addr_last_new = 0;
-    rx_addr_next_we = 0;
-    rx_addr_next_new = 0;
+    rx_addr_we = 0;
+    rx_addr_new = 0;
+    rx_burstsize_we = 0;
+    rx_burstsize_new = 0;
+    rx_rd_en_new = 0;
     rx_tag_we = 0;
     rx_tag_new = 0;
     case (state_reg)
       STATE_IDLE:
         if (i_op_copy_rx_pc || i_op_copy_rx_ad || i_op_copy_rx_nonce || i_op_copy_rx_tag) begin
-          rx_addr_last_we = 1;
-          rx_addr_last_new = i_copy_rx_addr + i_copy_rx_bytes;
-          rx_addr_next_we = 1;
-          rx_addr_next_new = i_copy_rx_addr;
+          rx_addr_we = 1;
+          rx_addr_new = i_copy_rx_addr;
+          rx_burstsize_we = 1;
+          rx_burstsize_new = i_copy_rx_bytes;
+          rx_rd_en_new = 1;
         end
       STATE_COPY_RX_INIT_PC:
         if (i_rx_wait == 'b0) begin
           ramrx_addr_we = 1;
           ramrx_addr_new = MEM8_ADDR_PC;
-          rx_addr = rx_addr_next_reg;
-          rx_rd_en = 1;
-          rx_addr_next_we = 1;
-          rx_addr_next_new = rx_addr_next_reg + 8;
         end
       STATE_COPY_RX_INIT_AD:
         if (i_rx_wait == 'b0) begin
           ramrx_addr_we = 1;
           ramrx_addr_new = MEM8_ADDR_AD;
-          rx_addr = rx_addr_next_reg;
-          rx_rd_en = 1;
-          rx_addr_next_we = 1;
-          rx_addr_next_new = rx_addr_next_reg + 8;
         end
       STATE_COPY_RX_INIT_NONCE:
         if (i_rx_wait == 'b0) begin
           ramrx_addr_we = 1;
           ramrx_addr_new = MEM8_ADDR_NONCE;
-          rx_addr = rx_addr_next_reg;
-          rx_rd_en = 1;
-          rx_addr_next_we = 1;
-          rx_addr_next_new = rx_addr_next_reg + 8;
         end
       STATE_COPY_RX_INIT_TAG:
         if (i_rx_wait == 'b0) begin
           rx_tag_we = 1;
           rx_tag_new = 0;
-          rx_addr = rx_addr_next_reg;
-          rx_rd_en = 1;
-          rx_addr_next_we = 1;
-          rx_addr_next_new = rx_addr_next_reg + 8;
         end
       STATE_COPY_RX:
         begin
-          if (i_rx_wait == 'b0) begin
-            if (i_rx_rd_dv) begin
-              ramrx_en = 1;
-              ramrx_we = 1;
-              ramrx_addr_we = 1;
-              ramrx_addr_new = ramrx_addr_reg + 1;
-              ramrx_wdata = i_rx_rd_data;
-              rx_addr = rx_addr_next_reg;
-              rx_rd_en = 1;
-              rx_addr_next_we = 1;
-              rx_addr_next_new = rx_addr_next_reg + 8;
-            end
+          if (i_rx_rd_dv) begin
+            ramrx_en = 1;
+            ramrx_we = 1;
+            ramrx_addr_we = 1;
+            ramrx_addr_new = ramrx_addr_reg + 1;
+            ramrx_wdata = i_rx_rd_data;
           end
         end
       STATE_COPY_RX_TAG:
         begin
-          if (i_rx_wait == 'b0) begin
-            if (i_rx_rd_dv) begin
-              core_tag_we[rx_tag_reg] = 1;
-              core_tag_new = i_rx_rd_data;
-              rx_tag_we = 1;
-              rx_tag_new = rx_tag_reg + 1;
-              rx_addr = rx_addr_next_reg;
-              rx_rd_en = 1;
-              rx_addr_next_we = 1;
-              rx_addr_next_new = rx_addr_next_reg + 8;
-            end
+          if (i_rx_rd_dv) begin
+            core_tag_we[rx_tag_reg] = 1;
+            core_tag_new = i_rx_rd_data;
+            rx_tag_we = 1;
+            rx_tag_new = rx_tag_reg + 1;
           end
         end
       default: ;
@@ -1669,12 +1634,12 @@ module nts_verify_secure #(
           state_new = STATE_COPY_RX_TAG;
         end
       STATE_COPY_RX:
-        if (rx_rd_en && rx_addr >= rx_addr_last_reg) begin
+        if (i_rx_wait == 'b0) begin
           state_we = 1;
           state_new = STATE_IDLE;
         end
       STATE_COPY_RX_TAG:
-        if (rx_rd_en && rx_addr >= rx_addr_last_reg) begin
+        if (i_rx_wait == 'b0) begin
           state_we = 1;
           state_new = STATE_IDLE;
         end

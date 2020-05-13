@@ -113,6 +113,7 @@ module nts_verify_secure_tb #(
   reg                     i_rx_wait;
   wire [ADDR_WIDTH+3-1:0] o_rx_addr;
   wire              [2:0] o_rx_wordsize;
+  wire [ADDR_WIDTH+3-1:0] o_rx_burstsize;
   wire                    o_rx_rd_en;
   reg                     i_rx_rd_dv;
   reg [RX_PORT_WIDTH-1:0] i_rx_rd_data;
@@ -183,6 +184,7 @@ module nts_verify_secure_tb #(
     .i_rx_wait(i_rx_wait),
     .o_rx_addr(o_rx_addr),
     .o_rx_wordsize(o_rx_wordsize),
+    .o_rx_burstsize(o_rx_burstsize),
     .o_rx_rd_en(o_rx_rd_en),
     .i_rx_rd_dv(i_rx_rd_dv),
     .i_rx_rd_data(i_rx_rd_data),
@@ -330,7 +332,7 @@ module nts_verify_secure_tb #(
   end
   endtask
 
-  task wait_busy;
+  task wait_busy ( input integer line );
   begin : wait_busy
     integer i;
     i = 0;
@@ -339,7 +341,7 @@ module nts_verify_secure_tb #(
       i = i + 1;
     end
     if (verbose>1)
-      $display("%s:%0d wait_busy completed in %0d ticks.", `__FILE__, `__LINE__, i);
+      $display("%s:%0d:%0d wait_busy completed in %0d ticks.", `__FILE__, `__LINE__, line, i);
   end
   endtask
 
@@ -380,14 +382,14 @@ module nts_verify_secure_tb #(
     if (verbose>2)
       `dump( "", mem_rx[j] );
 
-    wait_busy();
+    wait_busy( `__LINE__ );
     i_op_copy_rx_ad = 1;
     i_copy_rx_addr = mem_rx_baseaddr;
     i_copy_rx_bytes = bytes_count;
     #10;
     i_op_copy_rx_ad = 0;
     `assert(o_busy);
-    wait_busy();
+    wait_busy( `__LINE__ );
   end
   endtask
 
@@ -428,14 +430,14 @@ module nts_verify_secure_tb #(
     if (verbose>2)
       `dump( "", mem_tx[j] );
 
-    wait_busy();
+    wait_busy( `__LINE__ );
     i_op_copy_tx_ad = 1;
     i_copy_tx_addr = mem_tx_baseaddr;
     i_copy_tx_bytes = bytes_count;
     #10;
     i_op_copy_tx_ad = 0;
     `assert(o_busy);
-    wait_busy();
+    wait_busy( `__LINE__ );
   end
   endtask
 
@@ -446,14 +448,14 @@ module nts_verify_secure_tb #(
   begin
     mem_rx[32] = nonce[127:64];
     mem_rx[33] = nonce[63:0];
-    wait_busy();
+    wait_busy( `__LINE__ );
     i_op_copy_rx_nonce = 1;
     i_copy_rx_addr = mem_rx_baseaddr + (32*8);
     i_copy_rx_bytes = 16;
     #10;
     i_op_copy_rx_nonce = 0;
     `assert(o_busy);
-    wait_busy();
+    wait_busy( `__LINE__ );
   end
   endtask
 
@@ -463,14 +465,14 @@ module nts_verify_secure_tb #(
   begin
     mem_rx[35] = tag[127:64];
     mem_rx[36] = tag[63:0];
-    wait_busy();
+    wait_busy( `__LINE__ );
     i_op_copy_rx_tag = 1;
     i_copy_rx_addr = mem_rx_baseaddr + (35*8);
     i_copy_rx_bytes = 16;
     #10;
     i_op_copy_rx_tag = 0;
     `assert(o_busy);
-    wait_busy();
+    wait_busy( `__LINE__ );
   end
   endtask
 
@@ -486,69 +488,69 @@ module nts_verify_secure_tb #(
     mem_rx[42] = pc[128+:64];
     mem_rx[43] = pc[64+:64];
     mem_rx[44] = pc[0+:64];
-    wait_busy();
+    wait_busy( `__LINE__ );
     i_op_copy_rx_pc = 1;
     i_copy_rx_addr = mem_rx_baseaddr + (37*8);
     i_copy_rx_bytes = 64; /*512bits; 256(128+128) * 2 */
     #10;
     i_op_copy_rx_pc = 0;
     `assert(o_busy);
-    wait_busy();
+    wait_busy( `__LINE__ );
   end
   endtask
 
   task verify_c2s;
   begin
-    wait_busy();
+    wait_busy( `__LINE__ );
     i_op_verify_c2s = 1;
     #10;
     i_op_verify_c2s = 0;
     `assert(o_busy);
-    wait_busy();
+    wait_busy( `__LINE__ );
   end
   endtask
 
   task verify_cookie;
   begin
-    wait_busy();
+    wait_busy( `__LINE__ );
     i_op_cookie_verify = 1;
     #10;
     i_op_cookie_verify = 0;
     `assert(o_busy);
-    wait_busy();
+    wait_busy( `__LINE__ );
   end
   endtask
 
   task cookie_loadkeys;
   begin
-    wait_busy();
+    wait_busy( `__LINE__ );
     i_op_cookie_loadkeys = 1;
     #10;
     i_op_cookie_loadkeys = 0;
     `assert(o_busy);
-    wait_busy();
+    wait_busy( `__LINE__ );
   end
   endtask
 
   task cookie_rencrypt;
   begin
-    wait_busy();
+    wait_busy( `__LINE__ );
     i_op_cookie_rencrypt = 1;
     #10;
     i_op_cookie_rencrypt = 0;
     `assert(o_busy);
-    wait_busy();
+    wait_busy( `__LINE__ );
   end
   endtask
 
   task generate_tag;
   begin
-    wait_busy();
+    wait_busy( `__LINE__ );
     i_op_generate_tag = 1;
     #10;
     i_op_generate_tag = 0;
     `assert(o_busy);
-    wait_busy();
+    wait_busy( `__LINE__ );
   end
   endtask
 
@@ -560,7 +562,7 @@ module nts_verify_secure_tb #(
     reg [63:0] b;
     reg [63:0] c;
     reg [63:0] d;
-    wait_busy();
+    wait_busy( `__LINE__ );
     i_op_store_tx_nonce_tag = 1;
     i_copy_tx_addr = 64; // some address, whatever
     i_copy_tx_bytes = 32; //nonce=16, tag=16
@@ -569,7 +571,7 @@ module nts_verify_secure_tb #(
     i_copy_tx_addr = 0;
     i_copy_tx_bytes = 0;
     `assert(o_busy);
-    wait_busy();
+    wait_busy( `__LINE__ );
     a = mem_tx_func(64);
     b = mem_tx_func(64+1*8);
     c = mem_tx_func(64+2*8);
@@ -581,7 +583,7 @@ module nts_verify_secure_tb #(
 
   task store_cookiebuffer;
   begin
-    wait_busy();
+    wait_busy( `__LINE__ );
     i_op_store_tx_cookiebuf = 1;
     i_copy_tx_addr = 64+4*8; // some address, whatever. offsetted 0 from last task store_nonce_tag write.
     i_copy_tx_bytes = 0; //unused
@@ -590,31 +592,31 @@ module nts_verify_secure_tb #(
     i_copy_tx_addr = 0;
     i_copy_tx_bytes = 0;
     `assert(o_busy);
-    wait_busy();
+    wait_busy( `__LINE__ );
   end
   endtask
 
   task cookiebuf_reset;
   begin
-    wait_busy();
+    wait_busy( `__LINE__ );
     i_op_cookiebuf_reset = 1;
     #10;
     i_op_cookiebuf_reset = 0;
     `assert(o_busy == 'b0); //TODO change behaivor to be more similar to other ops?
-    //wait_busy();
+    //wait_busy( `__LINE__ );
   end
   endtask
 
   task cookiebuf_record_cookie( input [63:0] cookie_prefix );
   begin
-    wait_busy();
+    wait_busy( `__LINE__ );
     i_cookie_prefix = cookie_prefix;
     i_op_cookiebuf_appendcookie = 1;
     #10;
     i_op_cookiebuf_appendcookie = 0;
     i_cookie_prefix = 0;
     `assert(o_busy);
-    wait_busy();
+    wait_busy( `__LINE__ );
   end
   endtask
 
@@ -1146,7 +1148,7 @@ module nts_verify_secure_tb #(
     #10;
     i_op_copy_tx_ad = 0;
     `assert(o_busy);
-    wait_busy();
+    wait_busy( `__LINE__ );
 
     if (verbose>1) begin
       $display("%s:%0d ---------------------------------- Debug before Generate Tag ----------------------------------", `__FILE__, `__LINE__);
@@ -1166,7 +1168,7 @@ module nts_verify_secure_tb #(
     i_op_store_tx_nonce_tag = 1;
     #10;
     i_op_store_tx_nonce_tag = 0;
-    wait_busy();
+    wait_busy( `__LINE__ );
 
     unwrap_test(
       "case 2",
@@ -1205,8 +1207,10 @@ module nts_verify_secure_tb #(
   // Testbench model: RX-Buff
   //----------------------------------------------------------------
 
-  integer delay_rx_cnt;
-  reg [63:0] delay_rx_value;
+  integer                delay_rx_cnt;
+  reg [ADDR_WIDTH+3-1:0] delay_rx_current;
+  reg [ADDR_WIDTH+3-1:0] delay_rx_burst;
+
 
   always @(posedge i_clk or posedge i_areset)
   begin
@@ -1215,26 +1219,44 @@ module nts_verify_secure_tb #(
       i_rx_rd_dv <= 0;
       i_rx_rd_data <= 0;
       delay_rx_cnt <= 0;
-      delay_rx_value <= 0;
+      delay_rx_current <= 0;
+      delay_rx_burst <= 0;
+
     end else begin
       i_rx_rd_dv <= 0;
       i_rx_rd_data <= 0;
       if (i_rx_wait) begin
         if (delay_rx_cnt < 3) begin
-          delay_rx_cnt <= delay_rx_cnt+1;
+          delay_rx_cnt <= delay_rx_cnt + 1;
         end else begin
-          i_rx_wait <= 0;
-          i_rx_rd_dv <= 1;
-          i_rx_rd_data <= delay_rx_value;
+          if (delay_rx_burst > 0) begin : rx_out
+            reg [63:0] tmp;
+            tmp = mem_rx_func( delay_rx_current );
+            if (verbose>1) $display("%s:%0d RX-buff[%h]=%h (burstsize: %0d)", `__FILE__, `__LINE__, o_rx_addr, tmp, delay_rx_burst);
+            i_rx_rd_dv <= 1;
+            i_rx_rd_data <= tmp;
+          end
+          if (delay_rx_burst <= 8) begin
+            i_rx_wait <= 0;
+          end else begin
+            delay_rx_current <= delay_rx_current + 8;
+            delay_rx_burst <= delay_rx_burst - 8;
+          end
         end
-      end else if (o_rx_rd_en) begin : rx_buff
-        reg [63:0] tmp;
-        `assert(o_rx_wordsize == 3); //64bit
-        tmp = mem_rx_func(o_rx_addr);
+      end else if (o_rx_rd_en) begin
+        case (o_rx_wordsize)
+          3: begin
+               delay_rx_current <= o_rx_addr;
+               delay_rx_burst <= 8;
+             end
+          4: begin
+               delay_rx_current <= o_rx_addr;
+               delay_rx_burst <= o_rx_burstsize;
+             end
+          default: `assert( 0 == 1 )
+        endcase
         i_rx_wait <= 1;
         delay_rx_cnt <= 0;
-        delay_rx_value <= tmp;
-        if (verbose>1) $display("%s:%0d RX-buff[%h]=%h", `__FILE__, `__LINE__, o_rx_addr, tmp);
       end
     end
   end

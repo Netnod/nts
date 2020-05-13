@@ -31,6 +31,11 @@
 module nts_top_tb;
   localparam ADDR_WIDTH = 10;
 
+  localparam DEBUG_CRYPTO_RX = 1;
+  localparam DEBUG           = 3;
+  localparam BENCHMARK       = 1;
+  localparam ENGINES         = 1;
+
   localparam TEST_FUZZ_UI       = 0;
   localparam TEST_FUZZ_UI_START = 32;
   localparam TEST_FUZZ_UI_STOP  = 512;
@@ -310,9 +315,6 @@ module nts_top_tb;
        16'h94_c8                                            // .È
   };
 
-  localparam DEBUG           = 3;
-  localparam BENCHMARK       = 1;
-  localparam ENGINES         = 1;
   localparam API_ADDR_WIDTH  = 12;
   localparam API_RW_WIDTH    = 32;
   localparam MAC_DATA_WIDTH  = 64;
@@ -1825,6 +1827,20 @@ module nts_top_tb;
   //----------------------------------------------------------------
   // Debug traces
   //----------------------------------------------------------------
+
+  `define inspect( x ) $display("%s:%0d: INSPECT: %s = %h", `__FILE__, `__LINE__, `"x`", x)
+  `define always_inspect( x ) always @* `inspect( x )
+
+  if (DEBUG_CRYPTO_RX) begin
+    `always_inspect( dut.genblk1[0].engine.crypto.i_rx_wait );
+    `always_inspect( dut.genblk1[0].engine.crypto.o_rx_addr );
+    `always_inspect( dut.genblk1[0].engine.crypto.o_rx_burstsize);
+    `always_inspect( dut.genblk1[0].engine.crypto.o_rx_wordsize);
+    `always_inspect( dut.genblk1[0].engine.crypto.o_rx_rd_en);
+    `always_inspect( dut.genblk1[0].engine.crypto.i_rx_rd_dv);
+    `always_inspect( dut.genblk1[0].engine.crypto.i_rx_rd_data);
+  end
+
 
   if (DEBUG>0) begin
     always @*

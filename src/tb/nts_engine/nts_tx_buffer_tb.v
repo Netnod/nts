@@ -88,8 +88,7 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
   reg            [2:0] i_address_lo;
 
 
-  reg         i_parser_ipv4_done;
-  reg         i_parser_ipv6_done;
+  reg         i_parser_transfer;
 
   wire        o_parser_current_memory_full;
   wire        o_parser_current_empty;
@@ -206,32 +205,24 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
     end
   endtask
 
-  task transmit_packet( input ipv6 );
+  task transmit_packet;
     begin
       wait_busy();
-      if (ipv6) begin
-        i_parser_ipv6_done = 1;
-        #10 ;
-        i_parser_ipv6_done = 0;
-        #10 ;
-      end else begin
-        i_parser_ipv4_done = 1;
-        #10 ;
-        i_parser_ipv4_done = 0;
-        #10 ;
-      end
+      i_parser_transfer = 1;
+      #10 ;
+      i_parser_transfer = 0;
+      #10 ;
     end
   endtask
 
   task send_packet (
     input [65535:0] source,
-    input    [31:0] length,
-    input           ipv6
+    input    [31:0] length
   );
     begin
       wait_busy();
       write_packet ( source, length );
-      transmit_packet ( ipv6 );
+      transmit_packet ( );
     end
   endtask
 
@@ -390,8 +381,7 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
     .i_address_hi(i_address_hi),
     .i_address_lo(i_address_lo),
 
-    .i_parser_ipv4_done(i_parser_ipv4_done),
-    .i_parser_ipv6_done(i_parser_ipv6_done),
+    .i_parser_transfer(i_parser_transfer),
 
     .o_parser_current_memory_full(o_parser_current_memory_full),
     .o_parser_current_empty(o_parser_current_empty)
@@ -804,8 +794,7 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
     i_address_hi       = 0;
     i_address_lo       = 0;
 
-    i_parser_ipv4_done = 0;
-    i_parser_ipv6_done = 0;
+    i_parser_transfer = 0;
 
     #20 ;
     i_areset = 0;
@@ -817,9 +806,9 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
 
     $display("%s:%0d Send NTS IPv4 requests", `__FILE__, `__LINE__);
     #20
-    send_packet({60048'b0, nts_packet_ipv4_request1}, ETHIPV4_NTS_TESTPACKETS_BITS, 0);
+    send_packet( {60048'b0, nts_packet_ipv4_request1}, ETHIPV4_NTS_TESTPACKETS_BITS );
 
-    send_packet({60048'b0, nts_packet_ipv4_request2}, ETHIPV4_NTS_TESTPACKETS_BITS, 0);
+    send_packet( {60048'b0, nts_packet_ipv4_request2}, ETHIPV4_NTS_TESTPACKETS_BITS );
 
     receive_packet();
     receive_packet();
@@ -830,9 +819,9 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
 
     $display("%s:%0d Send NTS IPv6 requests", `__FILE__, `__LINE__);
 
-    send_packet({59888'b0, nts_packet_ipv6_request1}, ETHIPV6_NTS_TESTPACKETS_BITS, 1);
+    send_packet( {59888'b0, nts_packet_ipv6_request1}, ETHIPV6_NTS_TESTPACKETS_BITS );
 
-    send_packet({59888'b0, nts_packet_ipv6_request2}, ETHIPV6_NTS_TESTPACKETS_BITS, 1);
+    send_packet( {59888'b0, nts_packet_ipv6_request2}, ETHIPV6_NTS_TESTPACKETS_BITS );
 
     receive_packet();
     receive_packet();
@@ -855,7 +844,7 @@ module nts_tx_buffer_tb #( parameter integer verbose_output = 'h5);
     #10;
     i_write_en         = 0;
     #10;
-    transmit_packet(0);
+    transmit_packet();
     #10;
     receive_packet();
 

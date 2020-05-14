@@ -1052,6 +1052,11 @@ module nts_parser_ctrl #(
   reg [15:0] tx_udp_checksum_new;
   reg [15:0] tx_udp_checksum_reg;
 
+
+  reg txctrl_tx_from_rx_we;
+  reg txctrl_tx_from_rx_new;
+  reg txctrl_tx_from_rx_reg;
+
   reg                           verifier_we;
   reg [BITS_VERIFIER_STATE-1:0] verifier_new;
   reg [BITS_VERIFIER_STATE-1:0] verifier_reg;
@@ -2174,6 +2179,8 @@ module nts_parser_ctrl #(
       tx_udp_checksum_reg <= 0;
       tx_udp_length_reg <= 0;
 
+      txctrl_tx_from_rx_reg <= 0;
+
       verifier_reg <= VERIFIER_IDLE;
 
       word_counter_reg           <= 'b0;
@@ -2600,6 +2607,9 @@ module nts_parser_ctrl #(
 
       if (tx_udp_length_we)
         tx_udp_length_reg <= tx_udp_length_new;
+
+      if (txctrl_tx_from_rx_we)
+        txctrl_tx_from_rx_reg <= txctrl_tx_from_rx_new;
 
       if (verifier_we)
         verifier_reg <= verifier_new;
@@ -3135,9 +3145,6 @@ module nts_parser_ctrl #(
 
   always @*
   begin : copy_proc
-    reg copy_rx_tx;
-
-    copy_rx_tx = 0;
 
     copy_done = 0;
 
@@ -3158,10 +3165,6 @@ module nts_parser_ctrl #(
               copy_tx_addr_we   = 1;
               copy_tx_addr_new  = OFFSET_ICMP_V6_ECHO_COPY;
             end
-          ICMP_S_V6_ECHO_COPY_D:
-            begin
-              copy_rx_tx = 1;
-            end
           // ----- IPV6 Trace Route (Port Unreachable) ----
           ICMP_S_V6_TRACE_COPY:
             begin : trace_tmp
@@ -3172,10 +3175,6 @@ module nts_parser_ctrl #(
               copy_tx_addr_we   = 1;
               copy_tx_addr_new  = HEADER_LENGTH_ETHERNET + HEADER_LENGTH_IPV6 + ICMP_V6_UNREACHABLE_INITIAL_BYTES;
             end
-          ICMP_S_V6_TRACE_COPY_D:
-            begin
-              copy_rx_tx = 1;
-            end
           // ----- IPV4 Ping (Echo Reply) ----
           ICMP_S_V4_ECHO_COPY:
             begin
@@ -3184,10 +3183,6 @@ module nts_parser_ctrl #(
               copy_tx_addr_we   = 1;
               copy_tx_addr_new  = OFFSET_ICMP_V4_ECHO_COPY;
             end
-          ICMP_S_V4_ECHO_COPY_D:
-            begin
-              copy_rx_tx = 1;
-            end
           // ----- IPV4 Trace Route (Port Unreachable) ----
           ICMP_S_V4_TRACE_COPY:
             begin
@@ -3195,10 +3190,6 @@ module nts_parser_ctrl #(
               copy_bytes_new[ADDR_WIDTH+3-1:0] = ICMPV4_BYTES_TRACEROUTE;
               copy_tx_addr_we   = 1;
               copy_tx_addr_new  = HEADER_LENGTH_ETHERNET + HEADER_LENGTH_IPV4 + ICMP_V4_UNREACHABLE_INITIAL_BYTES;
-            end
-          ICMP_S_V4_TRACE_COPY_D:
-            begin
-              copy_rx_tx = 1;
             end
           default: ;
         endcase
@@ -3218,10 +3209,6 @@ module nts_parser_ctrl #(
               copy_tx_addr_we   = 1;
               copy_tx_addr_new  = ipdecode_offset_ntp_ext_reg;
             end
-          NTS_S_UNIQUE_IDENTIFIER_COPY_1:
-            begin
-              copy_rx_tx = 1;
-            end
           NTS_S_TX_EMIT_TL_NL_CL:
             begin
               copy_tx_addr_we  = 1;
@@ -3240,7 +3227,7 @@ module nts_parser_ctrl #(
       default: ;
     endcase
 
-    if (copy_rx_tx) begin
+    if (txctrl_tx_from_rx_reg) begin
       // WHILE(BYTES>=8)
       //   IF (RX_VALID) TX=RX, BYTES = BYTES-8;
       // COPY_DONE = TRUE
@@ -3865,7 +3852,6 @@ module nts_parser_ctrl #(
   begin : tx_control
     reg ip_update_header0;
     reg ip_update_header1;
-    reg tx_from_rx;
     reg responder_update_length;
     reg udp_checksum_addr;
     reg udp_checksum_datagram;
@@ -3874,7 +3860,6 @@ module nts_parser_ctrl #(
 
     ip_update_header0 = 0;
     ip_update_header1 = 0;
-    tx_from_rx = 0;
     responder_update_length = 0;
     udp_checksum_addr = 0;
     udp_checksum_datagram = 0;
@@ -3892,16 +3877,21 @@ module nts_parser_ctrl #(
     tx_write_en = 0;
     tx_write_data = 0;
 
+    txctrl_tx_from_rx_we = 0;
+    txctrl_tx_from_rx_new = 0;
+
     case (state_reg)
       STATE_PROCESS_ICMP:
         case (icmp_state_reg)
-          ICMP_S_V6_ECHO_COPY_D:
+          ICMP_S_V6_ECHO_COPY:
             begin
-              tx_from_rx = 1;
+              txctrl_tx_from_rx_we = 1;
+              txctrl_tx_from_rx_new = 1;
             end
-          ICMP_S_V6_TRACE_COPY_D:
+          ICMP_S_V6_TRACE_COPY:
             begin
-              tx_from_rx = 1;
+              txctrl_tx_from_rx_we = 1;
+              txctrl_tx_from_rx_new = 1;
             end
           ICMP_S_V6_UPDATE_LENGTH:
             begin
@@ -3929,13 +3919,15 @@ module nts_parser_ctrl #(
               tx_write_en = 1;
               tx_write_data = tx_icmp_tmpblock_reg;
             end
-          ICMP_S_V4_ECHO_COPY_D:
+          ICMP_S_V4_ECHO_COPY:
             begin
-              tx_from_rx = 1;
+              txctrl_tx_from_rx_we = 1;
+              txctrl_tx_from_rx_new = 1;
             end
-          ICMP_S_V4_TRACE_COPY_D:
+          ICMP_S_V4_TRACE_COPY:
             begin
-              tx_from_rx = 1;
+              txctrl_tx_from_rx_we = 1;
+              txctrl_tx_from_rx_new = 1;
             end
           ICMP_S_V4_UPDATE_LENGTH:
             begin
@@ -3965,9 +3957,10 @@ module nts_parser_ctrl #(
         endcase
       STATE_PROCESS_NTS:
         case (nts_state_reg)
-          NTS_S_UNIQUE_IDENTIFIER_COPY_1:
+          NTS_S_UNIQUE_IDENTIFIER_COPY_0:
             begin
-              tx_from_rx = 1;
+              txctrl_tx_from_rx_we = 1;
+              txctrl_tx_from_rx_new = 1;
             end
           NTS_S_TX_EMIT_TL_NL_CL:
             begin
@@ -4051,10 +4044,14 @@ module nts_parser_ctrl #(
             end
     end
 
-    if (tx_from_rx) begin
+    if (txctrl_tx_from_rx_reg) begin
       tx_address    = copy_tx_addr_reg;
       tx_write_en   = i_access_port_rd_dv;
       tx_write_data = i_access_port_rd_data;
+      if (copy_done) begin
+        txctrl_tx_from_rx_we = 1;
+        txctrl_tx_from_rx_new = 0;
+      end
     end
 
     if (udp_checksum_reset) begin

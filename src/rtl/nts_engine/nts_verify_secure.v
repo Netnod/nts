@@ -127,6 +127,7 @@ module nts_verify_secure #(
   localparam [BITS_STATE-1:0] STATE_STORE_COOKIEBUF      = 21;
   localparam [BITS_STATE-1:0] STATE_STORE_TX_CB_INIT     = 22;
   localparam [BITS_STATE-1:0] STATE_STORE_TX_CB          = 23;
+  localparam [BITS_STATE-1:0] STATE_WAIT_THEN_IDLE       = 30;
   localparam [BITS_STATE-1:0] STATE_ERROR                = 31;
 
   localparam NONCE_IDLE    = 0;
@@ -256,9 +257,24 @@ module nts_verify_secure #(
   reg                    tx_ctr_we;
   reg [ADDR_WIDTH+3-1:0] tx_ctr_new;
   reg [ADDR_WIDTH+3-1:0] tx_ctr_reg;
+  reg                    tx_ctr_rec_we;
+  reg [ADDR_WIDTH+3-1:0] tx_ctr_rec_new;
+  reg [ADDR_WIDTH+3-1:0] tx_ctr_rec_reg;
   reg                    tx_ctr_max_we;
   reg [ADDR_WIDTH+3-1:0] tx_ctr_max_new;
   reg [ADDR_WIDTH+3-1:0] tx_ctr_max_reg;
+
+  reg [ADDR_WIDTH+3-1:0] txo_addr_new;  //Address out
+  reg [ADDR_WIDTH+3-1:0] txo_addr_reg;  //Address out
+  reg                    txo_rd_en_new; //Read enable out
+  reg                    txo_rd_en_reg; //Read enable out
+  reg                    txo_wr_en_new; //Write enable out
+  reg                    txo_wr_en_reg; //Write enable out
+  reg           [63 : 0] txo_wr_data_new; //Write data out
+  reg           [63 : 0] txo_wr_data_reg; //Write data out
+
+  reg                    txi_read_cycle_new;
+  reg                    txi_read_cycle_reg;
 
   reg                    ibuf_tx_read_data_we;
   reg             [63:0] ibuf_tx_read_data_new;
@@ -360,11 +376,6 @@ module nts_verify_secure #(
   // Wires - TX-Buff related
   //----------------------------------------------------------------
 
-  reg [ADDR_WIDTH+3-1:0] tx_addr;  //Address out
-  reg                    tx_rd_en; //Read enable out
-  reg                    tx_wr_en; //Write enable out
-  reg           [63 : 0] tx_wr_data; //Write data out
-
   reg                    tx_handler_done; //tx_handler process done signal to FSM
 
   //----------------------------------------------------------------
@@ -458,10 +469,10 @@ module nts_verify_secure #(
   assign o_rx_wordsize = 4; // 4: burst, 3: 64bit, 2: 32bit, 1: 16bit, 0: 8bit
   assign o_rx_burstsize = rx_burstsize_reg;
 
-  assign o_tx_read_en = tx_rd_en;
-  assign o_tx_write_en = tx_wr_en;
-  assign o_tx_write_data = tx_wr_data;
-  assign o_tx_address = tx_addr;
+  assign o_tx_read_en = txo_rd_en_reg;
+  assign o_tx_write_en = txo_wr_en_reg;
+  assign o_tx_write_data = txo_wr_data_reg;
+  assign o_tx_address = txo_addr_reg;
 
   assign o_verify_tag_ok = verify_tag_ok_reg;
 
@@ -586,7 +597,13 @@ module nts_verify_secure #(
       state_reg <= 0;
       tx_addr_next_reg <= 0;
       tx_ctr_reg <= 0;
+      tx_ctr_rec_reg <= 0;
       tx_ctr_max_reg <= 0;
+      txi_read_cycle_reg <= 0;
+      txo_addr_reg <= 0;
+      txo_rd_en_reg <= 0;
+      txo_wr_en_reg <= 0;
+      txo_wr_data_reg <= 0;
       verify_tag_ok_reg <= 0;
     end else begin
       if (ibuf_tx_read_data_we)
@@ -690,8 +707,18 @@ module nts_verify_secure #(
       if (tx_ctr_we)
         tx_ctr_reg <= tx_ctr_new;
 
+      if (tx_ctr_rec_we)
+        tx_ctr_rec_reg <= tx_ctr_rec_new;
+
       if (tx_ctr_max_we)
         tx_ctr_max_reg <= tx_ctr_max_new;
+
+      txi_read_cycle_reg <= txi_read_cycle_new;
+
+      txo_addr_reg <= txo_addr_new;
+      txo_rd_en_reg <= txo_rd_en_new;
+      txo_wr_en_reg <= txo_wr_en_new;
+      txo_wr_data_reg <= txo_wr_data_new;
 
       if (verify_tag_ok_we)
         verify_tag_ok_reg <= verify_tag_ok_new;
@@ -1060,15 +1087,15 @@ module nts_verify_secure #(
   // handler.
   //----------------------------------------------------------------
 
-  task tx_load_ram_and_emit (
+  task txo_load_ram_and_emit (
     input        ramload,
     input [63:0] data_out
   );
   begin
     ramtx_en = ramload;
     ramtx_we = 0;
-    tx_wr_en = 1;
-    tx_wr_data = data_out;
+    txo_wr_en_new = 1;
+    txo_wr_data_new = data_out;
   end
   endtask
 
@@ -1088,11 +1115,14 @@ module nts_verify_secure #(
     ramtx_addr_new = 0;
     ramtx_wdata = 0;
 
+    // TXBuf input read cycle
+    txi_read_cycle_new = txo_rd_en_reg;
+
     // TXbuf out wires
-    tx_wr_en = 0;
-    tx_wr_data = 0;
-    tx_rd_en = 0;
-    tx_addr = 0;
+    txo_wr_en_new = 0;
+    txo_wr_data_new = 0;
+    txo_rd_en_new = 0;
+    txo_addr_new = 0;
 
     // TXbuf address registers
     tx_addr_next_we = 0;
@@ -1101,6 +1131,8 @@ module nts_verify_secure #(
     // TX buf counters
     tx_ctr_we = 0;
     tx_ctr_new = 0;
+    tx_ctr_rec_we = 0;
+    tx_ctr_rec_new = 0;
     tx_ctr_max_we = 0;
     tx_ctr_max_new = 0;
     tx_handler_done = 0;
@@ -1115,9 +1147,6 @@ module nts_verify_secure #(
         if (i_op_copy_tx_ad) begin
           tx_addr_next_we = 1;
           tx_addr_next_new = i_copy_tx_addr;
-          //Set loop counter and loop counter max
-          tx_ctr_we = 1;
-          tx_ctr_new = 0;
           tx_ctr_max_we = 1;
           tx_ctr_max_new = i_copy_tx_bytes;
         end
@@ -1149,31 +1178,40 @@ module nts_verify_secure #(
         begin
           ramtx_addr_we = 1;
           ramtx_addr_new = MEM8_ADDR_AD;
-          tx_rd_en = 1;
-          tx_addr = tx_addr_next_reg;
           tx_addr_next_we = 1;
           tx_addr_next_new = tx_addr_next_reg + 8;
+          tx_ctr_we = 1;
+          tx_ctr_new = 1;
+          tx_ctr_rec_we = 1;
+          tx_ctr_rec_new = 0;
+          txo_addr_new = tx_addr_next_reg;
+          txo_rd_en_new = 1;
         end
       STATE_COPY_TX:
         begin
           //$display("%s:%0d tx_ctr_reg %0d < tx_ctr_max_reg %0d", `__FILE__, `__LINE__, tx_ctr_reg, tx_ctr_max_reg);
-          if (tx_ctr_reg < tx_ctr_max_reg) begin
+          if (txi_read_cycle_reg) begin
             //Buffer input into register
             ibuf_tx_read_data_we  = 1;
             ibuf_tx_read_data_new = i_tx_read_data;
             ibuf_tx_read_data_valid_new = 1;
-
+            tx_ctr_rec_we = 1;
+            tx_ctr_rec_new = tx_ctr_rec_reg + 1;
+          end
+          if (tx_ctr_reg < tx_ctr_max_reg) begin
             //Loop counter increment
             tx_ctr_we = 1;
             tx_ctr_new = tx_ctr_reg + 1;
 
             //TXbuf read
-            tx_rd_en = 1;
-            tx_addr = tx_addr_next_reg;
+            txo_rd_en_new = 1;
+            txo_addr_new = tx_addr_next_reg;
 
             //Next cycle address
             tx_addr_next_we = 1;
             tx_addr_next_new = tx_addr_next_reg + 8;
+          end else if (tx_ctr_rec_reg < tx_ctr_max_reg) begin
+            ;
           end else if (ibuf_tx_read_data_valid_reg == 0) begin
              tx_handler_done = 1;
           end
@@ -1186,7 +1224,6 @@ module nts_verify_secure #(
             ramtx_addr_new = ramtx_addr_reg + 1;
             ramtx_wdata = ibuf_tx_read_data_reg;
           end
-
         end
       STATE_STORE_TX_AUTH_INIT:
         begin
@@ -1203,31 +1240,31 @@ module nts_verify_secure #(
           ramtx_addr_new = ramtx_addr_reg + 1;
           tx_ctr_we = 1;
           tx_ctr_new = tx_ctr_reg + 1;
-          tx_addr = tx_addr_next_reg;
           tx_addr_next_we = 1;
           tx_addr_next_new = tx_addr_next_reg + 8;
+          txo_addr_new = tx_addr_next_reg;
           case (ramtx_addr_reg)
             1:
               begin
                 ramtx_en = 1; //Load MEM8_ADDR_NONCE + 1
                 ramtx_we = 0;
-                tx_wr_en = 1;
-                tx_wr_data = ram_a_rdata; //Nonce MSB from previous cycle
+                txo_wr_en_new = 1;
+                txo_wr_data_new = ram_a_rdata; //Nonce MSB from previous cycle
               end
             2:
               begin
-                tx_wr_en = 1;
-                tx_wr_data = ram_a_rdata; //Nonce LSB from previous cycle
+                txo_wr_en_new = 1;
+                txo_wr_data_new = ram_a_rdata; //Nonce LSB from previous cycle
               end
             3:
               begin
-                tx_wr_en = 1;
-                tx_wr_data = core_tag_out[127:64];
+                txo_wr_en_new = 1;
+                txo_wr_data_new = core_tag_out[127:64];
               end
             4:
               begin
-                tx_wr_en = 1;
-                tx_wr_data = core_tag_out[63:0];
+                txo_wr_en_new = 1;
+                txo_wr_data_new = core_tag_out[63:0];
               end
             default: ;
           endcase
@@ -1236,7 +1273,7 @@ module nts_verify_secure #(
         begin
           ramtx_addr_we = 1;
           ramtx_addr_new = ramtx_addr_reg + 1; //MEM8_ADDR_NONCE, +1, ... then MEM8_ADDR_PC, +1, +2, ...
-          tx_addr = tx_addr_next_reg;
+          txo_addr_new = tx_addr_next_reg;
           tx_addr_next_we = 1;
           tx_addr_next_new = tx_addr_next_reg + 8;
           tx_ctr_we = 1;
@@ -1248,23 +1285,23 @@ module nts_verify_secure #(
                 ramtx_en = 1;
                 ramtx_we = 0;
               end
-            'h1: tx_load_ram_and_emit(1, ram_a_rdata); //Nonce MSB from previous cycle
-            'h2: tx_load_ram_and_emit(0, ram_a_rdata); //Nonce LSB from previous cycle
+            'h1: txo_load_ram_and_emit(1, ram_a_rdata); //Nonce MSB from previous cycle
+            'h2: txo_load_ram_and_emit(0, ram_a_rdata); //Nonce LSB from previous cycle
             'h3: //Tag0
               begin
                 ramtx_addr_we = 1;
                 ramtx_addr_new = MEM8_ADDR_PC;
-                tx_load_ram_and_emit(0, core_tag_out[127:64]);
+                txo_load_ram_and_emit(0, core_tag_out[127:64]);
               end
-            'h4: tx_load_ram_and_emit(1, core_tag_out[63:0]); //Load from MEM8_ADDR_PC
-            'h5: tx_load_ram_and_emit(1, ram_a_rdata); //C0 (C2S 0)
-            'h6: tx_load_ram_and_emit(1, ram_a_rdata); //C1 (C2S 1)
-            'h7: tx_load_ram_and_emit(1, ram_a_rdata); //C2 (C2S 2)
-            'h8: tx_load_ram_and_emit(1, ram_a_rdata); //C3 (C2S 3)
-            'h9: tx_load_ram_and_emit(1, ram_a_rdata); //C4 (S2C 0)
-            'ha: tx_load_ram_and_emit(1, ram_a_rdata); //C5 (S2C 1)
-            'hb: tx_load_ram_and_emit(1, ram_a_rdata); //C6 (S2C 2)
-            'hc: tx_load_ram_and_emit(0, ram_a_rdata); //C7 (S2C 3)
+            'h4: txo_load_ram_and_emit(1, core_tag_out[63:0]); //Load from MEM8_ADDR_PC
+            'h5: txo_load_ram_and_emit(1, ram_a_rdata); //C0 (C2S 0)
+            'h6: txo_load_ram_and_emit(1, ram_a_rdata); //C1 (C2S 1)
+            'h7: txo_load_ram_and_emit(1, ram_a_rdata); //C2 (C2S 2)
+            'h8: txo_load_ram_and_emit(1, ram_a_rdata); //C3 (C2S 3)
+            'h9: txo_load_ram_and_emit(1, ram_a_rdata); //C4 (S2C 0)
+            'ha: txo_load_ram_and_emit(1, ram_a_rdata); //C5 (S2C 1)
+            'hb: txo_load_ram_and_emit(1, ram_a_rdata); //C6 (S2C 2)
+            'hc: txo_load_ram_and_emit(0, ram_a_rdata); //C7 (S2C 3)
             default: ;
           endcase;
         end
@@ -1281,12 +1318,12 @@ module nts_verify_secure #(
         begin
           ramtx_addr_we = 1;
           ramtx_addr_new = ramtx_addr_reg + 1;
-          tx_addr = tx_addr_next_reg;
           tx_addr_next_we = 1;
           tx_addr_next_new = tx_addr_next_reg + 8;
           tx_ctr_we = 1;
           tx_ctr_new = tx_ctr_reg + 1;
-          tx_load_ram_and_emit(1, ram_a_rdata);
+          txo_addr_new = tx_addr_next_reg;
+          txo_load_ram_and_emit(1, ram_a_rdata);
         end
       default: ;
     endcase
@@ -1661,7 +1698,7 @@ module nts_verify_secure #(
       STATE_COPY_TX:
         if (tx_handler_done) begin
           state_we = 1;
-          state_new = STATE_IDLE;
+          state_new = STATE_WAIT_THEN_IDLE;
         end
       STATE_AUTH_MEMSTORE_CHRONY:
         if (chrony_count_reg >= CRHONY_COOKIE_DIV128) begin
@@ -1699,7 +1736,7 @@ module nts_verify_secure #(
       STATE_STORE_TX_AUTH:
         if (tx_ctr_reg >= 4) begin
           state_we = 1;
-          state_new = STATE_IDLE;
+          state_new = STATE_WAIT_THEN_IDLE;
         end
       STATE_STORE_TX_COOKIE_INIT:
         if (i_tx_busy == 'b0) begin
@@ -1709,7 +1746,7 @@ module nts_verify_secure #(
       STATE_STORE_TX_COOKIE:
         if (tx_ctr_reg >= 12) begin //TODO replace with a named constant (128+128+256+256) / 64  ...
           state_we = 1;
-          state_new = STATE_IDLE;
+          state_new = STATE_WAIT_THEN_IDLE;
         end
       STATE_STORE_TX_CB_INIT:
         if (cookiebuffer_length_reg == 0) begin
@@ -1728,7 +1765,7 @@ module nts_verify_secure #(
 
           if (tx_ctr_reg >= max) begin
             state_we = 1;
-            state_new = STATE_IDLE;
+            state_new = STATE_WAIT_THEN_IDLE;
           end
         end
       STATE_LOAD_KEYS_FROM_MEM:
@@ -1738,6 +1775,11 @@ module nts_verify_secure #(
         end
       STATE_STORE_COOKIEBUF:
         if (cookie_ctr_reg >= 12) begin //TODO replace with a named constant (128+128+256+256) / 64  ...
+          state_we = 1;
+          state_new = STATE_WAIT_THEN_IDLE;
+        end
+      STATE_WAIT_THEN_IDLE:
+        begin
           state_we = 1;
           state_new = STATE_IDLE;
         end

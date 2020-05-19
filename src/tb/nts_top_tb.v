@@ -1700,6 +1700,25 @@ module nts_top_tb;
           end
           `assert(ext_length % 4 == 0);
           `assert(ext_length > 16);
+          if (ext_tag == 16'h0404) begin : EncAuthEF
+            reg  [15:0] nonce_length;
+            reg  [15:0] ciphertext_length;
+            reg [127:0] tmp;
+            reg  [15:0] c;
+            nonce_length = tx_read_word16( i + 4 );
+            ciphertext_length = tx_read_word16( i + 6 );
+            $display("%s:%0d * TX * NTP Extension: NTS Enc&AuthEF NL = %0d, CL = %0d", `__FILE__, `__LINE__, nonce_length, ciphertext_length);
+            if (nonce_length == 16) begin
+              tmp = tx_read_word128( i + 8 );
+              $display("%s:%0d * TX * NTP Extension: NTS Enc&AuthEF nonce = %h", `__FILE__, `__LINE__, tmp);
+              for (c = 0; c < ciphertext_length/16; c = c + 1) begin
+                tmp = tx_read_word128( i + 24 + c * 16 );
+                $display("%s:%0d * TX * NTP Extension: NTS Enc&AuthEF c[%0d] = %h", `__FILE__, `__LINE__, c, tmp);
+              end
+            end else begin
+              $display("%s:%0d * TX * NTP Extension: NTS Enc&AuthEF wrong nonce length (%0d)!", `__FILE__, `__LINE__, nonce_length);
+            end
+          end
           skip_bytes = ext_length;
         end
       end
@@ -1839,6 +1858,7 @@ module nts_top_tb;
     `always_inspect( dut.genblk1[0].engine.crypto.o_rx_rd_en);
     `always_inspect( dut.genblk1[0].engine.crypto.i_rx_rd_dv);
     `always_inspect( dut.genblk1[0].engine.crypto.i_rx_rd_data);
+    `always_inspect( dut.genblk1[0].engine.crypto.core_tag_out);
   end
 
 

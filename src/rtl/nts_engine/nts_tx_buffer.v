@@ -85,15 +85,9 @@ module nts_tx_buffer #(
   localparam STATE_ERROR_GENERAL        = 5;
   localparam STATE_ERROR_BUFFER_OVERRUN = 6;
 
-  //localparam STATE_IP4_LENGTH           = 2;
-  //localparam STATE_IP4_CHECKSUM         = 3;
-  //localparam STATE_IP4_UDP_CHECKSUM     = 4;
-  //localparam STATE_IP6_LENGTH           = 5;
-  //localparam STATE_IP6_CHECKSUM         = 6;
-  //localparam STATE_IP6_UDP_CHECKSUM     = 7;
-
   localparam [ADDR_WIDTH-1:0] ADDRESS_FULL        = ~ 'b0;
-  localparam [ADDR_WIDTH-1:0] ADDRESS_ALMOST_FULL = (~ 'b0) - 1;
+  localparam [ADDR_WIDTH-1:0] ADDRESS_ALMOST_FULL1 = (~ 'b0) - 1;
+  localparam [ADDR_WIDTH-1:0] ADDRESS_ALMOST_FULL2 = (~ 'b0) - 2;
 
   //----------------------------------------------------------------
   // Registers including update variables and write enable.
@@ -180,6 +174,47 @@ module nts_tx_buffer #(
   reg  [3:0] tx_bytes_last_word_reg;
 
   //----------------------------------------------------------------
+  // Input buffer regs for data from TX Read/Write/Sum port
+  // This port has many writers interacting with it through a mux
+  // so it us horrible for timing unless registered inputs!
+  //----------------------------------------------------------------
+
+  reg                    ibuf_address_internal_reg;
+  reg   [ADDR_WIDTH-1:0] ibuf_address_hi_reg;
+  reg              [2:0] ibuf_address_lo_reg;
+
+  reg                    ibuf_read_en_reg;
+
+  reg                    ibuf_write_en_reg;
+  reg             [63:0] ibuf_write_data_reg;
+
+  reg                    ibuf_sum_reset_reg;
+  reg             [15:0] ibuf_sum_reset_value_reg;
+  reg                    ibuf_sum_en_reg;
+  reg [ADDR_WIDTH+3-1:0] ibuf_sum_bytes_reg;
+
+  //----------------------------------------------------------------
+  // Input buffer regs parser opterations
+  // Mostly just here to ensure parser operations get incorrect
+  // timings compared to whats done on the Read/Write/Sum port
+  //----------------------------------------------------------------
+
+  reg ibuf_parser_clear_reg;
+  reg ibuf_parser_update_length_reg;
+  reg ibuf_parser_transfer_reg;
+
+  //----------------------------------------------------------------
+  // Input buffer busy reg.
+  // Next cycle might be busy, and it must be registered early.
+  // Purpose: verify_secure, parser etc etc wait for TX busy as TX
+  // used to work before input buffering. If we don't raise busy as
+  // we used before, all the previous code will break thinking
+  // TX-buf finished in one cycle (when not actually done).
+  //----------------------------------------------------------------
+
+  reg ibuf_busy_reg;
+
+  //----------------------------------------------------------------
   // Wires
   //----------------------------------------------------------------
 
@@ -199,7 +234,7 @@ module nts_tx_buffer #(
   assign fifo                            = ~ current_mem_reg;
   assign fifo_word_count_p1              = word_count_reg[ fifo ] + 1; //TODO handle overflow
 
-  assign o_busy = ram_busy[ parser ];
+  assign o_busy = ibuf_busy_reg || ram_busy[ parser ];
 
   assign o_error = (mem_state_reg[0] == STATE_ERROR_GENERAL) ||
                    (mem_state_reg[1] == STATE_ERROR_GENERAL) ||
@@ -219,7 +254,8 @@ module nts_tx_buffer #(
 
   assign o_parser_current_empty          = mem_state_reg[ parser ] == STATE_EMPTY;
   assign o_parser_current_memory_full    = (mem_state_reg[ parser ] == STATE_HAS_DATA && ram_addr_hi_reg[ parser ] == ADDRESS_FULL) ||
-                                           (mem_state_reg[ parser ] == STATE_HAS_DATA && ram_addr_hi_reg[ parser ] == ADDRESS_ALMOST_FULL && i_write_en) ||
+                                           (mem_state_reg[ parser ] == STATE_HAS_DATA && ram_addr_hi_reg[ parser ] == ADDRESS_ALMOST_FULL1) ||
+                                           (mem_state_reg[ parser ] == STATE_HAS_DATA && ram_addr_hi_reg[ parser ] == ADDRESS_ALMOST_FULL2) ||
                                            (mem_state_reg[ parser ] > STATE_HAS_DATA); //TODO verify
   assign o_read_valid = read_cycle_reg;
   assign o_read_data = read_data;
@@ -252,6 +288,49 @@ module nts_tx_buffer #(
     tx_fifo_rd_valid_reg   <= fifo_rd_valid_reg;
     tx_fifo_rd_data_reg    <= ram_rd_data[ fifo ];
     tx_bytes_last_word_reg <= bytes_last_word_reg[ fifo ];
+  end
+
+  //----------------------------------------------------------------
+  // Input regs buffer
+  //----------------------------------------------------------------
+
+  always @(posedge i_clk or posedge i_areset)
+  if (i_areset) begin
+    ibuf_busy_reg <= 0;
+
+    ibuf_write_en_reg <= 0;
+    ibuf_write_data_reg <= 0;
+    ibuf_read_en_reg <= 0;
+    ibuf_sum_reset_reg <= 0;
+    ibuf_sum_reset_value_reg <= 0;
+    ibuf_sum_en_reg <= 0;
+    ibuf_sum_bytes_reg <= 0;
+    ibuf_address_internal_reg <= 0;
+    ibuf_address_hi_reg <= 0;
+    ibuf_address_lo_reg <= 0;
+
+    ibuf_parser_clear_reg <= 0;
+    ibuf_parser_update_length_reg <= 0;
+    ibuf_parser_transfer_reg <= 0;
+  end else begin
+    ibuf_busy_reg <= 0;
+    if (i_write_en || i_read_en || i_sum_reset || i_sum_en || i_parser_clear || i_parser_update_length || i_parser_transfer)
+     ibuf_busy_reg <= 1;
+
+    ibuf_write_en_reg <= i_write_en;
+    ibuf_write_data_reg <= i_write_data;
+    ibuf_read_en_reg <= i_read_en;
+    ibuf_sum_reset_reg <= i_sum_reset;
+    ibuf_sum_reset_value_reg <= i_sum_reset_value;
+    ibuf_sum_en_reg <= i_sum_en;
+    ibuf_sum_bytes_reg <= i_sum_bytes;
+    ibuf_address_internal_reg <= i_address_internal;
+    ibuf_address_hi_reg <= i_address_hi;
+    ibuf_address_lo_reg <= i_address_lo;
+
+    ibuf_parser_clear_reg <= i_parser_clear;
+    ibuf_parser_update_length_reg <= i_parser_update_length;
+    ibuf_parser_transfer_reg <= i_parser_transfer;
   end
 
   //----------------------------------------------------------------
@@ -488,13 +567,13 @@ module nts_tx_buffer #(
       sum_we = 1;
       internet_sum_pipelinestage1( sum_reg, sum_delayed_reg, carry_delayed_reg, sum_new );
     end
-    if (i_sum_en) begin
-      if (i_sum_bytes == 0)
+    if (ibuf_sum_en_reg) begin
+      if (ibuf_sum_bytes_reg == 0)
         sum_done_new = 1;
     end
-    if (i_sum_reset) begin
+    if (ibuf_sum_reset_reg) begin
       sum_we = 1;
-      sum_new = i_sum_reset_value;
+      sum_new = ibuf_sum_reset_value_reg;
     end
   end
 
@@ -546,11 +625,11 @@ module nts_tx_buffer #(
     case ( mem_state_reg[parser] )
       STATE_HAS_DATA:
         begin
-          if (i_sum_en) begin
+          if (ibuf_sum_en_reg) begin
             sum_addr_we = 1;
-            sum_addr_new = { i_address_hi, i_address_lo };
+            sum_addr_new = { ibuf_address_hi_reg, ibuf_address_lo_reg };
             sum_counter_we = 1;
-            sum_counter_new = i_sum_bytes;
+            sum_counter_new = ibuf_sum_bytes_reg;
           end
         end
       STATE_CHECKSUM:
@@ -610,7 +689,7 @@ module nts_tx_buffer #(
       end
     end
 
-    if (i_parser_clear) begin
+    if (ibuf_parser_clear_reg) begin
       mem_state_we  [parser] = 1;
       mem_state_new [parser] = STATE_EMPTY;
       word_count_we [parser] = 1;
@@ -620,11 +699,11 @@ module nts_tx_buffer #(
       case ( mem_state_reg[parser] )
         STATE_EMPTY:
           begin
-            if (i_write_en) begin
+            if (ibuf_write_en_reg) begin
               mem_state_we[parser] = 1;
               mem_state_new[parser] = STATE_HAS_DATA;
 
-              if (i_address_internal) begin
+              if (ibuf_address_internal_reg) begin
                 ram_addr_lo[parser] = 0;
                 ram_addr_hi[parser] = 0;
                 ram_addr_hi_we[parser]  = 1;
@@ -633,12 +712,12 @@ module nts_tx_buffer #(
                 word_count_we[parser] = 1;
                 word_count_new[parser] = 1;
               end else begin
-                ram_addr_lo[parser]     = i_address_lo;
-                ram_addr_hi[parser]     = i_address_hi;
+                ram_addr_lo[parser]     = ibuf_address_lo_reg;
+                ram_addr_hi[parser]     = ibuf_address_hi_reg;
                 //TODO: Not intended path, not well tested
               end
 
-              ram_wr_data[parser] = i_write_data;
+              ram_wr_data[parser] = ibuf_write_data_reg;
 
               ram_wr[parser]  = 1;
 
@@ -648,23 +727,23 @@ module nts_tx_buffer #(
           end
         STATE_HAS_DATA:
           begin
-            if (i_sum_en && i_sum_bytes != 0) begin
+            if (ibuf_sum_en_reg && ibuf_sum_bytes_reg != 0) begin
               mem_state_we[parser]  = 1;
               mem_state_new[parser] = STATE_CHECKSUM;
             end
-            if (i_read_en) begin
-              ram_addr_lo[parser] = i_address_lo;
-              ram_addr_hi[parser] = i_address_hi;
+            if (ibuf_read_en_reg) begin
+              ram_addr_lo[parser] = ibuf_address_lo_reg;
+              ram_addr_hi[parser] = ibuf_address_hi_reg;
               ram_rd[parser] = 1;
               read_cycle_new = 1;
             end
-            if (i_write_en) begin
+            if (ibuf_write_en_reg) begin
 
-              ram_wr_data[parser] = i_write_data;
+              ram_wr_data[parser] = ibuf_write_data_reg;
 
               ram_wr[parser] = 1;
 
-              if (i_address_internal) begin
+              if (ibuf_address_internal_reg) begin
                 ram_addr_lo[parser]     = 0;
                 ram_addr_hi[parser]     = ram_addr_hi_reg[parser];
                 ram_addr_hi_we[parser]  = 1;
@@ -673,32 +752,32 @@ module nts_tx_buffer #(
                 word_count_we[parser] = 1;
                 word_count_new[parser] = word_count_reg[parser] + 1;
               end else begin
-                ram_addr_lo[parser]     = i_address_lo;
-                ram_addr_hi[parser]     = i_address_hi;
+                ram_addr_lo[parser]     = ibuf_address_lo_reg;
+                ram_addr_hi[parser]     = ibuf_address_hi_reg;
               end
               //$display("%s:%0d WRITE: %h:%h = %h. wr=%h rd=%h", `__FILE__, `__LINE__, ram_addr_hi[parser], ram_addr_lo[parser], i_write_data, ram_wr[parser], ram_rd[parser] );
             end
-            if (i_parser_update_length) begin
-              if (i_address_lo == 0) begin
-                if (i_address_hi == 0) begin
+            if (ibuf_parser_update_length_reg) begin
+              if (ibuf_address_lo_reg == 0) begin
+                if (ibuf_address_hi_reg == 0) begin
                   word_count_we[parser] = 1;
                   word_count_new[parser] = 0;
                   bytes_last_word_we[parser] = 1;
                   bytes_last_word_new[parser] = 0;
                 end else begin
                   word_count_we[parser] = 1;
-                  word_count_new[parser] = i_address_hi - 1;
+                  word_count_new[parser] = ibuf_address_hi_reg - 1;
                   bytes_last_word_we[parser] = 1;
                   bytes_last_word_new[parser] = 8;
                 end
               end else begin
                 word_count_we[parser] = 1;
-                word_count_new[parser] = i_address_hi;
+                word_count_new[parser] = ibuf_address_hi_reg;
                 bytes_last_word_we[parser] = 1;
-                bytes_last_word_new[parser] = { 1'b0, i_address_lo };
+                bytes_last_word_new[parser] = { 1'b0, ibuf_address_lo_reg };
               end
             end
-            if (i_parser_transfer) begin
+            if (ibuf_parser_transfer_reg) begin
               mem_state_we[parser] = 1;
               mem_state_new[parser] = STATE_FIFO_OUT;
             end

@@ -51,6 +51,7 @@ module nts_tx_buffer #(
   input  wire [63:0] i_write_data,
 
   input  wire        i_read_en,
+  output wire        o_read_valid,
   output wire [63:0] o_read_data,
 
   input  wire                    i_sum_reset,
@@ -220,6 +221,7 @@ module nts_tx_buffer #(
   assign o_parser_current_memory_full    = (mem_state_reg[ parser ] == STATE_HAS_DATA && ram_addr_hi_reg[ parser ] == ADDRESS_FULL) ||
                                            (mem_state_reg[ parser ] == STATE_HAS_DATA && ram_addr_hi_reg[ parser ] == ADDRESS_ALMOST_FULL && i_write_en) ||
                                            (mem_state_reg[ parser ] > STATE_HAS_DATA); //TODO verify
+  assign o_read_valid = read_cycle_reg;
   assign o_read_data = read_data;
   assign o_sum = sum_reg;
   assign o_sum_done = sum_done_reg;

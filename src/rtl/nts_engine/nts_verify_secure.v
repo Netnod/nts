@@ -84,6 +84,7 @@ module nts_verify_secure #(
 
   input  wire                         i_tx_busy,
   output wire                         o_tx_read_en,
+  input  wire                         i_tx_read_dv,
   input  wire                  [63:0] i_tx_read_data,
   output wire                         o_tx_write_en,
   output wire                  [63:0] o_tx_write_data,
@@ -272,9 +273,6 @@ module nts_verify_secure #(
   reg                    txo_wr_en_reg; //Write enable out
   reg           [63 : 0] txo_wr_data_new; //Write data out
   reg           [63 : 0] txo_wr_data_reg; //Write data out
-
-  reg                    txi_read_cycle_new;
-  reg                    txi_read_cycle_reg;
 
   reg                    ibuf_tx_read_data_we;
   reg             [63:0] ibuf_tx_read_data_new;
@@ -555,7 +553,6 @@ module nts_verify_secure #(
     .ready(core_ready)
   );
 
-
   //----------------------------------------------------------------
   // Register update
   //----------------------------------------------------------------
@@ -599,7 +596,6 @@ module nts_verify_secure #(
       tx_ctr_reg <= 0;
       tx_ctr_rec_reg <= 0;
       tx_ctr_max_reg <= 0;
-      txi_read_cycle_reg <= 0;
       txo_addr_reg <= 0;
       txo_rd_en_reg <= 0;
       txo_wr_en_reg <= 0;
@@ -712,8 +708,6 @@ module nts_verify_secure #(
 
       if (tx_ctr_max_we)
         tx_ctr_max_reg <= tx_ctr_max_new;
-
-      txi_read_cycle_reg <= txi_read_cycle_new;
 
       txo_addr_reg <= txo_addr_new;
       txo_rd_en_reg <= txo_rd_en_new;
@@ -1115,9 +1109,6 @@ module nts_verify_secure #(
     ramtx_addr_new = 0;
     ramtx_wdata = 0;
 
-    // TXBuf input read cycle
-    txi_read_cycle_new = txo_rd_en_reg;
-
     // TXbuf out wires
     txo_wr_en_new = 0;
     txo_wr_data_new = 0;
@@ -1138,9 +1129,9 @@ module nts_verify_secure #(
     tx_handler_done = 0;
 
     // Input buffer of i_tx_read_data to relax timing
-    ibuf_tx_read_data_we  = 0;
-    ibuf_tx_read_data_new = 0;
-    ibuf_tx_read_data_valid_new = 0;
+    ibuf_tx_read_data_we  = i_tx_read_dv;
+    ibuf_tx_read_data_new = i_tx_read_data;
+    ibuf_tx_read_data_valid_new = i_tx_read_dv;
 
     case (state_reg)
       STATE_IDLE:
@@ -1190,14 +1181,10 @@ module nts_verify_secure #(
       STATE_COPY_TX:
         begin
           //$display("%s:%0d tx_ctr_reg %0d < tx_ctr_max_reg %0d", `__FILE__, `__LINE__, tx_ctr_reg, tx_ctr_max_reg);
-          if (txi_read_cycle_reg) begin
-            //Buffer input into register
-            ibuf_tx_read_data_we  = 1;
-            ibuf_tx_read_data_new = i_tx_read_data;
-            ibuf_tx_read_data_valid_new = 1;
-            tx_ctr_rec_we = 1;
-            tx_ctr_rec_new = tx_ctr_rec_reg + 1;
-          end
+            if (ibuf_tx_read_data_valid_reg) begin
+              tx_ctr_rec_we = 1;
+              tx_ctr_rec_new = tx_ctr_rec_reg + 1;
+            end
           if (tx_ctr_reg < tx_ctr_max_reg) begin
             //Loop counter increment
             tx_ctr_we = 1;
@@ -1211,7 +1198,7 @@ module nts_verify_secure #(
             tx_addr_next_we = 1;
             tx_addr_next_new = tx_addr_next_reg + 8;
           end else if (tx_ctr_rec_reg < tx_ctr_max_reg) begin
-            ;
+             ;
           end else if (ibuf_tx_read_data_valid_reg == 0) begin
              tx_handler_done = 1;
           end
@@ -1306,7 +1293,7 @@ module nts_verify_secure #(
           endcase;
         end
       STATE_STORE_TX_CB_INIT:
-        begin
+        if (i_tx_busy == 'b0) begin
           ramtx_en = 1;
           ramtx_we = 0;
           ramtx_addr_we = 1;

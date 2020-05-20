@@ -120,6 +120,7 @@ module nts_verify_secure_tb #(
 
   reg                     i_tx_busy;
   wire                    o_tx_read_en;
+  reg                     i_tx_read_dv;
   reg              [63:0] i_tx_read_data;
   wire                    o_tx_write_en;
   wire             [63:0] o_tx_write_data;
@@ -191,6 +192,7 @@ module nts_verify_secure_tb #(
 
     .i_tx_busy(i_tx_busy),
     .o_tx_read_en(o_tx_read_en),
+    .i_tx_read_dv(i_tx_read_dv),
     .i_tx_read_data(i_tx_read_data),
     .o_tx_write_en(o_tx_write_en),
     .o_tx_write_data(o_tx_write_data),
@@ -1274,16 +1276,43 @@ module nts_verify_secure_tb #(
   // Testbench model: TX-Buff
   //----------------------------------------------------------------
 
+  // TX RTL is allowed to wait before responding to read,
+  // but must support sequensial burst reads.
+  // This little delay pipeline simulates how TX RTL might
+  // behave.
+  reg        tx_delay0_dv;
+  reg [63:0] tx_delay0_data;
+  reg        tx_delay1_dv;
+  reg [63:0] tx_delay1_data;
+  reg        tx_delay2_dv;
+  reg [63:0] tx_delay2_data;
+
   always @(posedge i_clk or posedge i_areset)
   begin
     if (i_areset) begin
+      i_tx_read_dv <= 0;
       i_tx_read_data <= 0;
+      tx_delay0_dv <= 0;
+      tx_delay0_data <= 0;
+      tx_delay1_dv <= 0;
+      tx_delay1_data <= 0;
+      tx_delay2_dv <= 0;
+      tx_delay2_data <= 0;
     end else begin
-      i_tx_read_data <= 0;
+      i_tx_read_dv <= tx_delay2_dv;
+      i_tx_read_data <= tx_delay2_data;
+      tx_delay0_dv <= 0;
+      tx_delay0_data <= 0;
+      tx_delay1_dv <= tx_delay0_dv;
+      tx_delay1_data <= tx_delay0_data;
+      tx_delay2_dv <= tx_delay1_dv;
+      tx_delay2_data <= tx_delay1_data;
+
       if (o_tx_read_en) begin : tx_buff
         reg [63:0] tmp;
         tmp = mem_tx_func(o_tx_address);
-        i_tx_read_data <= tmp;
+        tx_delay0_dv <= 1;
+        tx_delay0_data <= tmp;
         if (verbose>1) $display("%s:%0d TX-buff[%h]=%h (read)", `__FILE__, `__LINE__, o_tx_address, tmp);
       end
       if (o_tx_write_en) begin

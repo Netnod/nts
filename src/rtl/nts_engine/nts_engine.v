@@ -280,6 +280,7 @@ module nts_engine #(
 
   wire                    crypto_txbuf_read_en;
   wire             [63:0] txbuf_crypto_read_data;
+  wire                    txbuf_crypto_read_valid;
   wire                    crypto_txbuf_write_en;
   wire             [63:0] crypto_txbuf_write_data;
   wire [ADDR_WIDTH+3-1:0] crypto_txbuf_address;
@@ -740,6 +741,7 @@ module nts_engine #(
     .i_write_data(mux_tx_write_data),
 
     .i_read_en(crypto_txbuf_read_en),
+    .o_read_valid(txbuf_crypto_read_valid),
     .o_read_data(txbuf_crypto_read_data),
 
     .i_sum_reset(parser_txbuf_sum_reset),
@@ -1049,6 +1051,7 @@ module nts_engine #(
 
     .i_tx_busy       ( txbuf_busy              ),
     .o_tx_read_en    ( crypto_txbuf_read_en    ),
+    .i_tx_read_dv    ( txbuf_crypto_read_valid ),
     .i_tx_read_data  ( txbuf_crypto_read_data  ),
     .o_tx_write_en   ( crypto_txbuf_write_en   ),
     .o_tx_write_data ( crypto_txbuf_write_data ),

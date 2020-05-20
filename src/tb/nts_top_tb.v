@@ -1715,6 +1715,13 @@ module nts_top_tb;
                 tmp = tx_read_word128( i + 24 + c * 16 );
                 $display("%s:%0d * TX * NTP Extension: NTS Enc&AuthEF c[%0d] = %h", `__FILE__, `__LINE__, c, tmp);
               end
+              if ( (tx_read_word128( i +  8 ) === 128'habfef8bad8ec78ee85f983b2028f76bb ) &&
+                   (tx_read_word128( i + 24 ) === 128'h65132c80e7eb739de1c29d9656458f0f ) &&
+                   (tx_read_word128( i + 40 ) === 128'h2ba26a299aa88d2795ecad0f441cd0b3 )
+                 )
+              begin
+                $display("%s:%0d * TX * NTP Extension: NTS Enc&AuthEF -- looks like a well know good packet", `__FILE__, `__LINE__);
+              end
             end else begin
               $display("%s:%0d * TX * NTP Extension: NTS Enc&AuthEF wrong nonce length (%0d)!", `__FILE__, `__LINE__, nonce_length);
             end

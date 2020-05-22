@@ -43,7 +43,7 @@ module nts_parser_ctrl #(
   parameter  [0:0] DEFAULT_SUPPORT_NTP        = 1'b0,
   parameter  [0:0] DEFAULT_SUPPORT_NTP_MD5    = 1'b0,
   parameter  [0:0] DEFAULT_SUPPORT_NTP_SHA1   = 1'b0,
-  parameter        DEBUG_BUFFER = 1
+  parameter        DEBUG_BUFFER = 0
 ) (
   input  wire                         i_areset, // async reset
   input  wire                         i_clk,
@@ -1067,15 +1067,38 @@ module nts_parser_ctrl #(
 
   localparam DEBUG_BUFFER_WORDS = 64;
 
-  reg  [63:0] debug_buffer [0:DEBUG_BUFFER_WORDS-1];
-  wire  [5:0] debug_buffer_read_addr;
+  /* verilator lint_off UNUSED */
   wire [63:0] debug_buffer_read_data;
   reg   [5:0] debug_buffer_write_addr;
   reg  [63:0] debug_buffer_write_data;
   reg         debug_buffer_write_enable;
+  /* verilator lint_on UNUSED */
 
-  assign debug_buffer_read_addr = i_api_address[6:1];
-  assign debug_buffer_read_data = (DEBUG_BUFFER>0) ? debug_buffer[debug_buffer_read_addr] : 0;
+
+  if (DEBUG_BUFFER) begin
+    wire  [5:0] debug_buffer_read_addr;
+    reg  [63:0] debug_buffer [0:DEBUG_BUFFER_WORDS-1];
+
+    assign debug_buffer_read_addr = i_api_address[6:1];
+    assign debug_buffer_read_data = debug_buffer[debug_buffer_read_addr];
+
+    always @ (posedge i_clk, posedge i_areset)
+    begin : debug_update
+      integer i;
+      if (i_areset) begin
+        for (i = 0; i < DEBUG_BUFFER_WORDS; i = i + 1) begin
+          debug_buffer[i] <= 0;
+        end
+      end else begin
+        if (debug_buffer_write_enable) begin
+          debug_buffer[debug_buffer_write_addr] <= debug_buffer_write_data;
+        end
+      end
+    end
+
+  end else begin
+    assign debug_buffer_read_data = 0;
+  end
 
   //----------------------------------------------------------------
   // Wires.
@@ -1949,21 +1972,6 @@ module nts_parser_ctrl #(
       endcase
     end //if DEBUG_BUFFER
   end
-
-  if (DEBUG_BUFFER)
-    always @ (posedge i_clk, posedge i_areset)
-    begin : debug_update
-      integer i;
-      if (i_areset) begin
-        for (i = 0; i < DEBUG_BUFFER_WORDS; i = i + 1) begin
-          debug_buffer[i] <= 0;
-        end
-      end else begin
-        if (debug_buffer_write_enable) begin
-          debug_buffer[debug_buffer_write_addr] <= debug_buffer_write_data;
-        end
-      end
-    end
 
   //----------------------------------------------------------------
   // Register Update

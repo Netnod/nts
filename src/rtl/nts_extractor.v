@@ -351,8 +351,13 @@ module nts_extractor #(
     endcase
 
     if (forward_mux) begin
-      mux_in_index_we = 1;
-      mux_in_index_new = (mux_in_index_reg + 1) % ENGINES;
+      if (mux_in_index_reg == 0) begin
+        mux_in_index_we = 1;
+        mux_in_index_new = ENGINES - 1;
+      end else begin
+        mux_in_index_we = 1;
+        mux_in_index_new = mux_in_index_reg - 1;
+      end
     end
   end
 

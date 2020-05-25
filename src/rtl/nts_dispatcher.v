@@ -373,7 +373,7 @@ module nts_dispatcher #(
             mux_ctrl_we = 1;
             mux_ctrl_new = MUX_SEARCH;
             mux_search_counter_we  = 1;
-            mux_search_counter_new = 1;
+            mux_search_counter_new = 4 * ENGINES;
           end
         end
 
@@ -389,13 +389,19 @@ module nts_dispatcher #(
     endcase
 
     if (forward_mux) begin
-      mux_index_we = 1;
-      mux_index_new = (mux_index_reg + 1) % ENGINES;
-      mux_search_counter_we = 1;
-      mux_search_counter_new = (mux_search_counter_reg + 1) % (4*ENGINES);
+      if (mux_index_reg == 0) begin
+        mux_index_we = 1;
+        mux_index_new = ENGINES - 1;
+      end else begin
+        mux_index_we = 1;
+        mux_index_new = mux_index_reg - 1;
+      end
 
       if (mux_search_counter_reg == 0) begin
         mux_in_packet_read_discard = 1; // throw away old packets
+      end else begin
+        mux_search_counter_we = 1;
+        mux_search_counter_new = mux_search_counter_reg - 1;
       end
     end
   end
@@ -707,7 +713,7 @@ module nts_dispatcher #(
       fifo_rd_valid_reg <= 0;
 
       mux_ctrl_reg  <= MUX_SEARCH;
-      mux_index_reg <= 0;
+      mux_index_reg <= ENGINES - 1;
       mux_search_counter_reg <= 1;
 
       ntp_time_lsb_reg <= 0;

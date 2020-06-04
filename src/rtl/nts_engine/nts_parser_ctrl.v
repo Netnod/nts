@@ -157,7 +157,7 @@ module nts_parser_ctrl #(
   //----------------------------------------------------------------
 
   localparam CORE_NAME    = 64'h70_61_72_73_65_72_20_20; //"parser  "
-  localparam CORE_VERSION = 32'h30_2e_30_33;
+  localparam CORE_VERSION = 32'h30_2e_30_34;
 
   localparam ADDR_NAME0        =    0;
   localparam ADDR_NAME1        =    1;
@@ -2696,17 +2696,23 @@ module nts_parser_ctrl #(
 
   always @*
   begin : convert_lwdv_to_byte_counter
+    reg sample_lwdv;
+
+    sample_lwdv = 0;
+
     last_bytes_we = 'b0;
     last_bytes_new = 0;
 
     case (state_reg)
-      STATE_IDLE:
-        if (i_process_initial) begin
-          last_bytes_we = 'b1;
-          last_bytes_new = i_last_word_data_valid;
-        end
+      STATE_IDLE: sample_lwdv = i_process_initial;
+      STATE_COPY: sample_lwdv = i_process_initial;
       default: ;
     endcase
+
+   if ( sample_lwdv ) begin
+     last_bytes_we = 'b1;
+     last_bytes_new = i_last_word_data_valid;
+   end
   end
 
   //----------------------------------------------------------------

@@ -318,15 +318,13 @@ module tb_ntp_auth;
     end
 
     i_rx_reset = 1;
-    #( CLOCK_PERIOD );
-    i_rx_reset = 0;
-    #( CLOCK_PERIOD );
     for (i = packet_ptr - 1; i >= 0; i = i - 1) begin
       i_rx_valid = 1;
       i_rx_data = packet[i];
-       if (DEBUG > 1)
-         $display("%s:%0d send_packet transmit: %h", `__FILE__, `__LINE__, i_rx_data);
+      if (DEBUG > 1)
+        $display("%s:%0d send_packet transmit: %h", `__FILE__, `__LINE__, i_rx_data);
       #( CLOCK_PERIOD );
+      i_rx_reset = 0;
     end
     i_rx_valid = 0;
     #( CLOCK_PERIOD );

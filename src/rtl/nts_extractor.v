@@ -67,11 +67,8 @@ module nts_extractor #(
   localparam [BUFFER_SELECT_ADDRESS_WIDTH-1:0] BUFFER_FIRST = 0;
   localparam [BUFFER_SELECT_ADDRESS_WIDTH-1:0] BUFFER_LAST = ~ BUFFER_FIRST;
 
-  localparam BR_IDLE      = 0;
-  localparam BR_INIT0     = 1;
-  localparam BR_COPY      = 2;
-  localparam BR_COPY_LAST = 3;
-  localparam BR_START_TX  = 4;
+  localparam [0:0] ENGINE_READER_IDLE    = 1'b0;
+  localparam [0:0] ENGINE_READER_READING = 1'b1;
 
   localparam [1:0] BUFFER_STATE_UNUSED  = 2'b00;
   localparam [1:0] BUFFER_STATE_WRITING = 2'b01;
@@ -96,7 +93,7 @@ module nts_extractor #(
   localparam ADDR_ERROR_DISCARDS    = API_ADDR_BASE + 'h41;
 
   localparam CORE_NAME    = 64'h4e_54_53_2d_45_58_54_52; //NTS-EXTR
-  localparam CORE_VERSION = 32'h30_2e_30_32; //0.02
+  localparam CORE_VERSION = 32'h30_2e_30_34; //0.04
 
   localparam MUX_SEARCH = 0;
   localparam MUX_REMAIN = 1;
@@ -104,22 +101,6 @@ module nts_extractor #(
   //----------------------------------------------------------------
   // Asynchrononous registers
   //----------------------------------------------------------------
-
-  // Buffer reader regs. (used to copy from buffer mem to txmem)
-
-  reg                  br_state_we;
-  reg            [2:0] br_state_new;
-  reg            [2:0] br_state_reg;
-
-  reg                  br_read_addr_we;
-  reg [ADDR_WIDTH-1:0] br_read_addr_new;
-  reg [ADDR_WIDTH-1:0] br_read_addr_reg; //source address inside current buffer
-
-  reg                  br_write_addr_we;
-  reg [ADDR_WIDTH-1:0] br_write_addr_new;
-  reg [ADDR_WIDTH-1:0] br_write_addr_reg;
-
-  // Buffer and buffer access related regs.
 
   reg                  buffer_initilized_we;
   reg    [BUFFERS-1:0] buffer_initilized_new;
@@ -170,6 +151,22 @@ module nts_extractor #(
   reg [31:0] dummy_new;
   reg [31:0] dummy_reg;
 
+  reg        engine_reader_fsm_we;
+  reg  [0:0] engine_reader_fsm_new;
+  reg  [0:0] engine_reader_fsm_reg;
+  reg        engine_reader_data_we;
+  reg [63:0] engine_reader_data_new;
+  reg [63:0] engine_reader_data_reg;
+  reg        engine_reader_data_valid_new;
+  reg        engine_reader_data_valid_reg;
+  reg        engine_reader_lwdv_we;
+  reg  [3:0] engine_reader_lwdv_new;
+  reg  [3:0] engine_reader_lwdv_reg;
+  reg        engine_reader_start_new;
+  reg        engine_reader_start_reg;
+  reg        engine_reader_stop_new;
+  reg        engine_reader_stop_reg;
+
   //internal logic errors. Should never occur.
   reg        error_illegal_discard_inc;
   reg [31:0] error_illegal_discard_reg;
@@ -181,14 +178,13 @@ module nts_extractor #(
   reg engine_fifo_rd_start_new;
   reg engine_fifo_rd_start_reg;
 
-  reg [7:0] lwdv_expanded_reg;
+  reg [BUFFER_SELECT_ADDRESS_WIDTH-1:0] tx_buffer;
+  reg                  [ADDR_WIDTH-1:0] tx_count;
+  reg                  [ADDR_WIDTH-1:0] tx_last;
+  reg                             [7:0] tx_lwdv;
 
-  reg [ADDR_WIDTH-1:0] tx_count;
-  reg [ADDR_WIDTH-1:0] tx_last;
-  reg            [7:0] tx_lwdv;
-
-  reg           [63:0] txmem [ 0 : (1<<ADDR_WIDTH)-1 ]; //MAC easy access memory
-  reg [ADDR_WIDTH-1:0] txmem_addr;
+  reg           [63:0] txmem [ 0 : (1<<BRAM_WIDTH)-1 ];
+  reg [BRAM_WIDTH-1:0] txmem_addr;
   reg           [63:0] txmem_wdata;
   reg                  txmem_wren;
 
@@ -220,26 +216,27 @@ module nts_extractor #(
   reg            [1:0] buffer_engine_state;
   reg            [1:0] buffer_mac_state;
 
-  reg buffer_read_start;
-  reg buffer_read_stop;
-
   reg  [7:0] mac_data_valid;
   reg [63:0] mac_data;
   reg        mac_start;
 
-  reg [BRAM_WIDTH-1:0] ram_engine_addr;
-  /* verilator lint_off UNUSED */
-  wire          [63:0] ram_engine_rdata;
-  /* verilator lint_on UNUSED */
-  reg                  ram_engine_write;
-  reg           [63:0] ram_engine_wdata;
-  reg [BRAM_WIDTH-1:0] ram_mac_addr;
-  reg                  ram_mac_read;
-  wire          [63:0] ram_mac_rdata;
+  reg                                   tx_start;
+  reg                  [ADDR_WIDTH-1:0] tx_start_last;
+  reg                             [7:0] tx_start_lwdv;
+  reg [BUFFER_SELECT_ADDRESS_WIDTH-1:0] tx_start_buffer;
+  reg                                   tx_stop;
 
-  reg                  tx_start;
-  reg [ADDR_WIDTH-1:0] tx_start_last;
-  reg            [7:0] tx_start_lwdv;
+  //----------------------------------------------------------------
+  // Extractor MUX - Search Registers
+  //----------------------------------------------------------------
+
+  reg               engine_mux_start_ready_search;
+  reg [ENGINES-1:0] engine_mux_ready_engines_new;
+  reg [ENGINES-1:0] engine_mux_ready_engines_reg;
+  reg engine_mux_ready_found_new;
+  reg engine_mux_ready_found_reg;
+  integer engine_mux_ready_index_new;
+  integer engine_mux_ready_index_reg;
 
   //----------------------------------------------------------------
   // Extractor MUX - Registers
@@ -279,6 +276,58 @@ module nts_extractor #(
   assign o_engine_fifo_rd_start = mux_out_fifo_rd_start;
 
   //----------------------------------------------------------------
+  // Extractor MUX - Search
+  //----------------------------------------------------------------
+
+  always @*
+  begin : extractor_mux_ready_search1
+    integer i;
+    for (i = 0; i < ENGINES; i = i + 1) begin
+      engine_mux_ready_engines_new[i] = i_engine_packet_available[i] && i_engine_fifo_empty[i] == 1'b0;
+    end
+  end
+
+  always @*
+  begin : extractor_mux_ready_search2
+    reg found;
+
+    engine_mux_ready_found_new = 0;
+
+    if (engine_mux_ready_index_reg == 0) begin
+      engine_mux_ready_index_new = ENGINES - 1;
+    end else begin
+      engine_mux_ready_index_new = engine_mux_ready_index_reg - 1;
+    end
+
+    found = 0;
+
+    if (engine_mux_ready_engines_reg[engine_mux_ready_index_reg]) begin
+      found = 1;
+    end
+
+    if (engine_mux_ready_index_reg == mux_in_index_reg) begin
+      if (mux_in_ctrl_reg == MUX_REMAIN) begin
+        found = 0; //Do not find your self while processing yourself
+      end
+    end
+
+    if (found) begin
+      engine_mux_ready_found_new = 1;
+      engine_mux_ready_index_new = engine_mux_ready_index_reg;
+    end
+
+    if (engine_mux_start_ready_search) begin
+      engine_mux_ready_found_new = 0;
+      if (mux_in_index_reg == 0) begin
+        engine_mux_ready_index_new = ENGINES - 1;
+      end else begin
+        engine_mux_ready_index_new = mux_in_index_reg - 1;
+      end
+    end
+
+  end
+
+  //----------------------------------------------------------------
   // Extractor MUX
   //----------------------------------------------------------------
 
@@ -304,6 +353,8 @@ module nts_extractor #(
 
     error_illegal_start_inc = 0;
     error_illegal_discard_inc = 0;
+
+    engine_mux_start_ready_search = 0;
 
     mux_in_ctrl_we = 0;
     mux_in_ctrl_new = MUX_SEARCH;
@@ -341,6 +392,7 @@ module nts_extractor #(
           if (available) begin
             mux_in_ctrl_we = 1;
             mux_in_ctrl_new = MUX_REMAIN;
+            engine_mux_start_ready_search = 1;
           end else begin
             forward_mux = 1;
           end
@@ -351,12 +403,9 @@ module nts_extractor #(
     endcase
 
     if (forward_mux) begin
-      if (mux_in_index_reg == 0) begin
-        mux_in_index_we = 1;
-        mux_in_index_new = ENGINES - 1;
-      end else begin
-        mux_in_index_we = 1;
-        mux_in_index_new = mux_in_index_reg - 1;
+      if (engine_mux_ready_found_reg) begin
+        mux_in_index_we  = 1;
+        mux_in_index_new = engine_mux_ready_index_reg;
       end
     end
   end
@@ -479,30 +528,63 @@ module nts_extractor #(
   end
 
   //----------------------------------------------------------------
-  // Buffer RAM
-  //----------------------------------------------------------------
-
-  bram_dp2w #( .ADDR_WIDTH( BRAM_WIDTH ), .DATA_WIDTH(64) ) bufferMEM (
-    .i_clk(i_clk),
-    .i_en_a(ram_engine_write),
-    .i_en_b(ram_mac_read),
-    .i_we_a(ram_engine_write),
-    .i_we_b(1'b0),
-    .i_addr_a(ram_engine_addr),
-    .i_addr_b(ram_mac_addr),
-    .i_data_a(ram_engine_wdata),
-    .i_data_b(64'b0),
-    .o_data_a(ram_engine_rdata),
-    .o_data_b(ram_mac_rdata)
-  );
-
-  //----------------------------------------------------------------
   // Engine_reader process
-  // Copies data from engine to internal buffers
+  // Copies data from engine to internal temporary register
   //----------------------------------------------------------------
 
   always @*
   begin : engine_reader
+    engine_fifo_rd_start_new = 0;
+    engine_packet_read_new = 0;
+
+    engine_reader_fsm_we = 0;
+    engine_reader_fsm_new = 0;
+
+    engine_reader_data_we = 0;
+    engine_reader_data_new = 0;
+
+    engine_reader_data_valid_new = 0;
+
+    engine_reader_lwdv_we = 0;
+    engine_reader_lwdv_new = 0;
+
+    engine_reader_start_new = 0;
+
+    engine_reader_stop_new = 0;
+
+    case (engine_reader_fsm_reg)
+      ENGINE_READER_IDLE:
+        if (mux_in_packet_available && mux_in_fifo_empty==1'b0) begin
+          engine_fifo_rd_start_new = 1;
+
+          engine_reader_fsm_we = 1;
+          engine_reader_fsm_new = ENGINE_READER_READING;
+          engine_reader_lwdv_we = 1;
+          engine_reader_lwdv_new = mux_in_bytes_last_word;
+          engine_reader_start_new = 1;
+        end
+      ENGINE_READER_READING:
+        if (mux_in_fifo_rd_valid) begin
+          engine_reader_data_we = 1;
+          engine_reader_data_new = mux_in_fifo_rd_data;
+          engine_reader_data_valid_new = 1;
+        end else if (mux_in_fifo_empty) begin
+          engine_packet_read_new = 1;
+          engine_reader_stop_new = 1;
+          engine_reader_fsm_we = 1;
+          engine_reader_fsm_new = ENGINE_READER_IDLE;
+        end
+      default: ;
+    endcase
+  end
+
+  //----------------------------------------------------------------
+  // Buffer writer process
+  // Copies data from internal temporary register to buffers
+  //----------------------------------------------------------------
+
+  always @*
+  begin : buffer_writer
     buffer_engine_addr_we = 0;
     buffer_engine_addr_new = 0;
     buffer_engine_lwdv_we = 0;
@@ -513,36 +595,31 @@ module nts_extractor #(
     buffer_engine_state_new = 0;
     buffer_initilized_we = 0;
     buffer_initilized_new = 0;
-    engine_packet_read_new = 0;
-    engine_fifo_rd_start_new = 0;
     write_wdata_new = 0;
     write_wren_new = 0;
     write_addr_new = 0;
-
     case (buffer_engine_state)
       BUFFER_STATE_UNUSED:
-        if (mux_in_packet_available && mux_in_fifo_empty==1'b0) begin
+        if (engine_reader_start_reg) begin
           buffer_engine_addr_we = 1;
           buffer_engine_addr_new = 0;
           buffer_engine_lwdv_we = 1;
-          buffer_engine_lwdv_new = mux_in_bytes_last_word;
+          buffer_engine_lwdv_new = engine_reader_lwdv_reg;
           buffer_engine_state_we = 1;
           buffer_engine_state_new = BUFFER_STATE_WRITING;
           buffer_initilized_we = 1;
           buffer_initilized_new = buffer_initilized_reg;
           buffer_initilized_new[buffer_engine_selected_reg] = 1;
-          engine_fifo_rd_start_new = 1;
         end
       BUFFER_STATE_WRITING:
-        if (mux_in_fifo_rd_valid) begin
+        if (engine_reader_data_valid_reg) begin
           buffer_engine_addr_we = 1;
           buffer_engine_addr_new = buffer_engine_addr + 1;
           write_addr_new[BRAM_WIDTH-1:ADDR_WIDTH] = buffer_engine_selected_reg;
           write_addr_new[ADDR_WIDTH-1:0] = buffer_engine_addr;
-          write_wdata_new = mux_in_fifo_rd_data;
+          write_wdata_new = engine_reader_data_reg;
           write_wren_new = 1;
-        end else if (mux_in_fifo_empty) begin
-          engine_packet_read_new = 1;
+        end else if (engine_reader_stop_reg) begin
           buffer_engine_state_we = 1;
           buffer_engine_state_new = BUFFER_STATE_LOADED;
           buffer_engine_selected_we = 1;
@@ -551,18 +628,6 @@ module nts_extractor #(
       BUFFER_STATE_LOADED: ;
       BUFFER_STATE_READING: ;
     endcase
-
-  end
-
-  //----------------------------------------------------------------
-  // RAM write process
-  //----------------------------------------------------------------
-
-  always @*
-  begin : ram_write
-    ram_engine_write = write_wren_reg;
-    ram_engine_addr = write_addr_reg;
-    ram_engine_wdata = write_wdata_reg;
   end
 
   //----------------------------------------------------------------
@@ -611,28 +676,41 @@ module nts_extractor #(
       mac_data_valid <= 0;
       mac_data <= 0;
       mac_start <= 0;
+      tx_buffer <= 0;
       tx_count <= 0;
       tx_last <= 0;
       tx_lwdv <= 0;
       tx_state <= 0;
+      tx_stop <= 0;
     end else begin
       mac_data_valid <= 0;
       mac_start <= 0;
       case (tx_state)
         TX_IDLE:
-          if (tx_start) begin
+          if (tx_start) begin : tx_idle_scope
+            reg [BRAM_WIDTH-1:0] addr;
+
+            addr[ADDR_WIDTH-1:0] = 0;
+            addr[BRAM_WIDTH-1:ADDR_WIDTH] = tx_start_buffer;
+
             mac_start <= 1;
-            mac_data <= mac_byte_txreverse( txmem[0], 8'hff );
+            mac_data <= mac_byte_txreverse( txmem[addr], 8'hff );
             mac_data_valid <= 8'hff;
 
+            tx_buffer <= tx_start_buffer;
             tx_last <= tx_start_last;
             tx_lwdv <= tx_start_lwdv;
             tx_count <= 2;
             tx_state <= TX_AWAIT_ACK;
           end
         TX_AWAIT_ACK:
-          if (i_mac_tx_ack) begin
-            mac_data <= mac_byte_txreverse( txmem[1], 8'hff );
+          if (i_mac_tx_ack) begin : tx_await_ack_scope
+            reg [BRAM_WIDTH-1:0] addr;
+
+            addr[ADDR_WIDTH-1:0] = 1;
+            addr[BRAM_WIDTH-1:ADDR_WIDTH] = tx_buffer;
+
+            mac_data <= mac_byte_txreverse( txmem[addr], 8'hff );
             mac_data_valid <= 8'hff;
 
             tx_state <= TX_WRITE;
@@ -641,15 +719,21 @@ module nts_extractor #(
             mac_data_valid <= mac_data_valid;
           end
         TX_WRITE:
-          begin
+          begin : tx_write_scoope
+            reg [BRAM_WIDTH-1:0] addr;
+
+            addr[ADDR_WIDTH-1:0] = tx_count;
+            addr[BRAM_WIDTH-1:ADDR_WIDTH] = tx_buffer;
+
             tx_count <= tx_count + 1;
             if (tx_count >= tx_last) begin
-              mac_data <= mac_byte_txreverse( txmem[tx_count], tx_lwdv );
+              mac_data <= mac_byte_txreverse( txmem[addr], tx_lwdv );
               mac_data_valid <= tx_lwdv;
 
               tx_state <= TX_SILENT_CYCLE;
+              tx_stop <= 1;
             end else begin
-              mac_data <= mac_byte_txreverse( txmem[tx_count], 8'hff );
+              mac_data <= mac_byte_txreverse( txmem[addr], 8'hff );
               mac_data_valid <= 8'hff;
             end
           end
@@ -683,83 +767,11 @@ module nts_extractor #(
     txmem[txmem_addr] <= txmem_wdata;
   end
 
-  //----------------------------------------------------------------
-  // Buffer reader
-  // Copies from big buffer to easier accessed txmem.
-  //----------------------------------------------------------------
-
   always @*
   begin
-    ram_mac_addr       = 0;
-    ram_mac_read       = 0;
-    br_read_addr_we    = 0;
-    br_read_addr_new   = 0;
-    br_state_we        = 0;
-    br_state_new       = 0;
-    br_write_addr_we   = 0;
-    br_write_addr_new  = 0;
-    txmem_wdata        = 0;
-    txmem_wren         = 0;
-    txmem_addr         = 0;
-    tx_start           = 0;
-    tx_start_last      = 0;
-    tx_start_lwdv      = 0;
-    buffer_read_stop   = 0;
-
-    ram_mac_addr[BRAM_WIDTH-1:ADDR_WIDTH] = buffer_mac_selected_reg;
-    ram_mac_addr[ADDR_WIDTH-1:0] = br_read_addr_reg;
-    ram_mac_read = 1;
-
-    case (br_state_reg)
-      BR_IDLE:
-        if (buffer_read_start) begin
-          br_read_addr_we = 1;
-          br_read_addr_new = 0;
-          br_state_we = 1;
-          br_state_new = BR_INIT0;
-        end
-      BR_INIT0:
-        begin
-          br_read_addr_we = 1;
-          br_read_addr_new = 1;
-          br_state_we = 1;
-          br_state_new = BR_COPY;
-          br_write_addr_we = 1;
-          br_write_addr_new = 0;
-        end
-      BR_COPY:
-        begin
-          br_read_addr_we = 1;
-          br_read_addr_new = br_read_addr_reg + 1;
-          br_write_addr_we = 1;
-          br_write_addr_new = br_write_addr_reg + 1;
-          txmem_wdata = ram_mac_rdata;
-          txmem_wren  = 1;
-          txmem_addr  = br_write_addr_reg;
-          if (br_read_addr_new >= buffer_mac_addr) begin
-             br_state_we = 1;
-             br_state_new = BR_COPY_LAST;
-          end
-        end
-      BR_COPY_LAST:
-        begin
-          txmem_wdata = ram_mac_rdata;
-          txmem_wren  = 1;
-          txmem_addr  = br_write_addr_reg;
-          br_state_we = 1;
-          br_state_new = BR_START_TX;
-        end
-      BR_START_TX:
-        if (tx_state == TX_IDLE) begin
-          tx_start = 1;
-          tx_start_lwdv = lwdv_expanded_reg;
-          tx_start_last = br_write_addr_reg;
-          br_state_we = 1;
-          br_state_new = BR_IDLE;
-          buffer_read_stop = 1;
-        end
-      default: ;
-    endcase;
+    txmem_addr = write_addr_reg;
+    txmem_wren = write_wren_reg;
+    txmem_wdata = write_wdata_reg;
   end
 
   //----------------------------------------------------------------
@@ -767,23 +779,35 @@ module nts_extractor #(
   //----------------------------------------------------------------
 
   always @*
-  begin
+  begin : mac_buff_select
+    reg [7:0] lwdv_expanded;
+
+    lwdv_expanded = mac_last_word_data_valid_expander( buffer_lwdv_reg[buffer_mac_selected_reg] );
+
     buffer_mac_selected_we = 0;
     buffer_mac_selected_new = 0;
     buffer_mac_state_we = 0;
     buffer_mac_state_new = 0;
-    buffer_read_start = 0;
+
+    tx_start        = 0;
+    tx_start_buffer = 0;
+    tx_start_last   = 0;
+    tx_start_lwdv   = 0;
+
     case (buffer_mac_state)
       BUFFER_STATE_UNUSED: ;
       BUFFER_STATE_WRITING: ;
       BUFFER_STATE_LOADED:
-        if (br_state_reg == BR_IDLE) begin
+        if (tx_state == TX_IDLE) begin
           buffer_mac_state_we = 1;
           buffer_mac_state_new = BUFFER_STATE_READING;
-          buffer_read_start = 1;
+          tx_start = 1;
+          tx_start_buffer = buffer_mac_selected_reg;
+          tx_start_lwdv = lwdv_expanded;
+          tx_start_last = buffer_mac_addr - 1;
         end
       BUFFER_STATE_READING:
-        if (buffer_read_stop) begin
+        if (tx_stop) begin
           buffer_mac_selected_we = 1;
           buffer_mac_selected_new = buffer_mac_selected_reg + 1;
           buffer_mac_state_we = 1;
@@ -851,9 +875,6 @@ module nts_extractor #(
   always @(posedge i_clk or posedge i_areset)
   begin : reg_update
     if (i_areset) begin
-      br_read_addr_reg <= 0;
-      br_state_reg <= 0;
-      br_write_addr_reg <= 0;
       buffer_engine_selected_reg <= 0;
       buffer_mac_selected_reg <= 0;
       buffer_initilized_reg <= 0;
@@ -864,23 +885,22 @@ module nts_extractor #(
       debug_tx_reg <= 0;
       dummy_reg <= 0;
       engine_fifo_rd_start_reg <= 0;
+      engine_mux_ready_engines_reg <= 0;
+      engine_mux_ready_found_reg <= 0;
+      engine_mux_ready_index_reg <= 0;
       engine_packet_read_reg <= 0;
+      engine_reader_fsm_reg <= 0;
+      engine_reader_data_reg <= 0;
+      engine_reader_data_valid_reg <= 0;
+      engine_reader_lwdv_reg <= 0;
+      engine_reader_start_reg <= 0;
+      engine_reader_stop_reg <= 0;
       error_illegal_discard_reg <= 0;
       error_illegal_start_reg <= 0;
-      lwdv_expanded_reg <= 0;
       mux_in_ctrl_reg  <= MUX_SEARCH;
       mux_in_index_reg <= 0;
       //note: mac moved to its own clocked process to get timing, behaivor etc very similar to pp_tx
     end else begin
-      if (br_read_addr_we)
-        br_read_addr_reg <= br_read_addr_new;
-
-      if (br_state_we)
-        br_state_reg <= br_state_new;
-
-      if (br_write_addr_we)
-        br_write_addr_reg <= br_write_addr_new;
-
       if (buffer_initilized_we)
         buffer_initilized_reg <= buffer_initilized_new;
 
@@ -908,15 +928,32 @@ module nts_extractor #(
         dummy_reg <= dummy_new;
 
       engine_fifo_rd_start_reg <= engine_fifo_rd_start_new;
+
+      engine_mux_ready_engines_reg <= engine_mux_ready_engines_new;
+      engine_mux_ready_found_reg <= engine_mux_ready_found_new;
+      engine_mux_ready_index_reg <= engine_mux_ready_index_new;
+
       engine_packet_read_reg <= engine_packet_read_new;
+
+      if (engine_reader_fsm_we)
+        engine_reader_fsm_reg <= engine_reader_fsm_new;
+
+      if (engine_reader_data_we)
+        engine_reader_data_reg <= engine_reader_data_new;
+
+      engine_reader_data_valid_reg <= engine_reader_data_valid_new;
+
+      if (engine_reader_lwdv_we)
+        engine_reader_lwdv_reg <= engine_reader_lwdv_new;
+
+      engine_reader_start_reg <= engine_reader_start_new;
+      engine_reader_stop_reg <= engine_reader_stop_new;
 
       if (error_illegal_discard_inc)
         error_illegal_discard_reg <= error_illegal_discard_reg + 1;
 
       if (error_illegal_start_inc)
         error_illegal_start_reg <= error_illegal_start_reg + 1;
-
-      lwdv_expanded_reg <= mac_last_word_data_valid_expander( buffer_lwdv_reg[buffer_mac_selected_reg] );
 
       if (mux_in_ctrl_we)
         mux_in_ctrl_reg <= mux_in_ctrl_new;

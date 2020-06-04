@@ -29,7 +29,8 @@
 //
 
 module nts_extractor_tb;
-
+  integer test_success;
+  integer test_fail;
 
   //----------------------------------------------------------------
   // network_path_shared.v swap bytes function
@@ -71,6 +72,9 @@ module nts_extractor_tb;
 
   `define assert(condition) if(!(condition)) begin $display("ASSERT FAILED: %s %d %s", `__FILE__, `__LINE__, `"condition`"); $finish(1); end
 
+  `define test(condition) if((condition)) begin test_success = test_success + 1; end else begin test_fail = test_fail + 1; $display("WARNING TEST FAILED: %s %d %s", `__FILE__, `__LINE__, `"condition`"); end
+
+
   //----------------------------------------------------------------
   // test_swap_bytes_equiv
   // * Implementations are only equivalent for 8'hff and 8'h00.
@@ -91,16 +95,16 @@ module nts_extractor_tb;
     data = 64'h5d41_402a_bc4b_2a76;
     v1 = mac_swap_bytes(data, mask);
     v2 = mac_byte_txreverse(data, mask);
-    $display("%s:%0d mask:%b %h %h", `__FILE__, `__LINE__, mask, v1, v2);
-    `assert(v1 == v2);
+    //$display("%s:%0d mask:%b %h %h", `__FILE__, `__LINE__, mask, v1, v2);
+    `test(v1 === v2);
     for (i = 0; i < 8; i = i + 1) begin
       mask[i[2:0]] = 1;
       v1 = mac_swap_bytes(data, mask);
       v2 = mac_byte_txreverse(data, mask);
-      $display("%s:%0d mask:%b %h %h", `__FILE__, `__LINE__, mask, v1, v2);
-      if (mask == 8'hff) begin
+      //$display("%s:%0d mask:%b %h %h", `__FILE__, `__LINE__, mask, v1, v2);
+      if (mask === 8'hff) begin
         //network path uses mac_swap_bytes(pp_mactx_data, 8'hff), so must be equivalent
-        `assert(v1 == v2);
+        `test(v1 === v2);
       end
     end
   end
@@ -108,8 +112,12 @@ module nts_extractor_tb;
 
   initial begin
     $display("%s:%0d Test start", `__FILE__, `__LINE__);
+    test_success = 0;
+    test_fail = 0;
+
     test_swap_bytes_equiv();
-    $display("%s:%0d Test stop", `__FILE__, `__LINE__);
+
+    $display("%s:%0d Test stop. Sucess: %0d, failure: %0d.", `__FILE__, `__LINE__, test_success, test_fail);
     $finish;
   end
 endmodule

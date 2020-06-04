@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019, The Swedish Post and Telecom Authority (PTS)
+// Copyright (c) 2019-2020, The Swedish Post and Telecom Authority (PTS)
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -40,10 +40,8 @@ module nts_rx_buffer #(
 
   input  wire                    i_parser_busy,
 
-  input  wire                    i_dispatch_packet_available,
-  output wire                    o_dispatch_packet_read,
+  output  wire                   o_dispatch_ready,
   input  wire                    i_dispatch_fifo_empty,
-  output wire                    o_dispatch_fifo_rd_start,
   input  wire                    i_dispatch_fifo_rd_valid,
   input  wire             [63:0] i_dispatch_fifo_rd_data,
 
@@ -100,17 +98,19 @@ module nts_rx_buffer #(
   reg  [3:0]              memctrl_new;
   reg  [3:0]              memctrl_reg;
 
+  reg dispatch_ready_new;
+  reg dispatch_ready_reg;
+
   //--- internal registers for handling input FIFO
 
-  reg                     dispatch_fifo_rd_start_new;
-  reg                     dispatch_fifo_rd_start_reg;
-  reg                     dispatch_packet_read_we;
-  reg                     dispatch_packet_read_new;
-  reg                     dispatch_packet_read_reg;
-
-  reg                     fifo_addr_we;
-  reg  [ADDR_WIDTH-1:0]   fifo_addr_new;
-  reg  [ADDR_WIDTH-1:0]   fifo_addr_reg;
+  reg                   fifo_addr_we;
+  reg  [ADDR_WIDTH-1:0] fifo_addr_new;
+  reg  [ADDR_WIDTH-1:0] fifo_addr_reg;
+  reg                   fifo_wen_new;
+  reg                   fifo_wen_reg;
+  reg                   fifo_wdata_we;
+  reg            [63:0] fifo_wdata_new;
+  reg            [63:0] fifo_wdata_reg;
 
   //---- internal registers for handling access port
   reg                         access_addr_lo_we;
@@ -223,7 +223,6 @@ module nts_rx_buffer #(
   //----------------------------------------------------------------
 
   reg         burst_done;
-  reg         fifo_start;
   reg         fifo_done;
   wire [63:0] ram_rd_data;
 
@@ -234,8 +233,7 @@ module nts_rx_buffer #(
   assign o_access_port_wait       = access_wait_reg;
   assign o_access_port_rd_dv      = access_dv_reg;
   assign o_access_port_rd_data    = access_out_reg;
-  assign o_dispatch_packet_read   = dispatch_packet_read_reg;
-  assign o_dispatch_fifo_rd_start = dispatch_fifo_rd_start_reg;
+  assign o_dispatch_ready         = dispatch_ready_reg;
 
   //----------------------------------------------------------------
   // Memory holding the Receive buffer
@@ -278,8 +276,9 @@ module nts_rx_buffer #(
       csum_size_reg        <= 'b0;
 
       fifo_addr_reg              <= 'b0;
-      dispatch_fifo_rd_start_reg <= 'b0;
-      dispatch_packet_read_reg   <= 'b0;
+      fifo_wdata_reg             <= 'b0;
+      fifo_wen_reg               <= 'b0;
+      dispatch_ready_reg         <= 'b0;
       memctrl_reg                <= 'b0;
 
       p0_done_reg    <= 'b0;
@@ -342,10 +341,12 @@ module nts_rx_buffer #(
       if (fifo_addr_we)
         fifo_addr_reg <= fifo_addr_new;
 
-      dispatch_fifo_rd_start_reg <= dispatch_fifo_rd_start_new;
+      if (fifo_wdata_we)
+        fifo_wdata_reg <= fifo_wdata_new;
 
-      if (dispatch_packet_read_we)
-        dispatch_packet_read_reg <= dispatch_packet_read_new;
+      fifo_wen_reg <= fifo_wen_new;
+
+      dispatch_ready_reg <= dispatch_ready_new;
 
       if (memctrl_we) begin
         memctrl_reg <= memctrl_new;
@@ -413,24 +414,6 @@ module nts_rx_buffer #(
   end
 
   //----------------------------------------------------------------
-  // FIFO start wire
-  // Helper reg. Used by FSM and others.
-  //----------------------------------------------------------------
-
-  always @*
-  begin : fifo_reg_start_proc
-    fifo_start = 0;
-    case (memctrl_reg)
-      MEMORY_CTRL_IDLE:
-        if (i_parser_busy == 0)
-          if (i_dispatch_packet_available && i_dispatch_fifo_empty == 0)
-            fifo_start = 1;
-      default: ;
-    endcase
-  end
-
-
-  //----------------------------------------------------------------
   // Finite State Machine
   // Overall functionallity control
   //----------------------------------------------------------------
@@ -442,7 +425,7 @@ module nts_rx_buffer #(
 
     case (memctrl_reg)
       MEMORY_CTRL_IDLE:
-        if (fifo_start) begin
+        if (i_dispatch_fifo_rd_valid) begin
           memctrl_we              = 'b1;
           memctrl_new             = MEMORY_CTRL_FIFO_WRITE;
 
@@ -637,7 +620,7 @@ module nts_rx_buffer #(
           ram_addr_we               = 'b1; //write zero addr
           ram_wr_en_we              = 'b1; //write zero wr (i.e. read)
 
-          if (fifo_start) begin
+          if (i_dispatch_fifo_rd_valid) begin
             ;
           end else if (i_access_port_rd_en) begin
             ram_addr_we             = 'b1;
@@ -645,13 +628,13 @@ module nts_rx_buffer #(
           end
         end
       MEMORY_CTRL_FIFO_WRITE:
-        if (i_dispatch_fifo_rd_valid) begin
+        if (fifo_wen_reg) begin
           ram_addr_we             = 'b1;
           ram_addr_new            = fifo_addr_reg;
           ram_wr_en_we            = 'b1;
           ram_wr_en_new           = 'b1;
           ram_wr_data_we          = 'b1;
-          ram_wr_data_new         = i_dispatch_fifo_rd_data;
+          ram_wr_data_new         = fifo_wdata_reg;
         end
       MEMORY_CTRL_READ_1ST_DLY: sequential_access = 1;
       MEMORY_CTRL_BURST_DLY:    sequential_access = 1;
@@ -675,33 +658,40 @@ module nts_rx_buffer #(
 
   always @*
   begin : fifo_control
-    fifo_addr_we                  = 'b0;
-    fifo_addr_new                 = 'b0;
+    fifo_addr_we   = 'b0;
+    fifo_addr_new  = 'b0;
+    fifo_wen_new   = 'b0;
+    fifo_wdata_we  = 'b0;
+    fifo_wdata_new = 'b0;
 
     fifo_done                     = 'b0;
 
-    dispatch_packet_read_we       = 'b1;
-    dispatch_packet_read_new      = 'b0;
-
-    dispatch_fifo_rd_start_new = 0;
+    dispatch_ready_new            = 1;
 
     case (memctrl_reg)
       MEMORY_CTRL_IDLE:
         begin
-          //dispatch_fifo_rd_en_we  = 'b1; // write zero to rd_en
-          if (fifo_start) begin
-            dispatch_fifo_rd_start_new = 'b1;
-            fifo_addr_we               = 'b1; // write zero to fifo_addr_reg
+          dispatch_ready_new = ~ i_parser_busy;
+          if (i_dispatch_fifo_rd_valid) begin
+            fifo_addr_we = 1;
+            fifo_addr_new = 0;
+            fifo_wen_new = 1;
+            fifo_wdata_we = 1;
+            fifo_wdata_new = i_dispatch_fifo_rd_data;
           end
         end
       MEMORY_CTRL_FIFO_WRITE:
-        if (i_dispatch_fifo_rd_valid) begin
-          fifo_addr_we            = 'b1;
-          fifo_addr_new           = fifo_addr_reg + 1;
-        end else if (i_dispatch_fifo_empty) begin
-          dispatch_packet_read_we  = 'b1;
-          dispatch_packet_read_new = 'b1;
-          fifo_done                = 1;
+        begin
+          dispatch_ready_new = 0;
+          if (i_dispatch_fifo_rd_valid) begin
+            fifo_addr_we  = 'b1;
+            fifo_addr_new = fifo_addr_reg + 1;
+            fifo_wen_new = 1;
+            fifo_wdata_we = 1;
+            fifo_wdata_new = i_dispatch_fifo_rd_data;
+          end else if (i_dispatch_fifo_empty) begin
+            fifo_done                = 1;
+          end
         end
       default: ;
     endcase
@@ -743,7 +733,7 @@ module nts_rx_buffer #(
           access_wait_new = 'b0;
 
 
-          if (fifo_start) begin
+          if (i_dispatch_fifo_rd_valid) begin
             ;
           end else if (i_access_port_rd_en) begin
 

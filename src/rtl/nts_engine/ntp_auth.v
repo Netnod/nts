@@ -1057,8 +1057,13 @@ module ntp_auth (
     rx_counter_we = 0;
     rx_counter_new = 0;
     if (i_rx_reset) begin
-      rx_counter_we = 1;
-      rx_counter_new = 0;
+      if (i_rx_valid) begin
+        rx_counter_we = 1;
+        rx_counter_new = 1;
+      end else begin
+        rx_counter_we = 1;
+        rx_counter_new = 0;
+      end
     end else if (i_rx_valid) begin
       if (rx_counter_reg != 16'hffff) begin
         rx_counter_we = 1;
@@ -1067,6 +1072,10 @@ module ntp_auth (
     end
   end
 
+
+  //----------------------------------------------------------------
+  // RX Ethernet Type Sampler
+  //----------------------------------------------------------------
 
   always @*
   begin
@@ -1152,10 +1161,12 @@ module ntp_auth (
     end
 
     if (i_rx_reset) begin
-      rx_ipv4_previous_new = 0;
       rx_ipv4_current_new = 0;
-      rx_ipv6_previous_new = 0;
       rx_ipv4_current_new = 0;
+      if (i_rx_valid == 1'b0) begin
+        rx_ipv4_previous_new = 0;
+        rx_ipv6_previous_new = 0;
+      end
       ntp_counter_we = 1;
       ntp_counter_new = 0;
     end

@@ -31,19 +31,21 @@
 module nts_top_tb;
   localparam ADDR_WIDTH = 10;
 
-  localparam DEBUG_CRYPTO_RX = 1;
-  localparam DEBUG           = 3;
-  localparam BENCHMARK       = 1;
-  localparam ENGINES         = 1;
+  localparam DEBUG_CRYPTO_RX = 0;
+  localparam DEBUG_MODEL_RX  = 0;
+  localparam DEBUG           = 0;
+  localparam BENCHMARK       = 0;
+  localparam ENGINES         = 64;
 
   localparam TEST_FUZZ_UI       = 0;
   localparam TEST_FUZZ_UI_START = 32;
   localparam TEST_FUZZ_UI_STOP  = 512;
   localparam TEST_FUZZ_UI_INC   = 4;
 
-  localparam TEST_UI36 = 3;
-
-  localparam TEST_NORMAL = 1;
+  localparam TEST_UI36 = 0;
+  localparam TEST_NORMAL = 0;
+  localparam TEST_NTS_PERFORMANCE = 1;
+  localparam TEST_NTS_PERFORMANCE_DELAY_CYCLES = 10;
 
   localparam [11:0] API_ADDR_ENGINE_BASE        = 12'h000;
   localparam [11:0] API_ADDR_ENGINE_NAME0       = API_ADDR_ENGINE_BASE;
@@ -352,6 +354,13 @@ module nts_top_tb;
   wire [31:0] o_api_dispatcher_read_data;
 
   reg  [63:0] i_ntp_time;
+
+  //----------------------------------------------------------------
+  // NTS counter used in performance messurements
+  //----------------------------------------------------------------
+
+  reg [63:0] nts_counter;
+  reg [63:0] clock; //tick counter used in performance benchmarks
 
   //----------------------------------------------------------------
   // RX MAC helper regs
@@ -726,7 +735,6 @@ module nts_top_tb;
     `assert( rx_busy );
     packet_available = 0;
     while (rx_busy) #10;
-    #20;
   end
   endtask
 
@@ -734,11 +742,11 @@ module nts_top_tb;
   begin : send_ipv4_ntpauth_md5_
     reg [879:0] ntpauth;
     ntpauth = { ntp, keyid, md5 };
-    $display("%s:%0d ntpauth: %h", `__FILE__, `__LINE__, ntpauth);
+    //$display("%s:%0d ntpauth: %h", `__FILE__, `__LINE__, ntpauth);
     ntpauth[879-(14+2)*8-:16]    = ntpauth[879-(14+2)*8-:16] + 4 + 16; //Total Length
-    $display("%s:%0d ntpauth: %h", `__FILE__, `__LINE__, ntpauth);
+    //$display("%s:%0d ntpauth: %h", `__FILE__, `__LINE__, ntpauth);
     ntpauth[879-(14+20+4)*8-:16] = ntpauth[879-(14+20+4)*8-:16] + 4 + 16; //UDP Length
-    $display("%s:%0d ntpauth: %h", `__FILE__, `__LINE__, ntpauth);
+    //$display("%s:%0d ntpauth: %h", `__FILE__, `__LINE__, ntpauth);
     send_packet( { 64656'b0, ntpauth }, 880, 0 );
   end
   endtask
@@ -903,6 +911,8 @@ module nts_top_tb;
                                           128'hf001_BBB0_f001_BBB1_f001_BBB2_f001_BBB3 };
   initial begin
     $display("Test start: %s:%0d", `__FILE__, `__LINE__);
+    nts_counter = 0;
+
     i_clk    = 0;
     i_areset = 1;
     i_api_dispatcher_cs = 0;
@@ -980,22 +990,18 @@ module nts_top_tb;
     if (TEST_NORMAL) begin
       //while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
       //send_packet({63696'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_1}, 1840, 0);
-      while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
       #20000;
 
       $display("%s:%0d: NTS_TEST_REQUEST_WITH_KEY_IPV4_3", `__FILE__, `__LINE__);
       send_packet({57552'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_3}, 7984, 0); //same key _2 packets, but 7 placeholders
-      while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
       #20000;
 
       $display("%s:%0d: NTS_TEST_REQUEST_WITH_KEY_IPV4_3", `__FILE__, `__LINE__);
       send_packet({57552'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_3}, 7984, 0); //same key _2 packets, but 7 placeholders
-      while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
       #20000;
 
       $display("%s:%0d: NTS_TEST_REQUEST_WITH_KEY_IPV6_3", `__FILE__, `__LINE__);
       send_packet({57392'b0, NTS_TEST_REQUEST_WITH_KEY_IPV6_3}, 8144, 0);
-      while (dut.dispatcher.mem_state_reg[dut.dispatcher.current_mem_reg] != 0) #10;
       #20000;
     end
     if (TEST_FUZZ_UI) begin
@@ -1060,6 +1066,28 @@ module nts_top_tb;
         end
       end
       #2000;
+    end
+    if (TEST_NTS_PERFORMANCE) begin : nts_perf
+      reg [63:0] time_start;
+      reg [63:0] time_elapsed;
+      reg [63:0] bits_per_second;
+      reg [63:0] packets_per_second;
+      reg [63:0] old_nts_counter;
+      old_nts_counter = 0;
+      nts_counter = 0;
+      time_start = clock;
+      time_elapsed = 0;
+      while (time_elapsed < 156_000_000 ) begin
+        send_packet({57392'b0, NTS_TEST_REQUEST_WITH_KEY_IPV6_3}, 8144, 0);
+        time_elapsed = clock - time_start;
+        if (nts_counter != old_nts_counter) begin
+          old_nts_counter = nts_counter;
+          bits_per_second = (nts_counter * 8144 * 156_000_000) / time_elapsed;
+          packets_per_second = (nts_counter * 156_000_000) / time_elapsed;
+          $display("%s:%0d PERF: Engines: %0d, %0d packets in %0d ticks. bits per second: %0d. packets per second: %0d", `__FILE__, `__LINE__, ENGINES, nts_counter, time_elapsed, bits_per_second, packets_per_second);
+          #(TEST_NTS_PERFORMANCE_DELAY_CYCLES);
+        end
+      end
     end
 
     //----------------------------------------------------------------
@@ -1244,7 +1272,8 @@ module nts_top_tb;
       { i_mac_rx_data_valid, i_mac_rx_data, i_mac_rx_bad_frame, i_mac_rx_good_frame } <= 0;
 
       if (rx_busy) begin
-        $display("%s:%0d RX: %h %h", `__FILE__, `__LINE__, rx_current[71:64], rx_current[63:0]);
+        if (DEBUG_MODEL_RX)
+          $display("%s:%0d RX: %h %h", `__FILE__, `__LINE__, rx_current[71:64], rx_current[63:0]);
         { i_mac_rx_data_valid, i_mac_rx_data } <= rx_current;
         if (rx_ptr == 0) begin
           rx_busy <= 0;
@@ -1257,7 +1286,8 @@ module nts_top_tb;
         end
 
       end else if (packet_available) begin
-        $display("%s:%0d packet_available", `__FILE__, `__LINE__);
+        if (DEBUG_MODEL_RX)
+          $display("%s:%0d packet_available", `__FILE__, `__LINE__);
         rx_busy <= 1;
         rx_ptr <= packet_length;
       end
@@ -1705,6 +1735,7 @@ module nts_top_tb;
             reg  [15:0] ciphertext_length;
             reg [127:0] tmp;
             reg  [15:0] c;
+            nts_counter = nts_counter + 1;
             nonce_length = tx_read_word16( i + 4 );
             ciphertext_length = tx_read_word16( i + 6 );
             $display("%s:%0d * TX * NTP Extension: NTS Enc&AuthEF NL = %0d, CL = %0d", `__FILE__, `__LINE__, nonce_length, ciphertext_length);
@@ -1764,7 +1795,11 @@ module nts_top_tb;
           begin
             if (o_mac_tx_data_valid != 8'h00) $display("%s:%0d TX TX_IDLE illegal data: %h - %h", `__FILE__, `__LINE__, o_mac_tx_data_valid, o_mac_tx_data);
             if (o_mac_tx_start) begin
-              tmp_ipg = tx_generate_ipg(tx_seed);
+              if (TEST_NTS_PERFORMANCE) begin
+                tmp_ipg = 0;
+              end else begin
+                tmp_ipg = tx_generate_ipg(tx_seed);
+              end
               $display("%s:%0d TX MAC will wait %0d cycles before issing ACK. Seed was: %0d", `__FILE__, `__LINE__, tmp_ipg, tx_seed);
               tx_ipg <= tmp_ipg;
               tx_seed <= tx_seed + 1;
@@ -1835,19 +1870,16 @@ module nts_top_tb;
   end
 
   //----------------------------------------------------------------
-  // Debu traces - occationally timestamp output
+  // Debug traces - occationally timestamp output
   //----------------------------------------------------------------
 
-  if (DEBUG>0) begin : clock_stamp
-    reg [63:0] clock;
-    always  @(posedge i_clk or posedge i_areset)
-    if (i_areset) begin
-      clock <= 0;
-    end else begin
-      clock <= clock + 1;
-      if ((clock & 64'hffff) == 64'h0)
-        $display("%s:%0d DEBUG CLOCK: %0d (%h) ticks", `__FILE__, `__LINE__, clock, clock);
-    end
+  always  @(posedge i_clk or posedge i_areset)
+  if (i_areset) begin
+    clock <= 0;
+  end else begin
+    clock <= clock + 1;
+    if ((clock & 64'hffff) == 64'h0)
+      if (DEBUG > 0) $display("%s:%0d DEBUG CLOCK: %0d (%h) ticks", `__FILE__, `__LINE__, clock, clock);
   end
 
   //----------------------------------------------------------------
@@ -1892,12 +1924,12 @@ module nts_top_tb;
      $display("%s:%0d dut.genblk1[0].engine.parser.protocol_detect_ntpauth_md5_reg: %h", `__FILE__, `__LINE__, dut.genblk1[0].engine.parser.protocol_detect_ntpauth_md5_reg);
     always @*
       $display("%s:%0d dut.dispatcher.engines_ready_reg: %h", `__FILE__, `__LINE__,  dut.dispatcher.engines_ready_reg);
-    always @*
-      $display("%s:%0d dut.dispatcher.mem_state[0]: %h", `__FILE__, `__LINE__, dut.dispatcher.mem_state_reg[0]);
-    always @*
-      $display("%s:%0d dut.dispatcher.mem_state[1]: %h", `__FILE__, `__LINE__, dut.dispatcher.mem_state_reg[1]);
-    always @*
-      $display("%s:%0d dut.dispatcher.current_mem: %h", `__FILE__, `__LINE__, dut.dispatcher.current_mem_reg);
+    //always @*
+    //  $display("%s:%0d dut.dispatcher.mem_state[0]: %h", `__FILE__, `__LINE__, dut.dispatcher.mem_state_reg[0]);
+    //always @*
+   //   $display("%s:%0d dut.dispatcher.mem_state[1]: %h", `__FILE__, `__LINE__, dut.dispatcher.mem_state_reg[1]);
+    //always @*
+      //$display("%s:%0d dut.dispatcher.current_mem: %h", `__FILE__, `__LINE__, dut.dispatcher.current_mem_reg);
     always @*
       $display("%s:%0d dut.dispatcher.mac_rx_corrected=%h",  `__FILE__, `__LINE__, dut.dispatcher.mac_rx_corrected);
     always @*
@@ -1906,8 +1938,8 @@ module nts_top_tb;
       $display("%s:%0d dut.engine_extractor_fifo_empty: %h", `__FILE__, `__LINE__, dut.engine_extractor_fifo_empty);
     always @(posedge i_clk)
       begin
-        if (dut.extractor.ram_engine_write)
-           $display("%s:%0d extractor.RAM[%h]=%h", `__FILE__, `__LINE__, dut.extractor.ram_engine_addr, dut.extractor.ram_engine_wdata);
+        if (dut.extractor.write_wren_reg)
+           $display("%s:%0d extractor.RAM[%h]=%h", `__FILE__, `__LINE__, dut.extractor.write_addr_reg, dut.extractor.write_wdata_reg);
         if (dut.extractor.buffer_engine_selected_we)
             $display("%s:%0d extractor, next write buffer: %h", `__FILE__, `__LINE__, dut.extractor.buffer_engine_selected_new);
       end

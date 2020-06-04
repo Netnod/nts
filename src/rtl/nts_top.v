@@ -29,7 +29,7 @@
 //
 
 module nts_top #(
-  parameter ENGINES         = 2,
+  parameter ENGINES         = 12,
   parameter ADDR_WIDTH      = 8,
   parameter API_ADDR_WIDTH  = 12,
   parameter API_RW_WIDTH    = 32,
@@ -74,8 +74,7 @@ module nts_top #(
   wire                  [ENGINES - 1:0] api_read_data_valid;
 
   wire [ENGINES-1:0] engine_busy;
-  wire [ENGINES-1:0] engine_dispatch_rx_packet_read_discard;
-  wire [ENGINES-1:0] engine_dispatch_rx_fifo_rd_start;
+  wire [ENGINES-1:0] engine_dispatch_rx_ready;
 
   /* verilator lint_off UNUSED */
   wire [ENGINES-1:0] engine_debug_detect_nts_cookie;
@@ -86,9 +85,9 @@ module nts_top #(
 
   wire [LAST_DATA_VALID_WIDTH * ENGINES - 1 : 0] dispatch_engine_rx_data_last_valid;
   wire                         [ENGINES - 1 : 0] dispatch_engine_rx_fifo_empty;
-  wire                         [ENGINES - 1 : 0] dispatch_engine_rx_packet_available;
   wire                         [ENGINES - 1 : 0] dispatch_engine_rx_fifo_rd_valid;
   wire        [MAC_DATA_WIDTH * ENGINES - 1 : 0] dispatch_engine_rx_fifo_rd_data;
+  wire                         [ENGINES - 1 : 0] dispatch_engine_rx_fifo_rd_start;
 
   wire                         [ENGINES - 1 : 0] engine_extractor_packet_available;
   wire                         [ENGINES - 1 : 0] engine_extractor_fifo_empty;
@@ -139,11 +138,10 @@ module nts_top #(
     .i_rx_good_frame(rx_good_frame_reg),
 
     .i_dispatch_busy               ( engine_busy                            ),
-    .o_dispatch_packet_available   ( dispatch_engine_rx_packet_available    ),
-    .i_dispatch_packet_read_discard( engine_dispatch_rx_packet_read_discard ),
+    .i_dispatch_ready              ( engine_dispatch_rx_ready               ),
     .o_dispatch_data_valid         ( dispatch_engine_rx_data_last_valid     ),
     .o_dispatch_fifo_empty         ( dispatch_engine_rx_fifo_empty          ),
-    .i_dispatch_fifo_rd_start      ( engine_dispatch_rx_fifo_rd_start       ),
+    .o_dispatch_fifo_rd_start      ( dispatch_engine_rx_fifo_rd_start       ),
     .o_dispatch_fifo_rd_valid      ( dispatch_engine_rx_fifo_rd_valid       ),
     .o_dispatch_fifo_rd_data       ( dispatch_engine_rx_fifo_rd_data        ),
 
@@ -205,11 +203,10 @@ module nts_top #(
 
         .o_busy(engine_busy[engine_index]),
 
-        .i_dispatch_rx_packet_available(dispatch_engine_rx_packet_available[engine_index]),
-        .o_dispatch_rx_packet_read_discard(engine_dispatch_rx_packet_read_discard[engine_index]),
+        .o_dispatch_rx_ready(engine_dispatch_rx_ready[engine_index]),
         .i_dispatch_rx_data_last_valid(dispatch_engine_rx_data_last_valid[LAST_DATA_VALID_WIDTH*engine_index+:LAST_DATA_VALID_WIDTH]),
         .i_dispatch_rx_fifo_empty(dispatch_engine_rx_fifo_empty[engine_index]),
-        .o_dispatch_rx_fifo_rd_start(engine_dispatch_rx_fifo_rd_start[engine_index]),
+        .i_dispatch_rx_fifo_rd_start(dispatch_engine_rx_fifo_rd_start[engine_index]),
         .i_dispatch_rx_fifo_rd_valid(dispatch_engine_rx_fifo_rd_valid[engine_index]),
         .i_dispatch_rx_fifo_rd_data(dispatch_engine_rx_fifo_rd_data[MAC_DATA_WIDTH*engine_index+:MAC_DATA_WIDTH]),
 

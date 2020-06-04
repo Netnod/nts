@@ -37,11 +37,10 @@ module nts_engine #(
 
   input wire  [63:0]           i_ntp_time,
 
-  input  wire                  i_dispatch_rx_packet_available,
-  output wire                  o_dispatch_rx_packet_read_discard,
+  output wire                  o_dispatch_rx_ready,
   input  wire [3:0]            i_dispatch_rx_data_last_valid,
   input  wire                  i_dispatch_rx_fifo_empty,
-  output wire                  o_dispatch_rx_fifo_rd_start,
+  input  wire                  i_dispatch_rx_fifo_rd_start,
   input  wire                  i_dispatch_rx_fifo_rd_valid,
   input  wire [63:0]           i_dispatch_rx_fifo_rd_data,
 
@@ -83,7 +82,7 @@ module nts_engine #(
 
   localparam CORE_NAME0   = 32'h4e_54_53_5f; // "NTS_"
   localparam CORE_NAME1   = 32'h45_4e_47_4e; // "ENGN"
-  localparam CORE_VERSION = 32'h30_2e_30_38; // "0.08"
+  localparam CORE_VERSION = 32'h30_2e_31_30; // "0.10"
 
   localparam ADDR_NAME0         = 'h00;
   localparam ADDR_NAME1         = 'h01;
@@ -580,10 +579,8 @@ module nts_engine #(
 
      .i_parser_busy(busy),
 
-     .i_dispatch_packet_available(i_dispatch_rx_packet_available),
-     .o_dispatch_packet_read(o_dispatch_rx_packet_read_discard),
+     .o_dispatch_ready(o_dispatch_rx_ready),
      .i_dispatch_fifo_empty(i_dispatch_rx_fifo_empty),
-     .o_dispatch_fifo_rd_start(o_dispatch_rx_fifo_rd_start),
      .i_dispatch_fifo_rd_valid(i_dispatch_rx_fifo_rd_valid),
      .i_dispatch_fifo_rd_data(i_dispatch_rx_fifo_rd_data),
 
@@ -940,7 +937,7 @@ module nts_engine #(
     .o_ready ( ntpauth_parser_ready    ),
     .o_good  ( ntpauth_parser_good     ),
 
-    .i_rx_reset ( o_dispatch_rx_fifo_rd_start ),
+    .i_rx_reset ( i_dispatch_rx_fifo_rd_start ),
     .i_rx_valid ( i_dispatch_rx_fifo_rd_valid ),
     .i_rx_data  ( i_dispatch_rx_fifo_rd_data  ),
 

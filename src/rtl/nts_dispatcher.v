@@ -45,11 +45,10 @@ module nts_dispatcher #(
   input  wire        i_rx_good_frame,
 
   input  wire [ENGINES      - 1 : 0 ] i_dispatch_busy,
-  output wire [ENGINES      - 1 : 0 ] o_dispatch_packet_available,
-  input  wire [ENGINES      - 1 : 0 ] i_dispatch_packet_read_discard,
+  input  wire [ENGINES      - 1 : 0 ] i_dispatch_ready,
   output wire [ENGINES * 4  - 1 : 0 ] o_dispatch_data_valid,
   output wire [ENGINES      - 1 : 0 ] o_dispatch_fifo_empty,
-  input  wire [ENGINES      - 1 : 0 ] i_dispatch_fifo_rd_start,
+  output wire [ENGINES      - 1 : 0 ] o_dispatch_fifo_rd_start,
   output wire [ENGINES      - 1 : 0 ] o_dispatch_fifo_rd_valid,
   output wire [ENGINES * 64 - 1 : 0 ] o_dispatch_fifo_rd_data,
 
@@ -112,7 +111,7 @@ module nts_dispatcher #(
   localparam BUS_WRITE = 8'hAA;
 
   localparam CORE_NAME    = 64'h4e_54_53_2d_44_49_53_50; //NTS-DISP
-  localparam CORE_VERSION = 32'h30_2e_30_33; //0.03
+  localparam CORE_VERSION = 32'h30_2e_30_34; //0.04
 
   localparam MUX_SEARCH = 0;
   localparam MUX_REMAIN = 1;
@@ -121,16 +120,14 @@ module nts_dispatcher #(
   // State constants
   //----------------------------------------------------------------
 
-  localparam STATE_EMPTY           = 0;
-  localparam STATE_HAS_DATA        = 1;
-  localparam STATE_PACKET_RECEIVED = 2;
-  localparam STATE_FIFO_OUT_INIT_0 = 3;
-  localparam STATE_FIFO_OUT_INIT_1 = 4;
-  localparam STATE_FIFO_OUT_INIT_2 = 5;
-  localparam STATE_FIFO_OUT        = 6;
-  localparam STATE_FIFO_OUT_FIN_0  = 7;
-  localparam STATE_FIFO_OUT_FIN_1  = 8;
-  localparam STATE_ERROR_GENERAL   = 9;
+  localparam STATE_IDLE       = 0;
+  localparam STATE_FORWARDING = 1;
+
+  //----------------------------------------------------------------
+  // Misc. constants
+  //----------------------------------------------------------------
+
+  localparam [ADDR_WIDTH-1:0] ADDR_ZERO = 0;
 
   //----------------------------------------------------------------
   // Internal registers and wires
@@ -138,41 +135,34 @@ module nts_dispatcher #(
 
   reg  [31:0]     api_read_data;
 
-  reg           current_mem_reg;       //Current: MAC RX receiver. ~Current: Dispatcher FIFO out
-  reg           current_mem_new;       //Current: MAC RX receiver. ~Current: Dispatcher FIFO out
   reg            fifo_empty_new;
   reg            fifo_empty_reg;
 
-  reg  [3:0]   mem_state_rx_new;
-  reg  [3:0] mem_state_fifo_new;
-  reg  [3:0]      mem_state_reg [1:0];
+  reg        fifo_discard_new; //internal
+  reg        fifo_discard_reg; //internal
 
-  reg                    ram_write_new_rx;
-  reg                    ram_write_reg [1:0]; //RAM W.E.
+  /* verilator lint_off UNUSED */
+  reg        fifo_good_new;
+  reg        fifo_good_reg; //TODO make out later on
+  reg        fifo_bad_new;
+  reg        fifo_bad_reg; //TODO
+  /* verilator lint_on UNUSED */
 
-  reg  [63:0]            ram_w_data_new_rx;
-  reg  [63:0]            ram_w_data_reg [1:0]; //RAM W.D.
-
-  wire [63:0]            ram_r_data [1:0]; //RAM R.D
-
-  reg  [ADDR_WIDTH-1:0]  ram_r_addr_new_fifo;  //RAM R.A
-  reg  [ADDR_WIDTH-1:0]  ram_r_addr_reg;       //RAM R.A
-
-  reg  [ADDR_WIDTH-1:0]  ram_w_addr_new_rx;
-  reg  [ADDR_WIDTH-1:0]  ram_w_addr_reg [1:0]; //RAM W.A
-
-  reg  [ADDR_WIDTH-1:0] counter_new_rx;
-  reg  [ADDR_WIDTH-1:0] counter_reg [1:0];
-
-  reg  [3:0]         data_valid_new_rx;
-  reg  [3:0]         data_valid_reg [1:0];
-
+  reg        fifo_rd_start_new; //out
+  reg        fifo_rd_start_reg; //out
   reg [63:0] fifo_rd_data_new;  //out
   reg [63:0] fifo_rd_data_reg;  //out
   reg        fifo_rd_valid_new; //out
   reg        fifo_rd_valid_reg; //out
+  reg  [3:0] fifo_rd_lwdv_new;
+  reg  [3:0] fifo_rd_lwdv_reg;
 
   reg [7:0] previous_rx_data_valid;
+
+  reg rx_state_we;
+  reg rx_state_new;
+  reg rx_state_reg;
+
   reg       detect_start_of_frame;
 
   wire      error_state;
@@ -246,8 +236,6 @@ module nts_dispatcher #(
   reg        ntp_time_lsb_we;
   reg [31:0] ntp_time_lsb_reg;
 
-  reg        sync_reset_metastable;
-  reg        sync_reset;
   reg [31:0] systick32_reg;
 
   //----------------------------------------------------------------
@@ -270,7 +258,7 @@ module nts_dispatcher #(
 
   reg  [4 * ENGINES - 1 : 0] engine_out_data_last_valid;
   reg      [ENGINES - 1 : 0] engine_out_fifo_empty;
-  reg      [ENGINES - 1 : 0] engine_out_packet_available;
+  reg      [ENGINES - 1 : 0] engine_out_fifo_rd_start;
   reg      [ENGINES - 1 : 0] engine_out_fifo_rd_valid;
   reg [64 * ENGINES - 1 : 0] engine_out_fifo_rd_data;
 
@@ -284,12 +272,8 @@ module nts_dispatcher #(
   reg             mux_index_we;
   integer         mux_index_new;
   integer         mux_index_reg;
-  reg             mux_search_counter_we;
-  integer         mux_search_counter_new;
-  integer         mux_search_counter_reg;
 
-  reg             mux_in_packet_read_discard; //selected engine wants to discard current packet
-  reg             mux_in_fifo_rd_start;       //selected engine wants FIFO to stard sending data
+  reg             mux_in_ready;
 
   //----------------------------------------------------------------
   // Output wiring
@@ -297,12 +281,12 @@ module nts_dispatcher #(
 
   assign bus_write_data  = engine_data_reg;
 
-  assign error_state     = (mem_state_reg[0] == STATE_ERROR_GENERAL) || (mem_state_reg[1] == STATE_ERROR_GENERAL);
+  assign error_state     = 1'b0; //TODO
 
   assign o_api_read_data = api_read_data;
 
-  assign o_dispatch_packet_available  = engine_out_packet_available;
   assign o_dispatch_data_valid        = engine_out_data_last_valid;
+  assign o_dispatch_fifo_rd_start     = engine_out_fifo_rd_start;
   assign o_dispatch_fifo_empty        = engine_out_fifo_empty;
   assign o_dispatch_fifo_rd_valid     = engine_out_fifo_rd_valid;
   assign o_dispatch_fifo_rd_data      = engine_out_fifo_rd_data;
@@ -313,118 +297,91 @@ module nts_dispatcher #(
   assign o_engine_write_data = bus_write_data;
 
   //----------------------------------------------------------------
+  // Dispatcher MUX - Search
+  //----------------------------------------------------------------
+
+  reg engine_mux_ready_found;
+  integer engine_mux_ready_index;
+
+  always @*
+  begin : dispatcher_mux_ready_
+    integer i;
+    integer j;
+
+    engine_mux_ready_found = 0;
+    engine_mux_ready_index = 0;
+
+    for (i = 0; i < ENGINES; i = i + 1) begin
+      j = ENGINES - 1 - i;
+      if (~ i_dispatch_busy[j]) begin
+        engine_mux_ready_found = 1;
+        engine_mux_ready_index = j;
+      end
+    end
+
+  end
+
+  //----------------------------------------------------------------
   // Dispatcher MUX
   //----------------------------------------------------------------
 
   always @*
   begin : dispatcher_mux
-    reg        busy;
     reg        discard;
-    reg [63:0] fifo_data;
-    reg        fifo_empty;
-    reg        fifo_valid;
-    reg        fifo_start;
+    reg        ready;
     reg        forward_mux;
-    reg  [3:0] last_word_data_valid;
-    reg        packet_available;
 
-    busy    = i_dispatch_busy[mux_index_reg];
-    discard = i_dispatch_packet_read_discard[mux_index_reg];
-
-    fifo_data  = fifo_rd_data_reg;
-    fifo_empty = fifo_empty_reg;
-    fifo_start = i_dispatch_fifo_rd_start[mux_index_reg];
-    fifo_valid = fifo_rd_valid_reg;
+    ready   = i_dispatch_ready[mux_index_reg];
+    discard = fifo_discard_reg;
 
     forward_mux = 0;
-    last_word_data_valid = data_valid_reg[ ~ current_mem_reg ];
-    packet_available     = mem_state_reg[ ~ current_mem_reg ] == STATE_FIFO_OUT_INIT_0;
 
     mux_ctrl_we = 0;
     mux_ctrl_new = MUX_SEARCH;
     mux_index_we = 0;
     mux_index_new = 0;
-    mux_search_counter_we  = 0;
-    mux_search_counter_new = 0;
 
-    mux_in_packet_read_discard  = 0;
-    mux_in_fifo_rd_start        = 0;
+    mux_in_ready                = 0;
 
-    engine_out_packet_available = 'h0;
     engine_out_data_last_valid  = 'h0;
-    engine_out_fifo_empty       = 'h0;
+    engine_out_fifo_rd_start    = 'b0;
+    engine_out_fifo_empty       = {ENGINES{1'b1}};
     engine_out_fifo_rd_valid    = 'h0;
     engine_out_fifo_rd_data     = 'h0;
 
     case (mux_ctrl_reg)
       MUX_REMAIN:
         begin
-          mux_in_packet_read_discard  = discard;
-          mux_in_fifo_rd_start        = fifo_start;
+          mux_in_ready                = ready;
 
-          engine_out_packet_available[mux_index_reg]     = packet_available;
-          engine_out_data_last_valid[4*mux_index_reg+:4] = last_word_data_valid;
-          engine_out_fifo_empty[mux_index_reg]           = fifo_empty;
-          engine_out_fifo_rd_valid[mux_index_reg]        = fifo_valid;
-          engine_out_fifo_rd_data[64*mux_index_reg+:64]  = fifo_data;
+          engine_out_data_last_valid[4*mux_index_reg+:4] = fifo_rd_lwdv_reg;
+          engine_out_fifo_empty[mux_index_reg]           = fifo_empty_reg;
+          engine_out_fifo_rd_start[mux_index_reg]        = fifo_rd_start_reg;
+          engine_out_fifo_rd_valid[mux_index_reg]        = fifo_rd_valid_reg;
+          engine_out_fifo_rd_data[64*mux_index_reg+:64]  = fifo_rd_data_reg;
 
           if (discard) begin
             forward_mux = 1;
             mux_ctrl_we = 1;
             mux_ctrl_new = MUX_SEARCH;
-            mux_search_counter_we  = 1;
-            mux_search_counter_new = 4 * ENGINES;
           end
         end
 
       MUX_SEARCH:
-        if (busy) begin
-          forward_mux = 1;
-        end else begin
-          mux_ctrl_we = 1;
-          mux_ctrl_new = MUX_REMAIN;
-        end
+        forward_mux = 1;
 
       default: ;
     endcase
 
     if (forward_mux) begin
-      if (mux_index_reg == 0) begin
-        mux_index_we = 1;
-        mux_index_new = ENGINES - 1;
-      end else begin
-        mux_index_we = 1;
-        mux_index_new = mux_index_reg - 1;
-      end
-
-      if (mux_search_counter_reg == 0) begin
-        mux_in_packet_read_discard = 1; // throw away old packets
-      end else begin
-        mux_search_counter_we = 1;
-        mux_search_counter_new = mux_search_counter_reg - 1;
+      if (engine_mux_ready_found) begin
+        mux_ctrl_we = 1;
+        mux_ctrl_new = MUX_REMAIN;
+        mux_index_we  = 1;
+        mux_index_new = engine_mux_ready_index;
       end
     end
   end
-
-  //----------------------------------------------------------------
-  // RAM cores
-  //----------------------------------------------------------------
-
-  bram #(ADDR_WIDTH,64) mem0 (
-     .i_clk(   i_clk ),
-     .i_addr(  ram_write_reg[0] ? ram_w_addr_reg[0] : ram_r_addr_reg),
-     .i_write( ram_write_reg[0]  ),
-     .i_data(  ram_w_data_reg[0] ),
-     .o_data(  ram_r_data[0] )
-  );
-
-  bram #(ADDR_WIDTH,64) mem1 (
-     .i_clk(   i_clk ),
-     .i_addr(  ram_write_reg[1] ? ram_w_addr_reg[1] : ram_r_addr_reg),
-     .i_write( ram_write_reg[1]),
-     .i_data(  ram_w_data_reg[1]),
-     .o_data(  ram_r_data[1])
-  );
 
   //----------------------------------------------------------------
   // API
@@ -517,7 +474,7 @@ module nts_dispatcher #(
           ADDR_SYSTICK32: api_read_data = systick32_reg;
           ADDR_CTRL: api_read_data = { 31'h0, dispatcher_enabled_reg };
           ADDR_STATUS: api_read_data = (engines_ready_reg == 0) ? 32'h0 : 32'h1;
-          ADDR_STATES_INSPECT: api_read_data = { 15'h0, current_mem_reg, 4'h0, mem_state_reg[0], 4'h0, mem_state_reg[1] };
+          //TODO ADDR_STATES_INSPECT: api_read_data = { 15'h0, current_mem_reg, 4'h0, mem_state_reg[0], 4'h0, mem_state_reg[1] };
           ADDR_NTPTIME_MSB:
             begin
               api_read_data = i_ntp_time[63:32];
@@ -627,67 +584,12 @@ module nts_dispatcher #(
   end
 
   //----------------------------------------------------------------
-  // Synchronous reset conversion
-  //----------------------------------------------------------------
-
-  always @ (posedge i_clk or posedge i_areset)
-  begin
-    if (i_areset) begin
-      sync_reset_metastable <= 1;
-      sync_reset <= 1;
-    end else begin
-      sync_reset_metastable <= 0;
-      sync_reset <= sync_reset_metastable;
-    end
-  end
-
-  //----------------------------------------------------------------
-  // BRAM Register Update (synchronous reset)
-  //----------------------------------------------------------------
-
-  always @ (posedge i_clk)
-  begin : bram_reg_update
-    integer i;
-    if (sync_reset) begin
-      ram_r_addr_reg <= 0;
-      for (i = 0; i < 2; i = i + 1)
-      begin
-        ram_w_data_reg[i] <= 0;
-        ram_w_addr_reg[i] <= 0;
-        ram_write_reg[i]  <= 0;
-      end
-    end else begin
-      ram_r_addr_reg <= ram_r_addr_new_fifo;
-      for (i = 0; i < 2; i = i + 1)
-      begin
-        if (i[0] == current_mem_reg) begin
-          ram_w_data_reg[i] <= ram_w_data_new_rx;
-          ram_w_addr_reg[i] <= ram_w_addr_new_rx;
-          ram_write_reg[i]  <= ram_write_new_rx;
-        end else begin
-          ram_w_data_reg[i] <= 0;
-          ram_w_addr_reg[i] <= 0;
-          ram_write_reg[i]  <= 0;
-        end
-      end
-    end
-  end
-
-  //----------------------------------------------------------------
   // Register Update
   //----------------------------------------------------------------
 
   always @ (posedge i_clk or posedge i_areset)
   begin : reg_update
-    integer i;
     if (i_areset) begin
-
-      for (i = 0; i < 2; i = i + 1)
-      begin
-        counter_reg[i] <= 0;
-        data_valid_reg[i] <= 0;
-        mem_state_reg[i] <= STATE_EMPTY;
-      end
 
       api_dummy_reg <= 0;
 
@@ -698,8 +600,6 @@ module nts_dispatcher #(
       counter_bytes_rx_reg <= 0;
       counter_bytes_rx_lsb_reg <= 0;
 
-      current_mem_reg <= 0;
-
       dispatcher_enabled_reg <= 0;
 
       engine_ctrl_reg <= 0;
@@ -708,39 +608,27 @@ module nts_dispatcher #(
 
       engines_ready_reg <= 0;
 
+      fifo_bad_reg <= 0;
+      fifo_discard_reg <= 0;
       fifo_empty_reg <= 0;
+      fifo_good_reg <= 0;
       fifo_rd_data_reg <= 0;
+      fifo_rd_lwdv_reg <= 0;
+      fifo_rd_start_reg <= 0;
       fifo_rd_valid_reg <= 0;
 
       mux_ctrl_reg  <= MUX_SEARCH;
       mux_index_reg <= ENGINES - 1;
-      mux_search_counter_reg <= 1;
 
       ntp_time_lsb_reg <= 0;
 
       previous_rx_data_valid <= 8'hFF; // Must not be zero as 00FF used to detect start of frame
 
+      rx_state_reg <= STATE_IDLE;
+
       systick32_reg <= 32'h01;
 
     end else begin
-
-      case (current_mem_reg)
-        1'b0:
-          begin
-            counter_reg[0]    <= counter_new_rx;
-            data_valid_reg[0] <= data_valid_new_rx;
-            mem_state_reg[0]  <= mem_state_rx_new;
-            mem_state_reg[1]  <= mem_state_fifo_new;
-          end
-        1'b1:
-          begin
-            counter_reg[1]   <= counter_new_rx;
-            data_valid_reg[1] <= data_valid_new_rx;
-            mem_state_reg[0] <= mem_state_fifo_new;
-            mem_state_reg[1] <= mem_state_rx_new;
-          end
-        default: ;
-      endcase
 
       if (api_dummy_we)
         api_dummy_reg <= api_dummy_new;
@@ -754,8 +642,6 @@ module nts_dispatcher #(
 
       if (counter_bytes_rx_lsb_we)
         counter_bytes_rx_lsb_reg <= counter_bytes_rx_reg[31:0];
-
-      current_mem_reg <= current_mem_new;
 
       if (dispatcher_enabled_we)
         dispatcher_enabled_reg <= dispatcher_enabled_new;
@@ -771,7 +657,12 @@ module nts_dispatcher #(
 
       engines_ready_reg <= engines_ready_new;
 
+      fifo_bad_reg <= fifo_bad_new;
+      fifo_discard_reg <= fifo_discard_new;
       fifo_empty_reg <= fifo_empty_new;
+      fifo_good_reg <= fifo_good_new;
+      fifo_rd_lwdv_reg <= fifo_rd_lwdv_new;
+      fifo_rd_start_reg <= fifo_rd_start_new;
       fifo_rd_data_reg <= fifo_rd_data_new;
       fifo_rd_valid_reg <= fifo_rd_valid_new;
 
@@ -781,8 +672,8 @@ module nts_dispatcher #(
       if (mux_index_we)
         mux_index_reg <= mux_index_new;
 
-      if (mux_search_counter_we)
-        mux_search_counter_reg <= mux_search_counter_new;
+      //if (mux_search_counter_we)
+      //   mux_search_counter_reg <= mux_search_counter_new;
 
       if (ntp_time_lsb_we)
         ntp_time_lsb_reg <= i_ntp_time[31:0];
@@ -791,6 +682,9 @@ module nts_dispatcher #(
       // Start of Frame Detector (previous MAC RX DV sampler)
       //----------------------------------------------------------------
       previous_rx_data_valid <= i_rx_data_valid;
+
+      if (rx_state_we)
+        rx_state_reg <= rx_state_new;
 
       systick32_reg <= systick32_reg + 1;
 
@@ -814,7 +708,7 @@ module nts_dispatcher #(
   counter64 counter_dispatched (
      .i_areset     ( i_areset                   ),
      .i_clk        ( i_clk                      ),
-     .i_inc        ( mux_in_fifo_rd_start       ),
+     .i_inc        ( fifo_rd_start_reg          ),
      .i_rst        ( 1'b0                       ),
      .i_lsb_sample ( counter_dispatched_lsb_we  ),
      .o_msb        ( counter_dispatched_msb     ),
@@ -1025,161 +919,78 @@ module nts_dispatcher #(
     end
   end
 
-  //----------------------------------------------------------------
-  // FIFO process
-  //----------------------------------------------------------------
-
-  always @*
-  begin : fifo
-
-    reg            [3:0] fifo_state;
-    reg [ADDR_WIDTH-1:0] fifo_counter;
-    reg           [63:0] fifo_data;
-
-    fifo_state   = mem_state_reg[ ~ current_mem_reg ];
-    fifo_counter = counter_reg[ ~ current_mem_reg ];
-    fifo_data    = ram_r_data[ ~ current_mem_reg ];
-
-    fifo_empty_new = fifo_empty_reg;
-    fifo_rd_data_new = 0;
-    fifo_rd_valid_new = 0;
-
-    mem_state_fifo_new = fifo_state;
-
-    ram_r_addr_new_fifo = 0;
-
-    if (mux_in_packet_read_discard) begin
-      //$display("%s:%0d i_dispatch_packet_read_discard", `__FILE__, `__LINE__);
-      mem_state_fifo_new = STATE_EMPTY;
-      fifo_empty_new = 'b1;
-    end else begin
-      case (fifo_state)
-        STATE_FIFO_OUT_INIT_0:
-          begin
-            if (mux_in_fifo_rd_start) begin
-              mem_state_fifo_new = STATE_FIFO_OUT_INIT_1;
-            end
-            ram_r_addr_new_fifo = 0;
-            fifo_empty_new = 'b0;
-          end
-        STATE_FIFO_OUT_INIT_1:
-          begin
-            mem_state_fifo_new = STATE_FIFO_OUT;
-            ram_r_addr_new_fifo = 1;
-          end
-        STATE_FIFO_OUT:
-          begin
-            fifo_rd_data_new = fifo_data;
-            fifo_rd_valid_new = 1;
-            if (ram_r_addr_reg == fifo_counter) begin
-              mem_state_fifo_new = STATE_FIFO_OUT_FIN_0;
-              ram_r_addr_new_fifo = ram_r_addr_reg;
-            end else begin
-              ram_r_addr_new_fifo = ram_r_addr_reg + 1;
-            end
-          end
-        STATE_FIFO_OUT_FIN_0:
-          begin
-            fifo_rd_data_new = fifo_data;
-            fifo_rd_valid_new = 1;
-            mem_state_fifo_new = STATE_FIFO_OUT_FIN_1;
-            //$display("%s:%0d Emit: %h ", `__FILE__, `__LINE__, ram_r_data[ ~ current_mem ]);
-          end
-        STATE_FIFO_OUT_FIN_1:
-          begin
-            //Remain here until i_dispatch_packet_read_discard (above) takes us out
-            fifo_rd_valid_new = 0;
-            fifo_empty_new = 'b1;
-          end
-        default: ;
-      endcase
-    end
-  end
-
   //------------------------------------------
   // Current (MAC RX) frame handling
   //------------------------------------------
 
   always @*
   begin : mac_rx_proc
-    reg            [3:0] fifo_state;
-    reg            [3:0] rx_state;
-    reg [ADDR_WIDTH-1:0] rx_counter;
-    reg            [3:0] rx_data_valid;
-
-    fifo_state    = mem_state_reg[ ~ current_mem_reg ];
-    rx_state      = mem_state_reg[ current_mem_reg ];
-    rx_counter    = counter_reg[ current_mem_reg ];
-    rx_data_valid = data_valid_reg[ current_mem_reg ];
 
     counter_packets_discarded_inc = 0;
 
-    counter_new_rx    = rx_counter;
-    current_mem_new   = current_mem_reg;
-    data_valid_new_rx = rx_data_valid;
-    mem_state_rx_new  = rx_state;
-    ram_w_addr_new_rx = 0;
-    ram_w_data_new_rx = 0;
-    ram_write_new_rx  = 0;
+    fifo_empty_new = 0;
+    fifo_discard_new = 0;
 
-    if (i_rx_bad_frame) begin
-      mem_state_rx_new  = STATE_EMPTY;
-      ram_w_addr_new_rx = 'b0;
-      counter_new_rx    = 'b0;
-      data_valid_new_rx = 'b0;
-    end else begin
-         //$display("%s:%0d Current mem: %h Current state: %h RxDV: %h", `__FILE__, `__LINE__, current_mem, mem_state[current_mem], i_rx_good_frame);
-      case (rx_state)
-        STATE_EMPTY:
-          begin
-            if (detect_start_of_frame) begin //i_rx_data_valid is implied by detect start of frame
-              if (dispatcher_enabled_reg) begin
-                counter_new_rx    = 'b0;
-                data_valid_new_rx = 0;
-                mem_state_rx_new  = STATE_HAS_DATA;
-                ram_write_new_rx  = 1'b1;
-                ram_w_addr_new_rx = 'b0;
-                ram_w_data_new_rx = mac_rx_corrected; // i_rx_data but last word shifted logically correct
-              end else begin
-                counter_packets_discarded_inc = 1;
-              end
-            end
-          end
-        STATE_HAS_DATA:
-          begin
-            if (rx_counter == ~ 'b0) begin
-              mem_state_rx_new = STATE_ERROR_GENERAL;
-            end else begin
-              if (i_rx_data_valid != 0) begin
-                counter_new_rx    = rx_counter + 1;
-                data_valid_new_rx = 0;
-                ram_write_new_rx  = 1'b1;
-                ram_w_addr_new_rx = rx_counter + 1;
-                ram_w_data_new_rx = mac_rx_corrected; // i_rx_data but last word shifted logically correct
-              end
-              if (i_rx_good_frame) begin
-                data_valid_new_rx = rx_data_valid_4bit;
-                mem_state_rx_new  = STATE_PACKET_RECEIVED;
-              end
-            end
-          end // not buffer overrun
-        STATE_PACKET_RECEIVED:
-          begin
-            if (fifo_state == STATE_EMPTY) begin
-              mem_state_rx_new = STATE_FIFO_OUT_INIT_0;
-              current_mem_new  = ~ current_mem_reg;
-            end
-            if (detect_start_of_frame) begin
+    fifo_rd_start_new = 0;
+    fifo_rd_data_new = 0;
+    fifo_rd_valid_new = 0;
+    fifo_rd_lwdv_new = 0;
+
+    fifo_good_new = 0;
+    fifo_bad_new = 0;
+
+    rx_state_we = 0;
+    rx_state_new = STATE_IDLE;
+
+    case (rx_state_reg)
+      STATE_IDLE:
+        begin
+          if (detect_start_of_frame) begin //i_rx_data_valid is implied by detect start of frame
+            if (dispatcher_enabled_reg == 1'b0) begin
               counter_packets_discarded_inc = 1;
+
+            end else if (mux_ctrl_reg != MUX_REMAIN) begin
+              counter_packets_discarded_inc = 1;
+
+            end else if (mux_in_ready == 1'b0) begin
+              counter_packets_discarded_inc = 1;
+
+            end else begin
+              rx_state_we = 1;
+              rx_state_new = STATE_FORWARDING;
+              fifo_rd_start_new = 1;
+              fifo_rd_data_new  = mac_rx_corrected; // i_rx_data but last word shifted logically correct
+              fifo_rd_valid_new = 1;
+              fifo_rd_lwdv_new = rx_data_valid_4bit;
             end
           end
-        default: //Default: Error handler
-         begin
-           counter_packets_discarded_inc = 1;
-           mem_state_rx_new = STATE_EMPTY;
+        end
+      STATE_FORWARDING:
+        begin
+          if (i_rx_data_valid != 0) begin
+            fifo_rd_data_new  = mac_rx_corrected;
+            fifo_rd_valid_new = 1;
+            fifo_rd_lwdv_new = rx_data_valid_4bit;
+          end
+          if (i_rx_good_frame) begin
+            fifo_discard_new = 1;
+            fifo_good_new = 1;
+            rx_state_we = 1;
+            rx_state_new = STATE_IDLE;
+          end
+          if (i_rx_bad_frame) begin
+            fifo_discard_new = 1;
+            fifo_bad_new = 1;
+            rx_state_we = 1;
+            rx_state_new = STATE_IDLE;
+          end
+        end
+      default: //Default: Error handler
+        begin
+          rx_state_we = 1;
+          rx_state_new = STATE_IDLE;
          end
-      endcase
-    end // not bad frame
-  end //always begin
+    endcase
+  end
 
 endmodule

@@ -263,6 +263,17 @@ module nts_dispatcher #(
   reg [64 * ENGINES - 1 : 0] engine_out_fifo_rd_data;
 
   //----------------------------------------------------------------
+  // Dispatcher MUX. Registers used to search for ready engine.
+  //----------------------------------------------------------------
+
+  reg engine_mux_ready_found_new;
+  reg engine_mux_ready_found_reg;
+  integer engine_mux_ready_index_new;
+  integer engine_mux_ready_index_reg;
+  reg [ENGINES-1:0] engine_mux_ready_engines_new;
+  reg [ENGINES-1:0] engine_mux_ready_engines_reg;
+
+  //----------------------------------------------------------------
   // Dispatcher MUX. Used to select one engine from many.
   //----------------------------------------------------------------
 
@@ -300,22 +311,27 @@ module nts_dispatcher #(
   // Dispatcher MUX - Search
   //----------------------------------------------------------------
 
-  reg engine_mux_ready_found;
-  integer engine_mux_ready_index;
+  always @*
+  begin : dispatcher_mux_ready_search1
+    integer i;
+    for (i = 0; i < ENGINES; i = i + 1) begin
+      engine_mux_ready_engines_new[i] = ~ i_dispatch_busy[i];
+    end
+  end
 
   always @*
-  begin : dispatcher_mux_ready_
+  begin : dispatcher_mux_ready_search2
     integer i;
     integer j;
 
-    engine_mux_ready_found = 0;
-    engine_mux_ready_index = 0;
+    engine_mux_ready_found_new = 0;
+    engine_mux_ready_index_new = 0;
 
     for (i = 0; i < ENGINES; i = i + 1) begin
       j = ENGINES - 1 - i;
-      if (~ i_dispatch_busy[j]) begin
-        engine_mux_ready_found = 1;
-        engine_mux_ready_index = j;
+      if (engine_mux_ready_engines_reg[j]) begin
+        engine_mux_ready_found_new = 1;
+        engine_mux_ready_index_new = j;
       end
     end
 
@@ -374,11 +390,11 @@ module nts_dispatcher #(
     endcase
 
     if (forward_mux) begin
-      if (engine_mux_ready_found) begin
+      if (engine_mux_ready_found_reg) begin
         mux_ctrl_we = 1;
         mux_ctrl_new = MUX_REMAIN;
         mux_index_we  = 1;
-        mux_index_new = engine_mux_ready_index;
+        mux_index_new = engine_mux_ready_index_reg;
       end
     end
   end
@@ -606,6 +622,10 @@ module nts_dispatcher #(
       engine_status_reg <= 0;
       engine_data_reg <= 0;
 
+      engine_mux_ready_engines_reg <= 0;
+      engine_mux_ready_found_reg   <= 0;
+      engine_mux_ready_index_reg   <= 0;
+
       engines_ready_reg <= 0;
 
       fifo_bad_reg <= 0;
@@ -654,6 +674,10 @@ module nts_dispatcher #(
 
       if (engine_status_we)
         engine_status_reg <= engine_status_new;
+
+      engine_mux_ready_engines_reg <= engine_mux_ready_engines_new;
+      engine_mux_ready_found_reg   <= engine_mux_ready_found_new;
+      engine_mux_ready_index_reg   <= engine_mux_ready_index_new;
 
       engines_ready_reg <= engines_ready_new;
 

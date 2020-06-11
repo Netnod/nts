@@ -30,7 +30,7 @@
 
 module nts_api #(
   parameter [11:0] ADDR_ENGINE_BASE = 12'h000,
-  parameter [11:0] ADDR_ENGINE_STOP = 12'h009,
+  parameter [11:0] ADDR_ENGINE_STOP = 12'h00F,
   parameter [11:0] ADDR_CLOCK_BASE  = 12'h010,
   parameter [11:0] ADDR_CLOCK_STOP  = 12'h01F,
   parameter [11:0] ADDR_COOKIE_BASE = 12'h020,

@@ -33,9 +33,12 @@ module nts_top_tb;
 
   localparam DEBUG_CRYPTO_RX = 0;
   localparam DEBUG_MODEL_RX  = 0;
+  localparam DEBUG_ICMP      = 0;
   localparam DEBUG           = 0;
-  localparam BENCHMARK       = 0;
-  localparam ENGINES         = 64;
+  localparam BENCHMARK       = 1;
+  localparam ENGINES_NTS     = 1;
+  localparam ENGINES_MINI    = 1;
+  localparam ENGINES         = ENGINES_NTS + ENGINES_MINI;
 
   localparam TEST_FUZZ_UI       = 0;
   localparam TEST_FUZZ_UI_START = 32;
@@ -43,8 +46,8 @@ module nts_top_tb;
   localparam TEST_FUZZ_UI_INC   = 4;
 
   localparam TEST_UI36 = 0;
-  localparam TEST_NORMAL = 0;
-  localparam TEST_NTS_PERFORMANCE = 1;
+  localparam TEST_NORMAL = 1;
+  localparam TEST_NTS_PERFORMANCE = 0;
   localparam TEST_NTS_PERFORMANCE_DELAY_CYCLES = 10;
 
   localparam [11:0] API_ADDR_ENGINE_BASE        = 12'h000;
@@ -755,7 +758,11 @@ module nts_top_tb;
   // Design Under Test (DUT)
   //----------------------------------------------------------------
 
-  nts_top #( .ENGINES(ENGINES), .ADDR_WIDTH(ADDR_WIDTH) ) dut (
+  nts_top #( 
+    .ENGINES_NTS(ENGINES_NTS),
+    .ENGINES_MINI(ENGINES_MINI),
+    .ADDR_WIDTH(ADDR_WIDTH)
+  ) dut (
     .i_areset(i_areset),
     .i_clk(i_clk),
 
@@ -1890,18 +1897,46 @@ module nts_top_tb;
   `define always_inspect( x ) always @* `inspect( x )
 
   if (DEBUG_CRYPTO_RX) begin
-    `always_inspect( dut.genblk1[0].engine.crypto.i_rx_wait );
-    `always_inspect( dut.genblk1[0].engine.crypto.o_rx_addr );
-    `always_inspect( dut.genblk1[0].engine.crypto.o_rx_burstsize);
-    `always_inspect( dut.genblk1[0].engine.crypto.o_rx_wordsize);
-    `always_inspect( dut.genblk1[0].engine.crypto.o_rx_rd_en);
-    `always_inspect( dut.genblk1[0].engine.crypto.i_rx_rd_dv);
-    `always_inspect( dut.genblk1[0].engine.crypto.i_rx_rd_data);
-    `always_inspect( dut.genblk1[0].engine.crypto.core_tag_out);
+    `always_inspect( dut.genblk1[0].engine.nts_enabled.crypto.i_rx_wait );
+    `always_inspect( dut.genblk1[0].engine.nts_enabled.crypto.o_rx_addr );
+    `always_inspect( dut.genblk1[0].engine.nts_enabled.crypto.o_rx_burstsize);
+    `always_inspect( dut.genblk1[0].engine.nts_enabled.crypto.o_rx_wordsize);
+    `always_inspect( dut.genblk1[0].engine.nts_enabled.crypto.o_rx_rd_en);
+    `always_inspect( dut.genblk1[0].engine.nts_enabled.crypto.i_rx_rd_dv);
+    `always_inspect( dut.genblk1[0].engine.nts_enabled.crypto.i_rx_rd_data);
+    `always_inspect( dut.genblk1[0].engine.nts_enabled.crypto.core_tag_out);
   end
 
+  if (DEBUG_ICMP>0) begin
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.icmp_enabled.icmp.response_done_new );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.icmp_enabled.icmp.response_done_reg );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.icmp_enabled.icmp.o_packet_drop );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.icmp_enabled.icmp.o_packet_transmit );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.icmp_enabled.icmp.o_icmp_idle );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.icmp_enabled.icmp.o_responder_en );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.icmp_enabled.icmp.o_responder_data );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.icmp_enabled.icmp.o_responder_update_length );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.icmp_enabled.icmp.o_responder_length_we );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.icmp_enabled.icmp.o_responder_length_new );
+  end
 
   if (DEBUG>0) begin
+    `always_inspect( dut.dispatcher.mini_state_reg );
+    `always_inspect( dut.engine_extractor_packet_available );
+    `always_inspect( dut.engine_extractor_fifo_empty );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.tx_buffer.i_parser_transfer);
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.tx_buffer.o_dispatch_tx_packet_available );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.state_reg );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.word_counter_overflow_reg);
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.detect_ipv6_reg );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.ipdecode_ip6_payload_length_reg);
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.ipdecode_ip6_next_reg );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.protocol_detect_ip6echo_reg);
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.response_packet_total_length_reg );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.o_tx_addr);
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.o_tx_w_data);
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.o_tx_update_length);
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.o_tx_transfer);
     always @*
      $display("%s:%0d dut.genblk1[0].engine.parser.protocol_detect_ip4echo_reg: %h", `__FILE__, `__LINE__, dut.genblk1[0].engine.parser.protocol_detect_ip4echo_reg);
     always @*
@@ -2045,13 +2080,16 @@ module nts_top_tb;
       if (i_areset) begin
         old_tick_counter_icmp <= 1;
         old_parser_state_icmp <= 0;
-      end else begin
+      end else begin : parser
+        reg [5:0] new_state;
+        new_state =
+           dut.genblk1[ENGINES_NTS].engine.parser.icmp_enabled.icmp.icmp_state_reg;
 
-        if (old_parser_state_icmp != dut.genblk1[0].engine.parser.icmp_state_reg) begin
+        if (old_parser_state_icmp != new_state) begin
           old_tick_counter_icmp <= tick_counter;
-          old_parser_state_icmp <= dut.genblk1[0].engine.parser.icmp_state_reg;
-          $display("%s:%0d BENCHMARK: dut.genblk1[0].engine.parser.icmp_state_reg %h -> %h (hex): %0d ticks", `__FILE__, `__LINE__,
-            old_parser_state_icmp, dut.genblk1[0].engine.parser.icmp_state_reg, tick_counter - old_tick_counter_icmp);
+          old_parser_state_icmp <= new_state;
+          $display("%s:%0d BENCHMARK: dut.genblk1[ENGINES_NTS].engine.parser.icmp.icmp_state_reg %h -> %h (hex): %0d ticks", `__FILE__, `__LINE__,
+            old_parser_state_icmp, new_state, tick_counter - old_tick_counter_icmp);
         end
       end
     end
@@ -2092,11 +2130,11 @@ module nts_top_tb;
         old_tick_counter_siv <= 1;
         old_parser_state_siv <= 0;
       end else begin
-        if (old_parser_state_siv != dut.genblk1[0].engine.crypto.core.core_ctrl_reg) begin
+        if (old_parser_state_siv != dut.genblk1[0].engine.nts_enabled.crypto.core.core_ctrl_reg) begin
           old_tick_counter_siv <= tick_counter;
-          old_parser_state_siv <= dut.genblk1[0].engine.crypto.core.core_ctrl_reg;
-          $display("%s:%0d BENCHMARK: dut.genblk1[0].engine.crypto.core.core_ctrl_reg %h -> %h (hex): %0d ticks", `__FILE__, `__LINE__,
-            old_parser_state_siv, dut.genblk1[0].engine.crypto.core.core_ctrl_reg, tick_counter - old_tick_counter_siv);
+          old_parser_state_siv <= dut.genblk1[0].engine.nts_enabled.crypto.core.core_ctrl_reg;
+          $display("%s:%0d BENCHMARK: dut.genblk1[0].engine.nts_enabled.crypto.core.core_ctrl_reg %h -> %h (hex): %0d ticks", `__FILE__, `__LINE__,
+            old_parser_state_siv, dut.genblk1[0].engine.nts_enabled.crypto.core.core_ctrl_reg, tick_counter - old_tick_counter_siv);
         end
       end
     end
@@ -2107,11 +2145,11 @@ module nts_top_tb;
         old_tick_counter_verify_secure <= 1;
         old_parser_state_verify_secure <= 0;
       end else begin
-        if (old_parser_state_verify_secure != dut.genblk1[0].engine.crypto.state_reg) begin
+        if (old_parser_state_verify_secure != dut.genblk1[0].engine.nts_enabled.crypto.state_reg) begin
           old_tick_counter_verify_secure <= tick_counter;
-          old_parser_state_verify_secure <= dut.genblk1[0].engine.crypto.state_reg;
+          old_parser_state_verify_secure <= dut.genblk1[0].engine.nts_enabled.crypto.state_reg;
           $display("%s:%0d BENCHMARK: dut.genblk1[0].engine.crypto.state_reg %h -> %h (hex): %0d ticks", `__FILE__, `__LINE__,
-            old_parser_state_verify_secure, dut.genblk1[0].engine.crypto.state_reg, tick_counter - old_tick_counter_verify_secure);
+            old_parser_state_verify_secure, dut.genblk1[0].engine.nts_enabled.crypto.state_reg, tick_counter - old_tick_counter_verify_secure);
         end
       end
     end

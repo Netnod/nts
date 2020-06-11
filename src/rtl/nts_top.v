@@ -29,7 +29,8 @@
 //
 
 module nts_top #(
-  parameter ENGINES         = 12,
+  parameter ENGINES_NTS     = 16,
+  parameter ENGINES_MINI    = 2,
   parameter ADDR_WIDTH      = 8,
   parameter API_ADDR_WIDTH  = 12,
   parameter API_RW_WIDTH    = 32,
@@ -57,6 +58,8 @@ module nts_top #(
   input  wire   [API_RW_WIDTH - 1:0] i_api_dispatcher_write_data,
   output wire   [API_RW_WIDTH - 1:0] o_api_dispatcher_read_data
 );
+
+  localparam ENGINES = ENGINES_NTS + ENGINES_MINI;
   localparam LAST_DATA_VALID_WIDTH = 4;
 
   reg               [63:0] ntp_time_reg;
@@ -126,7 +129,12 @@ module nts_top #(
   // Dispatcher
   //----------------------------------------------------------------
 
-  nts_dispatcher #(.ENGINES(ENGINES), .ADDR_WIDTH(ADDR_WIDTH)) dispatcher (
+  nts_dispatcher #(
+     .ENGINES(ENGINES),
+     .ENGINES_NTS(ENGINES_NTS),
+     .ENGINES_MINI(ENGINES_MINI),
+     .ADDR_WIDTH(ADDR_WIDTH)
+  ) dispatcher (
     .i_areset(i_areset),
     .i_clk(i_clk),
 
@@ -191,11 +199,20 @@ module nts_top #(
   // NTS Engine(s)
   //----------------------------------------------------------------
 
+  localparam [ENGINES-1:0] SUPPORT_NTS      = {{ENGINES_MINI{1'b0}},{ENGINES_NTS{1'b1}}};
+  localparam [ENGINES-1:0] SUPPORT_NTP_AUTH = {{ENGINES_MINI{1'b1}},{ENGINES_NTS{1'b0}}};
+  localparam [ENGINES-1:0] SUPPORT_NTP      = {{ENGINES_MINI{1'b1}},{ENGINES_NTS{1'b0}}};
+  localparam [ENGINES-1:0] SUPPORT_NET      = {{ENGINES_MINI{1'b1}},{ENGINES_NTS{1'b0}}};
   genvar engine_index;
   generate
     for (engine_index = 0; engine_index < ENGINES; engine_index = engine_index + 1) begin : genblk1
-
-      nts_engine #(.ADDR_WIDTH(ADDR_WIDTH)) engine (
+      nts_engine #(
+        .ADDR_WIDTH      ( ADDR_WIDTH),
+        .SUPPORT_NTS     ( SUPPORT_NTS[engine_index]      ),
+        .SUPPORT_NTP_AUTH( SUPPORT_NTP_AUTH[engine_index] ),
+        .SUPPORT_NTP     ( SUPPORT_NTP[engine_index]      ),
+        .SUPPORT_NET     ( SUPPORT_NET[engine_index]      )
+      ) engine (
         .i_areset(i_areset),
         .i_clk(i_clk),
 

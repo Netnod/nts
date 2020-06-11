@@ -30,7 +30,9 @@
 
 module nts_dispatcher #(
   parameter ADDR_WIDTH = 8,
-  parameter ENGINES = 1,
+  parameter ENGINES = 2,
+  parameter ENGINES_NTS = 1,
+  parameter ENGINES_MINI = 1,
   parameter DEBUG = 0
 ) (
   input  wire        i_areset, // async reset
@@ -66,7 +68,6 @@ module nts_dispatcher #(
   input  wire [ENGINES*32-1:0] i_engine_read_data,
   input  wire [ENGINES-1:0]    i_engine_read_data_valid
 );
-
   //----------------------------------------------------------------
   // API constants
   //----------------------------------------------------------------
@@ -113,8 +114,6 @@ module nts_dispatcher #(
   localparam CORE_NAME    = 64'h4e_54_53_2d_44_49_53_50; //NTS-DISP
   localparam CORE_VERSION = 32'h30_2e_30_34; //0.04
 
-  localparam MUX_SEARCH = 0;
-  localparam MUX_REMAIN = 1;
 
   //----------------------------------------------------------------
   // State constants
@@ -135,33 +134,37 @@ module nts_dispatcher #(
 
   reg  [31:0]     api_read_data;
 
-  reg            fifo_empty_new;
-  reg            fifo_empty_reg;
+  reg        mini_discard_new; //internal
+  reg        mini_discard_reg; //internal
+  reg        mini_rd_start_new; //out
+  reg        mini_rd_start_reg; //out
+  reg [63:0] mini_rd_data_new;  //out
+  reg [63:0] mini_rd_data_reg;  //out
+  reg        mini_rd_valid_new; //out
+  reg        mini_rd_valid_reg; //out
+  reg  [3:0] mini_rd_lwdv_new;
+  reg  [3:0] mini_rd_lwdv_reg;
 
-  reg        fifo_discard_new; //internal
-  reg        fifo_discard_reg; //internal
+  reg mini_state_we;
+  reg mini_state_new;
+  reg mini_state_reg;
 
-  /* verilator lint_off UNUSED */
-  reg        fifo_good_new;
-  reg        fifo_good_reg; //TODO make out later on
-  reg        fifo_bad_new;
-  reg        fifo_bad_reg; //TODO
-  /* verilator lint_on UNUSED */
+  reg        nts_discard_new; //internal
+  reg        nts_discard_reg; //internal
+  reg        nts_rd_start_new; //out
+  reg        nts_rd_start_reg; //out
+  reg [63:0] nts_rd_data_new;  //out
+  reg [63:0] nts_rd_data_reg;  //out
+  reg        nts_rd_valid_new; //out
+  reg        nts_rd_valid_reg; //out
+  reg  [3:0] nts_rd_lwdv_new;
+  reg  [3:0] nts_rd_lwdv_reg;
 
-  reg        fifo_rd_start_new; //out
-  reg        fifo_rd_start_reg; //out
-  reg [63:0] fifo_rd_data_new;  //out
-  reg [63:0] fifo_rd_data_reg;  //out
-  reg        fifo_rd_valid_new; //out
-  reg        fifo_rd_valid_reg; //out
-  reg  [3:0] fifo_rd_lwdv_new;
-  reg  [3:0] fifo_rd_lwdv_reg;
+  reg nts_state_we;
+  reg nts_state_new;
+  reg nts_state_reg;
 
   reg [7:0] previous_rx_data_valid;
-
-  reg rx_state_we;
-  reg rx_state_new;
-  reg rx_state_reg;
 
   reg       detect_start_of_frame;
 
@@ -253,40 +256,6 @@ module nts_dispatcher #(
   reg                bus_read_data_mux_valid;
 
   //----------------------------------------------------------------
-  // Engine(s) data bus wires
-  //----------------------------------------------------------------
-
-  reg  [4 * ENGINES - 1 : 0] engine_out_data_last_valid;
-  reg      [ENGINES - 1 : 0] engine_out_fifo_empty;
-  reg      [ENGINES - 1 : 0] engine_out_fifo_rd_start;
-  reg      [ENGINES - 1 : 0] engine_out_fifo_rd_valid;
-  reg [64 * ENGINES - 1 : 0] engine_out_fifo_rd_data;
-
-  //----------------------------------------------------------------
-  // Dispatcher MUX. Registers used to search for ready engine.
-  //----------------------------------------------------------------
-
-  reg engine_mux_ready_found_new;
-  reg engine_mux_ready_found_reg;
-  integer engine_mux_ready_index_new;
-  integer engine_mux_ready_index_reg;
-  reg [ENGINES-1:0] engine_mux_ready_engines_new;
-  reg [ENGINES-1:0] engine_mux_ready_engines_reg;
-
-  //----------------------------------------------------------------
-  // Dispatcher MUX. Used to select one engine from many.
-  //----------------------------------------------------------------
-
-  reg             mux_ctrl_we;
-  reg             mux_ctrl_new;
-  reg             mux_ctrl_reg;
-  reg             mux_index_we;
-  integer         mux_index_new;
-  integer         mux_index_reg;
-
-  reg             mux_in_ready;
-
-  //----------------------------------------------------------------
   // Output wiring
   //----------------------------------------------------------------
 
@@ -296,108 +265,77 @@ module nts_dispatcher #(
 
   assign o_api_read_data = api_read_data;
 
-  assign o_dispatch_data_valid        = engine_out_data_last_valid;
-  assign o_dispatch_fifo_rd_start     = engine_out_fifo_rd_start;
-  assign o_dispatch_fifo_empty        = engine_out_fifo_empty;
-  assign o_dispatch_fifo_rd_valid     = engine_out_fifo_rd_valid;
-  assign o_dispatch_fifo_rd_data      = engine_out_fifo_rd_data;
-
   assign o_engine_cs         = bus_cs_reg;
   assign o_engine_we         = bus_we_reg;
   assign o_engine_address    = bus_addr_reg;
   assign o_engine_write_data = bus_write_data;
 
-  //----------------------------------------------------------------
-  // Dispatcher MUX - Search
-  //----------------------------------------------------------------
 
-  always @*
-  begin : dispatcher_mux_ready_search1
-    integer i;
-    for (i = 0; i < ENGINES; i = i + 1) begin
-      engine_mux_ready_engines_new[i] = ~ i_dispatch_busy[i];
-    end
-  end
-
-  always @*
-  begin : dispatcher_mux_ready_search2
-    integer i;
-    integer j;
-
-    engine_mux_ready_found_new = 0;
-    engine_mux_ready_index_new = 0;
-
-    for (i = 0; i < ENGINES; i = i + 1) begin
-      j = ENGINES - 1 - i;
-      if (engine_mux_ready_engines_reg[j]) begin
-        engine_mux_ready_found_new = 1;
-        engine_mux_ready_index_new = j;
-      end
-    end
-
-  end
+  reg [70:0] input0_reg;
+  reg [70:0] input1_reg;
+  reg [70:0] input2_reg;
+  reg [70:0] input3_reg;
+  reg [70:0] input4_reg;
+  reg [70:0] input5_reg;
+  reg [70:0] input6_reg;
+  reg [70:0] input7_reg;
 
   //----------------------------------------------------------------
-  // Dispatcher MUX
+  // Dispatcher Mux
   //----------------------------------------------------------------
 
-  always @*
-  begin : dispatcher_mux
-    reg        discard;
-    reg        ready;
-    reg        forward_mux;
+  wire mux_nts_busy;
+  wire mux_nts_ready;
+  /* verilator lint_off UNUSED */
+  wire mux_mini_busy; //TODO
+  wire mux_mini_ready; //TODO
+  /* verilator lint_on UNUSED */
 
-    ready   = i_dispatch_ready[mux_index_reg];
-    discard = fifo_discard_reg;
+  nts_dispatcher_mux #(.ENGINES(ENGINES_NTS)) mux_nts (
+    .i_clk    ( i_clk    ),
+    .i_areset ( i_areset ),
 
-    forward_mux = 0;
+    .o_busy  ( mux_nts_busy  ),
+    .o_ready ( mux_nts_ready ),
 
-    mux_ctrl_we = 0;
-    mux_ctrl_new = MUX_SEARCH;
-    mux_index_we = 0;
-    mux_index_new = 0;
+    .i_discard   ( nts_discard_reg  ),
 
-    mux_in_ready                = 0;
+    .i_start     ( nts_rd_start_reg ),
+    .i_valid     ( nts_rd_valid_reg ),
+    .i_valid4bit ( nts_rd_lwdv_reg  ),
+    .i_data      ( nts_rd_data_reg  ),
 
-    engine_out_data_last_valid  = 'h0;
-    engine_out_fifo_rd_start    = 'b0;
-    engine_out_fifo_empty       = {ENGINES{1'b1}};
-    engine_out_fifo_rd_valid    = 'h0;
-    engine_out_fifo_rd_data     = 'h0;
+    .i_dispatch_busy          ( i_dispatch_busy          [   ENGINES_NTS-1:0] ),
+    .i_dispatch_ready         ( i_dispatch_ready         [   ENGINES_NTS-1:0] ),
+    .o_dispatch_data_valid    ( o_dispatch_data_valid    [ 4*ENGINES_NTS-1:0] ),
+    .o_dispatch_fifo_empty    ( o_dispatch_fifo_empty    [   ENGINES_NTS-1:0] ),
+    .o_dispatch_fifo_rd_start ( o_dispatch_fifo_rd_start [   ENGINES_NTS-1:0] ),
+    .o_dispatch_fifo_rd_valid ( o_dispatch_fifo_rd_valid [   ENGINES_NTS-1:0] ),
+    .o_dispatch_fifo_rd_data  ( o_dispatch_fifo_rd_data  [64*ENGINES_NTS-1:0] )
+  );
 
-    case (mux_ctrl_reg)
-      MUX_REMAIN:
-        begin
-          mux_in_ready                = ready;
+  nts_dispatcher_mux #(.ENGINES(ENGINES_MINI)) mux_mini (
+    .i_clk    ( i_clk    ),
+    .i_areset ( i_areset ),
 
-          engine_out_data_last_valid[4*mux_index_reg+:4] = fifo_rd_lwdv_reg;
-          engine_out_fifo_empty[mux_index_reg]           = fifo_empty_reg;
-          engine_out_fifo_rd_start[mux_index_reg]        = fifo_rd_start_reg;
-          engine_out_fifo_rd_valid[mux_index_reg]        = fifo_rd_valid_reg;
-          engine_out_fifo_rd_data[64*mux_index_reg+:64]  = fifo_rd_data_reg;
+    .o_busy  ( mux_mini_busy  ),
+    .o_ready ( mux_mini_ready ),
 
-          if (discard) begin
-            forward_mux = 1;
-            mux_ctrl_we = 1;
-            mux_ctrl_new = MUX_SEARCH;
-          end
-        end
+    .i_discard   ( mini_discard_reg  ),
 
-      MUX_SEARCH:
-        forward_mux = 1;
+    .i_start     ( mini_rd_start_reg ),
+    .i_valid     ( mini_rd_valid_reg ),
+    .i_valid4bit ( mini_rd_lwdv_reg  ),
+    .i_data      ( mini_rd_data_reg  ),
 
-      default: ;
-    endcase
-
-    if (forward_mux) begin
-      if (engine_mux_ready_found_reg) begin
-        mux_ctrl_we = 1;
-        mux_ctrl_new = MUX_REMAIN;
-        mux_index_we  = 1;
-        mux_index_new = engine_mux_ready_index_reg;
-      end
-    end
-  end
+    .i_dispatch_busy          ( i_dispatch_busy          [   ENGINES-1:   ENGINES_NTS] ),
+    .i_dispatch_ready         ( i_dispatch_ready         [   ENGINES-1:   ENGINES_NTS] ),
+    .o_dispatch_data_valid    ( o_dispatch_data_valid    [ 4*ENGINES-1: 4*ENGINES_NTS] ),
+    .o_dispatch_fifo_empty    ( o_dispatch_fifo_empty    [   ENGINES-1:   ENGINES_NTS] ),
+    .o_dispatch_fifo_rd_start ( o_dispatch_fifo_rd_start [   ENGINES-1:   ENGINES_NTS] ),
+    .o_dispatch_fifo_rd_valid ( o_dispatch_fifo_rd_valid [   ENGINES-1:   ENGINES_NTS] ),
+    .o_dispatch_fifo_rd_data  ( o_dispatch_fifo_rd_data  [64*ENGINES-1:64*ENGINES_NTS] )
+  );
 
   //----------------------------------------------------------------
   // API
@@ -618,33 +556,38 @@ module nts_dispatcher #(
 
       dispatcher_enabled_reg <= 0;
 
+      input0_reg <= 0;
+      input1_reg <= 0;
+      input2_reg <= 0;
+      input3_reg <= 0;
+      input4_reg <= 0;
+      input5_reg <= 0;
+      input6_reg <= 0;
+      input7_reg <= 0;
+
       engine_ctrl_reg <= 0;
       engine_status_reg <= 0;
       engine_data_reg <= 0;
 
-      engine_mux_ready_engines_reg <= 0;
-      engine_mux_ready_found_reg   <= 0;
-      engine_mux_ready_index_reg   <= 0;
-
       engines_ready_reg <= 0;
 
-      fifo_bad_reg <= 0;
-      fifo_discard_reg <= 0;
-      fifo_empty_reg <= 0;
-      fifo_good_reg <= 0;
-      fifo_rd_data_reg <= 0;
-      fifo_rd_lwdv_reg <= 0;
-      fifo_rd_start_reg <= 0;
-      fifo_rd_valid_reg <= 0;
+      mini_discard_reg <= 0;
+      mini_rd_data_reg <= 0;
+      mini_rd_lwdv_reg <= 0;
+      mini_rd_start_reg <= 0;
+      mini_rd_valid_reg <= 0;
+      mini_state_reg <= STATE_IDLE;
 
-      mux_ctrl_reg  <= MUX_SEARCH;
-      mux_index_reg <= ENGINES - 1;
+      nts_discard_reg <= 0;
+      nts_rd_data_reg <= 0;
+      nts_rd_lwdv_reg <= 0;
+      nts_rd_start_reg <= 0;
+      nts_rd_valid_reg <= 0;
+      nts_state_reg <= STATE_IDLE;
 
       ntp_time_lsb_reg <= 0;
 
       previous_rx_data_valid <= 8'hFF; // Must not be zero as 00FF used to detect start of frame
-
-      rx_state_reg <= STATE_IDLE;
 
       systick32_reg <= 32'h01;
 
@@ -675,29 +618,34 @@ module nts_dispatcher #(
       if (engine_status_we)
         engine_status_reg <= engine_status_new;
 
-      engine_mux_ready_engines_reg <= engine_mux_ready_engines_new;
-      engine_mux_ready_found_reg   <= engine_mux_ready_found_new;
-      engine_mux_ready_index_reg   <= engine_mux_ready_index_new;
-
       engines_ready_reg <= engines_ready_new;
 
-      fifo_bad_reg <= fifo_bad_new;
-      fifo_discard_reg <= fifo_discard_new;
-      fifo_empty_reg <= fifo_empty_new;
-      fifo_good_reg <= fifo_good_new;
-      fifo_rd_lwdv_reg <= fifo_rd_lwdv_new;
-      fifo_rd_start_reg <= fifo_rd_start_new;
-      fifo_rd_data_reg <= fifo_rd_data_new;
-      fifo_rd_valid_reg <= fifo_rd_valid_new;
+      input0_reg <= input1_reg;
+      input1_reg <= input2_reg;
+      input2_reg <= input3_reg;
+      input3_reg <= input4_reg;
+      input4_reg <= input5_reg;
+      input5_reg <= input6_reg;
+      input6_reg <= input7_reg;
+      input7_reg <= { detect_start_of_frame, i_rx_bad_frame, i_rx_good_frame, rx_data_valid_4bit, mac_rx_corrected };
 
-      if (mux_ctrl_we)
-        mux_ctrl_reg <= mux_ctrl_new;
+      mini_discard_reg <= mini_discard_new;
+      mini_rd_lwdv_reg <= mini_rd_lwdv_new;
+      mini_rd_start_reg <= mini_rd_start_new;
+      mini_rd_data_reg <= mini_rd_data_new;
+      mini_rd_valid_reg <= mini_rd_valid_new;
 
-      if (mux_index_we)
-        mux_index_reg <= mux_index_new;
+      if (mini_state_we)
+        mini_state_reg <= mini_state_new;
 
-      //if (mux_search_counter_we)
-      //   mux_search_counter_reg <= mux_search_counter_new;
+      nts_discard_reg <= nts_discard_new;
+      nts_rd_lwdv_reg <= nts_rd_lwdv_new;
+      nts_rd_start_reg <= nts_rd_start_new;
+      nts_rd_data_reg <= nts_rd_data_new;
+      nts_rd_valid_reg <= nts_rd_valid_new;
+
+      if (nts_state_we)
+        nts_state_reg <= nts_state_new;
 
       if (ntp_time_lsb_we)
         ntp_time_lsb_reg <= i_ntp_time[31:0];
@@ -706,9 +654,6 @@ module nts_dispatcher #(
       // Start of Frame Detector (previous MAC RX DV sampler)
       //----------------------------------------------------------------
       previous_rx_data_valid <= i_rx_data_valid;
-
-      if (rx_state_we)
-        rx_state_reg <= rx_state_new;
 
       systick32_reg <= systick32_reg + 1;
 
@@ -732,7 +677,7 @@ module nts_dispatcher #(
   counter64 counter_dispatched (
      .i_areset     ( i_areset                   ),
      .i_clk        ( i_clk                      ),
-     .i_inc        ( fifo_rd_start_reg          ),
+     .i_inc        ( nts_rd_start_reg           ),
      .i_rst        ( 1'b0                       ),
      .i_lsb_sample ( counter_dispatched_lsb_we  ),
      .o_msb        ( counter_dispatched_msb     ),
@@ -943,78 +888,250 @@ module nts_dispatcher #(
     end
   end
 
-  //------------------------------------------
-  // Current (MAC RX) frame handling
-  //------------------------------------------
+  wire        d_sof;
+  wire        d_bad;
+  wire        d_good;
+  wire  [3:0] d_valid4bits;
+  wire [63:0] d_data0;
+
+  wire [15:0] d_ether_proto;
+  wire  [3:0] d_ip_version;
+
+  wire  [3:0] d_ip4_ihl;
+  wire  [7:0] d_ip4_protocol;
+  wire [15:0] d_ip4_total_length;
+  wire [15:0] d_ip4_udp_port_dst;
+
+  wire [15:0] d_ip6_payload_length;
+  wire  [7:0] d_ip6_next;
+  wire [15:0] d_ip6_udp_port_dst;
+
+  assign { d_sof, d_bad, d_good, d_valid4bits, d_data0 } = input0_reg;
+
+  assign d_ether_proto        = input1_reg[31:16];
+
+  assign d_ip_version         = input1_reg[15:12];
+
+  assign d_ip4_ihl            = input1_reg[11:8];
+  assign d_ip4_total_length   = input2_reg[63:48];
+  assign d_ip4_protocol       = input2_reg[7:0];
+  assign d_ip4_udp_port_dst   = input4_reg[31:16];
+
+  assign d_ip6_payload_length = input2_reg[47:32];
+  assign d_ip6_next           = input2_reg[31:24];
+  assign d_ip6_udp_port_dst   = input7_reg[63:48];
+
+  localparam [15:0] E_TYPE_IPV4 =  16'h08_00;
+  localparam [15:0] E_TYPE_IPV6 =  16'h86_DD;
+  localparam UDP_LENGTH_NTP_VANILLA = 8      // UDP Header
+                                    + 6 * 8; // NTP Payload
+  localparam  [7:0] IP_PROTO_UDP    = 8'h11; //17
+
+  reg decode_is_nts4;
+  reg decode_is_nts6;
+
+  wire decode_is_nts;
+  wire decode_is_other;
+  assign decode_is_nts   = d_sof & ( decode_is_nts6 | decode_is_nts4 );
+  assign decode_is_other = d_sof & ( !decode_is_nts6 & !decode_is_nts4 );
 
   always @*
-  begin : mac_rx_proc
+  begin : decoder_is_ipv4
+    reg port_is_nts;
+    reg length_is_nts;
+
+    decode_is_nts4 = 0;
+
+    case (d_ip4_udp_port_dst)
+      123: port_is_nts = 1;
+      4123: port_is_nts = 1;
+      default: port_is_nts = 0;
+    endcase
+
+    case (d_ip4_total_length)
+      20 + UDP_LENGTH_NTP_VANILLA: length_is_nts = 0;
+      20 + UDP_LENGTH_NTP_VANILLA + 4 + 16: length_is_nts = 0;
+      20 + UDP_LENGTH_NTP_VANILLA + 4 + 20: length_is_nts = 0;
+      default: length_is_nts = 1;
+    endcase
+
+    if (d_ether_proto == E_TYPE_IPV4) begin
+      if (d_ip_version == 4) begin
+        if (d_ip4_ihl == 5) begin
+          if (d_ip4_protocol == IP_PROTO_UDP) begin
+            if (port_is_nts) begin
+              if (length_is_nts) begin
+                decode_is_nts4 = 1;
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+
+  always @*
+  begin : decoder_is_ipv6
+    reg port_is_nts;
+    reg length_is_nts;
+
+    decode_is_nts6 = 0;
+
+    case (d_ip6_udp_port_dst)
+      123: port_is_nts = 1;
+      4123: port_is_nts = 1;
+      default: port_is_nts = 0;
+    endcase
+
+    case (d_ip6_payload_length)
+      UDP_LENGTH_NTP_VANILLA: length_is_nts = 0;
+      UDP_LENGTH_NTP_VANILLA + 4 + 16: length_is_nts = 0;
+      UDP_LENGTH_NTP_VANILLA + 4 + 20: length_is_nts = 0;
+      default: length_is_nts = 1;
+    endcase
+
+    if (d_ether_proto == E_TYPE_IPV6) begin
+      if (d_ip_version == 6) begin
+        if (d_ip6_next == IP_PROTO_UDP) begin
+          if (port_is_nts) begin
+            if (length_is_nts) begin
+              decode_is_nts6 = 1;
+            end
+          end
+        end
+      end
+    end
+  end
+
+  always @*
+  begin : mac_rx_proc_nts
 
     counter_packets_discarded_inc = 0;
 
-    fifo_empty_new = 0;
-    fifo_discard_new = 0;
+    nts_discard_new = 0;
 
-    fifo_rd_start_new = 0;
-    fifo_rd_data_new = 0;
-    fifo_rd_valid_new = 0;
-    fifo_rd_lwdv_new = 0;
+    nts_rd_start_new = 0;
+    nts_rd_data_new = 0;
+    nts_rd_valid_new = 0;
+    nts_rd_lwdv_new = 0;
 
-    fifo_good_new = 0;
-    fifo_bad_new = 0;
+    nts_state_we = 0;
+    nts_state_new = STATE_IDLE;
 
-    rx_state_we = 0;
-    rx_state_new = STATE_IDLE;
-
-    case (rx_state_reg)
+    case (nts_state_reg)
       STATE_IDLE:
         begin
-          if (detect_start_of_frame) begin //i_rx_data_valid is implied by detect start of frame
+          if (decode_is_nts) begin
             if (dispatcher_enabled_reg == 1'b0) begin
               counter_packets_discarded_inc = 1;
 
-            end else if (mux_ctrl_reg != MUX_REMAIN) begin
+            end else if (mux_nts_busy) begin
               counter_packets_discarded_inc = 1;
 
-            end else if (mux_in_ready == 1'b0) begin
+            end else if (mux_nts_ready == 1'b0) begin
               counter_packets_discarded_inc = 1;
 
             end else begin
-              rx_state_we = 1;
-              rx_state_new = STATE_FORWARDING;
-              fifo_rd_start_new = 1;
-              fifo_rd_data_new  = mac_rx_corrected; // i_rx_data but last word shifted logically correct
-              fifo_rd_valid_new = 1;
-              fifo_rd_lwdv_new = rx_data_valid_4bit;
+              nts_state_we = 1;
+              nts_state_new = STATE_FORWARDING;
+              nts_rd_start_new = 1;
+              nts_rd_data_new  = d_data0;
+              nts_rd_valid_new = 1;
+              nts_rd_lwdv_new = d_valid4bits;
             end
           end
         end
       STATE_FORWARDING:
         begin
-          if (i_rx_data_valid != 0) begin
-            fifo_rd_data_new  = mac_rx_corrected;
-            fifo_rd_valid_new = 1;
-            fifo_rd_lwdv_new = rx_data_valid_4bit;
+          if (d_valid4bits != 0) begin
+            nts_rd_data_new  = d_data0;
+            nts_rd_valid_new = 1;
+            nts_rd_lwdv_new = d_valid4bits;
           end
-          if (i_rx_good_frame) begin
-            fifo_discard_new = 1;
-            fifo_good_new = 1;
-            rx_state_we = 1;
-            rx_state_new = STATE_IDLE;
+          if (d_good) begin
+            nts_discard_new = 1;
+            nts_state_we = 1;
+            nts_state_new = STATE_IDLE;
           end
-          if (i_rx_bad_frame) begin
-            fifo_discard_new = 1;
-            fifo_bad_new = 1;
-            rx_state_we = 1;
-            rx_state_new = STATE_IDLE;
+          if (d_bad) begin
+            nts_discard_new = 1;
+            nts_state_we = 1;
+            nts_state_new = STATE_IDLE;
           end
         end
       default: //Default: Error handler
         begin
-          rx_state_we = 1;
-          rx_state_new = STATE_IDLE;
+          nts_state_we = 1;
+          nts_state_new = STATE_IDLE;
          end
     endcase
   end
+
+  //------------------------------------------
+  // Current (MAC RX) frame handling
+  //------------------------------------------
+
+  always @*
+  begin : mac_rx_proc_mini
+
+    mini_discard_new = 0;
+
+    mini_rd_start_new = 0;
+    mini_rd_data_new = 0;
+    mini_rd_valid_new = 0;
+    mini_rd_lwdv_new = 0;
+
+    mini_state_we = 0;
+    mini_state_new = 0;
+
+    case (mini_state_reg)
+      STATE_IDLE:
+        begin
+          if (decode_is_other) begin
+            if (dispatcher_enabled_reg == 1'b0) begin
+              //counter_packets_discarded_inc = 1;
+
+            end else if (mux_mini_busy) begin
+              //counter_packets_discarded_inc = 1;
+
+            end else if (mux_mini_ready == 1'b0) begin
+              //counter_packets_discarded_inc = 1;
+
+            end else begin
+              mini_state_we = 1;
+              mini_state_new = STATE_FORWARDING;
+              mini_rd_start_new = 1;
+              mini_rd_data_new  = d_data0;
+              mini_rd_valid_new = 1;
+              mini_rd_lwdv_new = d_valid4bits;
+            end
+          end
+        end
+      STATE_FORWARDING:
+        begin
+          if (d_valid4bits != 0) begin
+            mini_rd_data_new  = d_data0;
+            mini_rd_valid_new = 1;
+            mini_rd_lwdv_new = d_valid4bits;
+          end
+          if (d_good) begin
+            mini_discard_new = 1;
+            mini_state_we = 1;
+            mini_state_new = STATE_IDLE;
+          end
+          if (d_bad) begin
+            mini_discard_new = 1;
+            mini_state_we = 1;
+            mini_state_new = STATE_IDLE;
+          end
+        end
+      default: //Default: Error handler
+        begin
+          mini_state_we = 1;
+          mini_state_new = STATE_IDLE;
+         end
+    endcase
+  end
+
 
 endmodule

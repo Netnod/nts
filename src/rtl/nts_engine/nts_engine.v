@@ -29,7 +29,11 @@
 //
 
 module nts_engine #(
-  parameter ADDR_WIDTH = 8
+  parameter ADDR_WIDTH = 8,
+  parameter SUPPORT_NTS      = 1,
+  parameter SUPPORT_NTP_AUTH = 0,
+  parameter SUPPORT_NTP      = 0,
+  parameter SUPPORT_NET      = 0
 ) (
   input  wire                  i_areset, // async reset
   input  wire                  i_clk,
@@ -40,7 +44,9 @@ module nts_engine #(
   output wire                  o_dispatch_rx_ready,
   input  wire [3:0]            i_dispatch_rx_data_last_valid,
   input  wire                  i_dispatch_rx_fifo_empty,
+  /* verilator lint_off UNUSED */
   input  wire                  i_dispatch_rx_fifo_rd_start,
+  /* verilator lint_on UNUSED */
   input  wire                  i_dispatch_rx_fifo_rd_valid,
   input  wire [63:0]           i_dispatch_rx_fifo_rd_data,
 
@@ -82,13 +88,18 @@ module nts_engine #(
 
   localparam CORE_NAME0   = 32'h4e_54_53_5f; // "NTS_"
   localparam CORE_NAME1   = 32'h45_4e_47_4e; // "ENGN"
-  localparam CORE_VERSION = 32'h30_2e_31_30; // "0.10"
+  localparam CORE_VERSION = 32'h30_2e_31_31;
+  localparam CORE_SUPPORT = { 28'b0, SUPPORT_NET,
+                                     SUPPORT_NTP,
+                                     SUPPORT_NTP_AUTH,
+                                     SUPPORT_NTS };
 
   localparam ADDR_NAME0         = 'h00;
   localparam ADDR_NAME1         = 'h01;
   localparam ADDR_VERSION       = 'h02;
   localparam ADDR_CTRL          = 'h08;
   localparam ADDR_STATUS        = 'h09;
+  localparam ADDR_SUPPORT       = 'h0a;
 
   localparam DEBUG_NAME = 32'h44_42_55_47; // "DBUG"
 
@@ -152,13 +163,19 @@ module nts_engine #(
   wire                         detect_nts_cookie_placeholder;
   wire                         detect_nts_authenticator;
 
+  /* verilator lint_off UNUSED */
   wire                         api_cs_cookie;
+  /* verilator lint_on UNUSED */
   wire                         api_cs_clock;
   wire                         api_cs_debug;
   wire                         api_cs_engine;
+  /* verilator lint_off UNUSED */
   wire                         api_cs_keymem;
+  /* verilator lint_on UNUSED */
   wire                         api_cs_parser;
+  /* verilator lint_off UNUSED */
   wire                         api_cs_ntpauth_keymem;
+  /* verilator lint_on UNUSED */
 
   reg                 [31 : 0] api_read_data_engine;
   wire                [31 : 0] api_read_data_cookie;
@@ -172,6 +189,7 @@ module nts_engine #(
   wire                 [7 : 0] api_address;
   wire                [31 : 0] api_write_data;
 
+  /* verilator lint_off UNUSED */
   wire                         keymem_internal_get_current_key;
   wire                         keymem_internal_get_key_with_id;
   wire                [31 : 0] keymem_internal_server_key_id;
@@ -180,7 +198,9 @@ module nts_engine #(
   wire                [31 : 0] keymem_internal_key_id;
   wire                [31 : 0] keymem_internal_key_data;
   wire                         keymem_internal_ready;
+  /* verilator lint_on UNUSED */
 
+  /* verilator lint_off UNUSED */
   wire                         ntpauth_ntpkeymem_get_key_md5;
   wire                         ntpauth_ntpkeymem_get_key_sha1;
   wire                [31 : 0] ntpauth_ntpkeymem_keyid;
@@ -189,16 +209,21 @@ module nts_engine #(
   wire                         ntpkeymem_ntpauth_key_valid;
   wire                [31 : 0] ntpkeymem_ntpauth_key_data;
   wire                         ntpkeymem_ntpauth_ready;
+  /* verilator lint_on UNUSED */
 
   wire                   [6:0] ntpauth_txbuf_address;
   wire                         ntpauth_txbuf_write_en;
   wire                  [63:0] ntpauth_txbuf_write_data;
 
+  /* verilator lint_off UNUSED */
   wire                         parser_ntpauth_md5;
   wire                         parser_ntpauth_sha1;
+  /* verilator lint_on UNUSED */
   wire                         ntpauth_parser_ready;
   wire                         ntpauth_parser_good;
+  /* verilator lint_off UNUSED */
   wire                         parser_ntpauth_transmit;
+  /* verilator lint_on UNUSED */
 
   wire                         busy;
   wire                         parser_busy;
@@ -239,15 +264,18 @@ module nts_engine #(
   wire                         parser_muxctrl_timestamp_ipv4;
   wire                         parser_muxctrl_timestamp_ipv6;
 
+  /* verilator lint_off UNUSED */
   wire                         parser_statistics_nts_bad_auth;
   wire                         parser_statistics_nts_bad_cookie;
   wire                         parser_statistics_nts_bad_keyid;
   wire                         parser_statistics_nts_processed;
+  /* verilator lint_on UNUSED */
 
 
   wire                    crypto_parser_busy;
   wire                    crypto_error;
   wire                    crypto_parser_verify_tag_ok;
+  /* verilator lint_off UNUSED */
   wire                    parser_crypto_sample_key;
   wire                    parser_crypto_rx_op_copy_ad;
   wire                    parser_crypto_rx_op_copy_nonce;
@@ -276,20 +304,23 @@ module nts_engine #(
   wire                    crypto_rxbuf_rd_en;
   reg                     rxbuf_crypto_rd_dv;
   reg              [63:0] rxbuf_crypto_rd_data;
+  /* verilator lint_on UNUSED */
 
   wire                    crypto_txbuf_read_en;
+  /* verilator lint_off UNUSED */
   wire             [63:0] txbuf_crypto_read_data;
   wire                    txbuf_crypto_read_valid;
+  /* verilator lint_on UNUSED */
   wire                    crypto_txbuf_write_en;
   wire             [63:0] crypto_txbuf_write_data;
   wire [ADDR_WIDTH+3-1:0] crypto_txbuf_address;
 
+  /* verilator lint_off UNUSED */
   wire                    crypto_noncegen_get;
   wire             [63:0] noncegen_crypto_nonce;
   wire                    noncegen_crypto_nonce_valid;
   wire                    noncegen_crypto_ready;
-
-  wire             [31:0] ZERO;
+  /* verilator lint_on UNUSED */
 
   //----------------------------------------------------------------
   // Concurrent connectivity for ports etc.
@@ -304,12 +335,11 @@ module nts_engine #(
   assign o_detect_nts_cookie_placeholder = detect_nts_cookie_placeholder;
   assign o_detect_nts_authenticator      = detect_nts_authenticator;
 
-  assign ZERO = 0;
-
   //----------------------------------------------------------------
   // Statistics counters and Debug registers
   //----------------------------------------------------------------
 
+  /* verilator lint_off UNUSED */
   wire [31:0] counter_nts_bad_auth_msb;
   wire [31:0] counter_nts_bad_auth_lsb;
   reg         counter_nts_bad_auth_lsb_we;
@@ -333,48 +363,60 @@ module nts_engine #(
   wire  [31:0] counter_error_txbuf_msb;
   wire  [31:0] counter_error_txbuf_lsb;
   reg          counter_error_txbuf_lsb_we;
+  /* verilator lint_on UNUSED */
 
   reg [31:0] systick32_reg;
 
-  counter64 counter_nts_bad_auth (
-     .i_areset     ( i_areset                       ),
-     .i_clk        ( i_clk                          ),
-     .i_inc        ( parser_statistics_nts_bad_auth ),
-     .i_rst        ( 1'b0                           ),
-     .i_lsb_sample ( counter_nts_bad_auth_lsb_we    ),
-     .o_msb        ( counter_nts_bad_auth_msb       ),
-     .o_lsb        ( counter_nts_bad_auth_lsb       )
-  );
+  if (SUPPORT_NTS) begin
+    counter64 counter_nts_bad_auth (
+       .i_areset     ( i_areset                       ),
+       .i_clk        ( i_clk                          ),
+       .i_inc        ( parser_statistics_nts_bad_auth ),
+       .i_rst        ( 1'b0                           ),
+       .i_lsb_sample ( counter_nts_bad_auth_lsb_we    ),
+       .o_msb        ( counter_nts_bad_auth_msb       ),
+       .o_lsb        ( counter_nts_bad_auth_lsb       )
+    );
 
-  counter64 counter_nts_bad_cookie (
-     .i_areset     ( i_areset                         ),
-     .i_clk        ( i_clk                            ),
-     .i_inc        ( parser_statistics_nts_bad_cookie ),
-     .i_rst        ( 1'b0                             ),
-     .i_lsb_sample ( counter_nts_bad_cookie_lsb_we    ),
-     .o_msb        ( counter_nts_bad_cookie_msb       ),
-     .o_lsb        ( counter_nts_bad_cookie_lsb       )
-  );
+    counter64 counter_nts_bad_cookie (
+       .i_areset     ( i_areset                         ),
+       .i_clk        ( i_clk                            ),
+       .i_inc        ( parser_statistics_nts_bad_cookie ),
+       .i_rst        ( 1'b0                             ),
+       .i_lsb_sample ( counter_nts_bad_cookie_lsb_we    ),
+       .o_msb        ( counter_nts_bad_cookie_msb       ),
+       .o_lsb        ( counter_nts_bad_cookie_lsb       )
+    );
 
-  counter64 counter_nts_bad_keyid (
-     .i_areset     ( i_areset                        ),
-     .i_clk        ( i_clk                           ),
-     .i_inc        ( parser_statistics_nts_bad_keyid ),
-     .i_rst        ( 1'b0                            ),
-     .i_lsb_sample ( counter_nts_bad_keyid_lsb_we    ),
-     .o_msb        ( counter_nts_bad_keyid_msb       ),
-     .o_lsb        ( counter_nts_bad_keyid_lsb       )
-  );
+    counter64 counter_nts_bad_keyid (
+       .i_areset     ( i_areset                        ),
+       .i_clk        ( i_clk                           ),
+       .i_inc        ( parser_statistics_nts_bad_keyid ),
+       .i_rst        ( 1'b0                            ),
+       .i_lsb_sample ( counter_nts_bad_keyid_lsb_we    ),
+       .o_msb        ( counter_nts_bad_keyid_msb       ),
+       .o_lsb        ( counter_nts_bad_keyid_lsb       )
+    );
 
-  counter64 counter_nts_processed (
-     .i_areset     ( i_areset                        ),
-     .i_clk        ( i_clk                           ),
-     .i_inc        ( parser_statistics_nts_processed ),
-     .i_rst        ( 1'b0                            ),
-     .i_lsb_sample ( counter_nts_processed_lsb_we    ),
-     .o_msb        ( counter_nts_processed_msb       ),
-     .o_lsb        ( counter_nts_processed_lsb       )
-  );
+    counter64 counter_nts_processed (
+       .i_areset     ( i_areset                        ),
+       .i_clk        ( i_clk                           ),
+       .i_inc        ( parser_statistics_nts_processed ),
+       .i_rst        ( 1'b0                            ),
+       .i_lsb_sample ( counter_nts_processed_lsb_we    ),
+       .o_msb        ( counter_nts_processed_msb       ),
+       .o_lsb        ( counter_nts_processed_lsb       )
+    );
+  end else begin
+    assign counter_nts_bad_auth_msb = 0;
+    assign counter_nts_bad_auth_lsb = 0;
+    assign counter_nts_bad_cookie_msb = 0;
+    assign counter_nts_bad_cookie_lsb = 0;
+    assign counter_nts_bad_keyid_msb = 0;
+    assign counter_nts_bad_keyid_lsb = 0;
+    assign counter_nts_processed_msb = 0;
+    assign counter_nts_processed_lsb = 0;
+  end
 
   counter64 counter_error_crypto (
      .i_areset     ( i_areset                    ),
@@ -442,6 +484,7 @@ module nts_engine #(
           ADDR_VERSION: api_read_data_engine = CORE_VERSION;
           ADDR_CTRL: api_read_data_engine = { 31'h0000_0000, ctrl_reg };
           ADDR_STATUS: api_read_data_engine = { 31'h0000_0000, (~parser_busy) }; //TODO: Bit31 RNG error. No such signal from noncegen to forward.
+          ADDR_SUPPORT: api_read_data_engine = CORE_SUPPORT;
           default: ;
         endcase
       end
@@ -765,7 +808,11 @@ module nts_engine #(
   //----------------------------------------------------------------
 
   nts_parser_ctrl #(
-    .ADDR_WIDTH(ADDR_WIDTH)
+    .ADDR_WIDTH       ( ADDR_WIDTH       ),
+    .SUPPORT_NTS      ( SUPPORT_NTS      ), 
+    .SUPPORT_NTP_AUTH ( SUPPORT_NTP_AUTH ),
+    .SUPPORT_NTP      ( SUPPORT_NTP      ),
+    .SUPPORT_NET      ( SUPPORT_NET      )
   ) parser (
    .i_areset(i_areset),
    .i_clk(i_clk),
@@ -879,84 +926,104 @@ module nts_engine #(
   // Server Key Memory instantiation.
   //----------------------------------------------------------------
 
-  nts_keymem keymem (
-    .clk(i_clk),
-    .areset(i_areset),
-    // API access
-    .cs(api_cs_keymem),
-    .we(api_we),
-    .address(api_address),
-    .write_data(api_write_data),
-    .read_data(api_read_data_keymem),
-    // Client access
-    .get_current_key(keymem_internal_get_current_key),
-    .get_key_with_id(keymem_internal_get_key_with_id),
-    .server_key_id(keymem_internal_server_key_id),
-    .key_word(keymem_internal_key_word),
-    .key_valid(keymem_internal_key_valid),
-    .key_id(keymem_internal_key_id),
-    .key_data(keymem_internal_key_data),
-    .ready(keymem_internal_ready)
-  );
+  if (SUPPORT_NTS) begin
+    nts_keymem keymem (
+      .clk(i_clk),
+      .areset(i_areset),
+      // API access
+      .cs(api_cs_keymem),
+      .we(api_we),
+      .address(api_address),
+      .write_data(api_write_data),
+      .read_data(api_read_data_keymem),
+      // Client access
+      .get_current_key(keymem_internal_get_current_key),
+      .get_key_with_id(keymem_internal_get_key_with_id),
+      .server_key_id(keymem_internal_server_key_id),
+      .key_word(keymem_internal_key_word),
+      .key_valid(keymem_internal_key_valid),
+      .key_id(keymem_internal_key_id),
+      .key_data(keymem_internal_key_data),
+      .ready(keymem_internal_ready)
+    );
+  end else begin
+    assign api_read_data_keymem = 0;
+    assign keymem_internal_key_valid = 0;
+    assign keymem_internal_key_id = 0;
+    assign keymem_internal_key_data = 0;
+    assign keymem_internal_ready = 0;
+  end
 
   //----------------------------------------------------------------
   // NTP AUTH (MD5, SHA1) 160bit Key Memory instantiation.
   //----------------------------------------------------------------
 
-  ntp_auth_keymem ntpkeymem (
-    .i_clk       ( i_clk    ),
-    .i_areset    ( i_areset ),
+  if (SUPPORT_NTP_AUTH) begin
+    ntp_auth_keymem ntpkeymem (
+      .i_clk       ( i_clk    ),
+      .i_areset    ( i_areset ),
 
-    .i_cs        ( api_cs_ntpauth_keymem ),
-    .i_we        ( api_we                ),
-    .i_address   ( api_address           ),
-    .i_write_data( api_write_data        ),
-    .o_read_data ( api_read_data_ntpauth_keymem  ),
+      .i_cs        ( api_cs_ntpauth_keymem ),
+      .i_we        ( api_we                ),
+      .i_address   ( api_address           ),
+      .i_write_data( api_write_data        ),
+      .o_read_data ( api_read_data_ntpauth_keymem  ),
 
-    .i_get_key_md5  ( ntpauth_ntpkeymem_get_key_md5  ),
-    .i_get_key_sha1 ( ntpauth_ntpkeymem_get_key_sha1 ),
-    .i_keyid        ( ntpauth_ntpkeymem_keyid        ),
-    .o_key_word     ( ntpkeymem_ntpauth_key_word     ),
-    .o_key_valid    ( ntpkeymem_ntpauth_key_valid    ),
-    .o_key_data     ( ntpkeymem_ntpauth_key_data     ),
-    .o_ready        ( ntpkeymem_ntpauth_ready        )
-  );
+      .i_get_key_md5  ( ntpauth_ntpkeymem_get_key_md5  ),
+      .i_get_key_sha1 ( ntpauth_ntpkeymem_get_key_sha1 ),
+      .i_keyid        ( ntpauth_ntpkeymem_keyid        ),
+      .o_key_word     ( ntpkeymem_ntpauth_key_word     ),
+      .o_key_valid    ( ntpkeymem_ntpauth_key_valid    ),
+      .o_key_data     ( ntpkeymem_ntpauth_key_data     ),
+      .o_ready        ( ntpkeymem_ntpauth_ready        )
+    );
+  end else begin
+    assign api_read_data_ntpauth_keymem = 0;
+  end
 
   //----------------------------------------------------------------
   // NTP AUTH (MD5, SHA1) module.
   //----------------------------------------------------------------
 
-  ntp_auth ntpauth (
-    .i_areset ( i_areset ),
-    .i_clk    ( i_clk    ),
+  if (SUPPORT_NTP_AUTH) begin
+    ntp_auth ntpauth (
+      .i_areset ( i_areset ),
+      .i_clk    ( i_clk    ),
 
-    .i_auth_md5  ( parser_ntpauth_md5      ),
-    .i_auth_sha1 ( parser_ntpauth_sha1     ),
-    .i_tx        ( parser_ntpauth_transmit ),
+      .i_auth_md5  ( parser_ntpauth_md5      ),
+      .i_auth_sha1 ( parser_ntpauth_sha1     ),
+      .i_tx        ( parser_ntpauth_transmit ),
 
-    .o_ready ( ntpauth_parser_ready    ),
-    .o_good  ( ntpauth_parser_good     ),
+      .o_ready ( ntpauth_parser_ready    ),
+      .o_good  ( ntpauth_parser_good     ),
 
-    .i_rx_reset ( i_dispatch_rx_fifo_rd_start ),
-    .i_rx_valid ( i_dispatch_rx_fifo_rd_valid ),
-    .i_rx_data  ( i_dispatch_rx_fifo_rd_data  ),
+      .i_rx_reset ( i_dispatch_rx_fifo_rd_start ),
+      .i_rx_valid ( i_dispatch_rx_fifo_rd_valid ),
+      .i_rx_data  ( i_dispatch_rx_fifo_rd_data  ),
 
-    .i_timestamp_wr_en            ( timestamp_tx_wr_en        ),
-    .i_timestamp_ntp_header_block ( timestamp_tx_header_block ),
-    .i_timestamp_ntp_header_data  ( timestamp_tx_header_data  ),
+      .i_timestamp_wr_en            ( timestamp_tx_wr_en        ),
+      .i_timestamp_ntp_header_block ( timestamp_tx_header_block ),
+      .i_timestamp_ntp_header_data  ( timestamp_tx_header_data  ),
 
-    .o_keymem_get_key_md5  ( ntpauth_ntpkeymem_get_key_md5  ),
-    .o_keymem_get_key_sha1 ( ntpauth_ntpkeymem_get_key_sha1 ),
-    .o_keymem_keyid        ( ntpauth_ntpkeymem_keyid        ),
-    .i_keymem_key_word     ( ntpkeymem_ntpauth_key_word     ),
-    .i_keymem_key_valid    ( ntpkeymem_ntpauth_key_valid    ),
-    .i_keymem_key_data     ( ntpkeymem_ntpauth_key_data     ),
-    .i_keymem_ready        ( ntpkeymem_ntpauth_ready        ),
+      .o_keymem_get_key_md5  ( ntpauth_ntpkeymem_get_key_md5  ),
+      .o_keymem_get_key_sha1 ( ntpauth_ntpkeymem_get_key_sha1 ),
+      .o_keymem_keyid        ( ntpauth_ntpkeymem_keyid        ),
+      .i_keymem_key_word     ( ntpkeymem_ntpauth_key_word     ),
+      .i_keymem_key_valid    ( ntpkeymem_ntpauth_key_valid    ),
+      .i_keymem_key_data     ( ntpkeymem_ntpauth_key_data     ),
+      .i_keymem_ready        ( ntpkeymem_ntpauth_ready        ),
 
-    .o_tx_wr_en ( ntpauth_txbuf_write_en   ),
-    .o_tx_addr  ( ntpauth_txbuf_address    ),
-    .o_tx_data  ( ntpauth_txbuf_write_data )
-  );
+      .o_tx_wr_en ( ntpauth_txbuf_write_en   ),
+      .o_tx_addr  ( ntpauth_txbuf_address    ),
+      .o_tx_data  ( ntpauth_txbuf_write_data )
+    );
+  end else begin
+    assign ntpauth_parser_ready = 0;
+    assign ntpauth_parser_good = 0;
+    assign ntpauth_txbuf_write_en = 0;
+    assign ntpauth_txbuf_address = 0;
+    assign ntpauth_txbuf_write_data = 0;
+  end
 
   //----------------------------------------------------------------
   // NTP Timestamp instantiation.
@@ -995,91 +1062,114 @@ module nts_engine #(
   // NTS Verify Secure instantiation.
   //----------------------------------------------------------------
 
-  nts_verify_secure #(.ADDR_WIDTH(ADDR_WIDTH)) crypto (
-    .i_areset(i_areset),
-    .i_clk(i_clk),
+  if (SUPPORT_NTS) begin : nts_enabled
+    wire [31:0] ZERO;
+    assign ZERO = 0;
 
-    .o_busy         ( crypto_parser_busy ),
-    .o_error        ( crypto_error       ),
+    nts_verify_secure #(.ADDR_WIDTH(ADDR_WIDTH)) crypto (
+      .i_areset(i_areset),
+      .i_clk(i_clk),
 
-    .o_verify_tag_ok( crypto_parser_verify_tag_ok ),
+      .o_busy         ( crypto_parser_busy ),
+      .o_error        ( crypto_error       ),
 
-    .i_key_word   ( keymem_internal_key_word ),
-    .i_key_valid  ( parser_crypto_sample_key ),
-    .i_key_data   ( keymem_internal_key_data ),
+      .o_verify_tag_ok( crypto_parser_verify_tag_ok ),
 
-    .i_unrwapped_s2c  ( ZERO[ 0:0] ),
-    .i_unwrapped_c2s  ( ZERO[ 0:0] ),
-    .i_unwrapped_word ( ZERO[ 2:0] ),
-    .i_unwrapped_data ( ZERO[31:0] ),
+      .i_key_word   ( keymem_internal_key_word ),
+      .i_key_valid  ( parser_crypto_sample_key ),
+      .i_key_data   ( keymem_internal_key_data ),
 
-    .i_op_copy_rx_ad    ( parser_crypto_rx_op_copy_ad    ),
-    .i_op_copy_rx_nonce ( parser_crypto_rx_op_copy_nonce ),
-    .i_op_copy_rx_pc    ( parser_crypto_rx_op_copy_pc    ),
-    .i_op_copy_rx_tag   ( parser_crypto_rx_op_copy_tag   ),
-    .i_copy_rx_addr     ( parser_crypto_rx_addr          ), //Specify memory address in RX buf
-    .i_copy_rx_bytes    ( parser_crypto_rx_bytes         ),
+      .i_unrwapped_s2c  ( ZERO[ 0:0] ),
+      .i_unwrapped_c2s  ( ZERO[ 0:0] ),
+      .i_unwrapped_word ( ZERO[ 2:0] ),
+      .i_unwrapped_data ( ZERO[31:0] ),
 
-    .i_op_copy_tx_ad         ( parser_crypto_tx_op_copy_ad         ), //Read packet stored in TX buff for transfer
-    .i_op_store_tx_nonce_tag ( parser_crypto_tx_op_store_nonce_tag ), //Write raw packet auth: (nonce)(tag)
-    .i_op_store_tx_cookie    ( parser_crypto_tx_op_store_cookie    ), //Write raw cookie: (nonce)(tag)(ciphertext)
-    .i_op_store_tx_cookiebuf ( parser_crypto_store_tx_cookiebuf    ), //Write cookie buffer. First issue i_op_generate_tag, then parser_crypto_tx_op_store_nonce_tag, then i_op_store_tx_cookiebuf
-    .i_copy_tx_addr          ( parser_crypto_tx_addr               ), //Specify memory address in TX buf
-    .i_copy_tx_bytes         ( parser_crypto_tx_bytes              ),
+      .i_op_copy_rx_ad    ( parser_crypto_rx_op_copy_ad    ),
+      .i_op_copy_rx_nonce ( parser_crypto_rx_op_copy_nonce ),
+      .i_op_copy_rx_pc    ( parser_crypto_rx_op_copy_pc    ),
+      .i_op_copy_rx_tag   ( parser_crypto_rx_op_copy_tag   ),
+      .i_copy_rx_addr     ( parser_crypto_rx_addr          ), //Specify memory address in RX buf
+      .i_copy_rx_bytes    ( parser_crypto_rx_bytes         ),
 
-    .i_op_cookie_verify      ( parser_crypto_op_cookie_verify   ), //Decipher and authenticate (nonce)(tag)(ciphertext) user server key
-    .i_op_cookie_loadkeys    ( parser_crypto_op_cookie_loadkeys ), //Copy S2C, C2S from RAM to Registers,
-    .i_op_cookie_rencrypt    ( parser_crypto_op_cookie_rencrypt ), //Encrypt (nonce)(plaintext) into (nonce)(tag)(ciphertext)
+      .i_op_copy_tx_ad         ( parser_crypto_tx_op_copy_ad         ), //Read packet stored in TX buff for transfer
+      .i_op_store_tx_nonce_tag ( parser_crypto_tx_op_store_nonce_tag ), //Write raw packet auth: (nonce)(tag)
+      .i_op_store_tx_cookie    ( parser_crypto_tx_op_store_cookie    ), //Write raw cookie: (nonce)(tag)(ciphertext)
+      .i_op_store_tx_cookiebuf ( parser_crypto_store_tx_cookiebuf    ), //Write cookie buffer. First issue i_op_generate_tag, then parser_crypto_tx_op_store_nonce_tag, then i_op_store_tx_cookiebuf
+      .i_copy_tx_addr          ( parser_crypto_tx_addr               ), //Specify memory address in TX buf
+      .i_copy_tx_bytes         ( parser_crypto_tx_bytes              ),
 
-    .i_op_verify_c2s   ( parser_crypto_op_c2s_verify_auth   ), //Authenticate an incomming packet using C2S key
-    .i_op_generate_tag ( parser_crypto_op_s2c_generate_auth ), //Authenticate an outbound packet using S2C key
+      .i_op_cookie_verify      ( parser_crypto_op_cookie_verify   ), //Decipher and authenticate (nonce)(tag)(ciphertext) user server key
+      .i_op_cookie_loadkeys    ( parser_crypto_op_cookie_loadkeys ), //Copy S2C, C2S from RAM to Registers,
+      .i_op_cookie_rencrypt    ( parser_crypto_op_cookie_rencrypt ), //Encrypt (nonce)(plaintext) into (nonce)(tag)(ciphertext)
 
-    .i_op_cookiebuf_reset(parser_crypto_op_cookiebuf_reset),
-    .i_op_cookiebuf_appendcookie(parser_crypto_op_cookiebuf_append),
-    .i_cookie_prefix(parser_crypto_cookieprefix),
+      .i_op_verify_c2s   ( parser_crypto_op_c2s_verify_auth   ), //Authenticate an incomming packet using C2S key
+      .i_op_generate_tag ( parser_crypto_op_s2c_generate_auth ), //Authenticate an outbound packet using S2C key
 
-    .i_rx_wait      ( rxbuf_crypto_wait      ),
-    .o_rx_addr      ( crypto_rxbuf_addr      ),
-    .o_rx_burstsize ( crypto_rxbuf_burstsize ),
-    .o_rx_wordsize  ( crypto_rxbuf_wordsize  ),
-    .o_rx_rd_en     ( crypto_rxbuf_rd_en     ),
-    .i_rx_rd_dv     ( rxbuf_crypto_rd_dv     ),
-    .i_rx_rd_data   ( rxbuf_crypto_rd_data   ),
+      .i_op_cookiebuf_reset(parser_crypto_op_cookiebuf_reset),
+      .i_op_cookiebuf_appendcookie(parser_crypto_op_cookiebuf_append),
+      .i_cookie_prefix(parser_crypto_cookieprefix),
 
-    .i_tx_busy       ( txbuf_busy              ),
-    .o_tx_read_en    ( crypto_txbuf_read_en    ),
-    .i_tx_read_dv    ( txbuf_crypto_read_valid ),
-    .i_tx_read_data  ( txbuf_crypto_read_data  ),
-    .o_tx_write_en   ( crypto_txbuf_write_en   ),
-    .o_tx_write_data ( crypto_txbuf_write_data ),
-    .o_tx_address    ( crypto_txbuf_address    ),
+      .i_rx_wait      ( rxbuf_crypto_wait      ),
+      .o_rx_addr      ( crypto_rxbuf_addr      ),
+      .o_rx_burstsize ( crypto_rxbuf_burstsize ),
+      .o_rx_wordsize  ( crypto_rxbuf_wordsize  ),
+      .o_rx_rd_en     ( crypto_rxbuf_rd_en     ),
+      .i_rx_rd_dv     ( rxbuf_crypto_rd_dv     ),
+      .i_rx_rd_data   ( rxbuf_crypto_rd_data   ),
 
-    .o_noncegen_get         ( crypto_noncegen_get         ),
-    .i_noncegen_nonce       ( noncegen_crypto_nonce       ),
-    .i_noncegen_nonce_valid ( noncegen_crypto_nonce_valid ),
-    .i_noncegen_ready       ( noncegen_crypto_ready       )
+      .i_tx_busy       ( txbuf_busy              ),
+      .o_tx_read_en    ( crypto_txbuf_read_en    ),
+      .i_tx_read_dv    ( txbuf_crypto_read_valid ),
+      .i_tx_read_data  ( txbuf_crypto_read_data  ),
+      .o_tx_write_en   ( crypto_txbuf_write_en   ),
+      .o_tx_write_data ( crypto_txbuf_write_data ),
+      .o_tx_address    ( crypto_txbuf_address    ),
 
-  );
+      .o_noncegen_get         ( crypto_noncegen_get         ),
+      .i_noncegen_nonce       ( noncegen_crypto_nonce       ),
+      .i_noncegen_nonce_valid ( noncegen_crypto_nonce_valid ),
+      .i_noncegen_ready       ( noncegen_crypto_ready       )
+
+    );
 
   //----------------------------------------------------------------
   // NTS Nonce Generator. Pseudorandom number generator.
   //----------------------------------------------------------------
 
-  nts_noncegen noncegen (
-    .clk        ( i_clk    ),
-    .areset     ( i_areset ),
-    //API
-    .cs         ( api_cs_cookie        ),
-    .we         ( api_we               ),
-    .address    ( api_address          ),
-    .write_data ( api_write_data       ),
-    .read_data  ( api_read_data_cookie ),
-    //NonceGen
-    .get_nonce   ( crypto_noncegen_get         ),
-    .nonce       ( noncegen_crypto_nonce       ),
-    .nonce_valid ( noncegen_crypto_nonce_valid ),
-    .ready       ( noncegen_crypto_ready       )
-  );
+    nts_noncegen noncegen (
+      .clk        ( i_clk    ),
+      .areset     ( i_areset ),
+      //API
+      .cs         ( api_cs_cookie        ),
+      .we         ( api_we               ),
+      .address    ( api_address          ),
+      .write_data ( api_write_data       ),
+      .read_data  ( api_read_data_cookie ),
+      //NonceGen
+      .get_nonce   ( crypto_noncegen_get         ),
+      .nonce       ( noncegen_crypto_nonce       ),
+      .nonce_valid ( noncegen_crypto_nonce_valid ),
+      .ready       ( noncegen_crypto_ready       )
+    );
+  end else begin
+    assign api_read_data_cookie = 0;
+    assign crypto_error = 0;
+    assign crypto_parser_busy = 0;
+    assign crypto_parser_verify_tag_ok = 0;
+    assign crypto_rxbuf_addr = 0;
+    assign crypto_txbuf_read_en = 0;
+    assign crypto_rxbuf_burstsize = 0;
+    assign crypto_rxbuf_wordsize = 0;
+    assign crypto_rxbuf_rd_en = 0;
+    assign crypto_txbuf_read_en = 0;
+    assign crypto_txbuf_write_en = 0;
+    assign crypto_txbuf_write_data = 0;
+    assign crypto_txbuf_address = 0;
+    assign crypto_noncegen_get = 0;
+    assign noncegen_crypto_nonce = 0;
+    assign noncegen_crypto_nonce_valid = 0;
+    assign noncegen_crypto_ready = 0;
+  end // (SUPPORT_NTS)
 
   //----------------------------------------------------------------
 

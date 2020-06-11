@@ -42,6 +42,7 @@ SHA1_SRC = ../sub/sha1/src/rtl/sha1_core.v ../sub/sha1/src/rtl/sha1_w_mem.v
 SIPHASH_SRC = ../sub/siphash/src/rtl/siphash_core.v
 NONCEGEN_SRC = ../sub/nts_noncegen/src/rtl/nts_noncegen.v $(SIPHASH_SRC)
 ENGINE_SRC = \
+ ../src/rtl/nts_engine/icmp.v \
  ../src/rtl/nts_engine/ntp_auth.v \
  ../src/rtl/nts_engine/nts_api.v \
  ../src/rtl/nts_engine/nts_engine.v \
@@ -292,6 +293,7 @@ $(OUTPUT)/nts_top_tb.vvp: \
  ../src/tb/nts_top_tb.v \
  ../src/rtl/nts_top.v \
  ../src/rtl/nts_dispatcher.v \
+ ../src/rtl/nts_dispatcher_mux.v \
  ../src/rtl/nts_extractor.v \
  ../src/rtl/memory/bram.v \
  $(ENGINE_SRC)

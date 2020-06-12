@@ -112,7 +112,7 @@ module nts_dispatcher #(
   localparam BUS_WRITE = 8'hAA;
 
   localparam CORE_NAME    = 64'h4e_54_53_2d_44_49_53_50; //NTS-DISP
-  localparam CORE_VERSION = 32'h30_2e_30_34; //0.04
+  localparam CORE_VERSION = 32'h30_2e_30_35;
 
 
   //----------------------------------------------------------------
@@ -129,10 +129,8 @@ module nts_dispatcher #(
   localparam [ADDR_WIDTH-1:0] ADDR_ZERO = 0;
 
   //----------------------------------------------------------------
-  // Internal registers and wires
+  // Registers
   //----------------------------------------------------------------
-
-  reg  [31:0]     api_read_data;
 
   reg        mini_discard_new; //internal
   reg        mini_discard_reg; //internal
@@ -164,14 +162,28 @@ module nts_dispatcher #(
   reg nts_state_new;
   reg nts_state_reg;
 
-  reg [7:0] previous_rx_data_valid;
+  //----------------------------------------------------------------
+  // Preprocessor decode wires
+  //----------------------------------------------------------------
 
-  reg       detect_start_of_frame;
+  wire [63:0] d_data0;
+  wire d_is_nts;
+  wire d_is_other;
+  /* verilator lint_off UNUSED */
+  wire d_is_drop;
+  /* verilator lint_on UNUSED */
+  wire d_bad;
+  wire d_good;
+  wire [3:0] d_valid4bits;
+  wire d_start_of_frame;
 
-  wire      error_state;
+  //----------------------------------------------------------------
+  // Misc. wires
+  //----------------------------------------------------------------
 
-  reg [63:0] mac_rx_corrected;
-  reg  [3:0] rx_data_valid_4bit;
+  reg [31:0] api_read_data;
+
+  wire error_state;
 
   //----------------------------------------------------------------
   // API Debug, counter etc registers
@@ -208,7 +220,8 @@ module nts_dispatcher #(
   wire [31:0] counter_good_lsb;
   reg         counter_good_lsb_we;
 
-  reg         counter_packets_discarded_inc;
+  reg         counter_packets_discarded_nts_inc;
+  reg         counter_packets_discarded_other_inc;
   reg         counter_packets_discarded_rst;
   wire [31:0] counter_packets_discarded_msb;
   wire [31:0] counter_packets_discarded_lsb;
@@ -270,15 +283,6 @@ module nts_dispatcher #(
   assign o_engine_address    = bus_addr_reg;
   assign o_engine_write_data = bus_write_data;
 
-
-  reg [70:0] input0_reg;
-  reg [70:0] input1_reg;
-  reg [70:0] input2_reg;
-  reg [70:0] input3_reg;
-  reg [70:0] input4_reg;
-  reg [70:0] input5_reg;
-  reg [70:0] input6_reg;
-  reg [70:0] input7_reg;
 
   //----------------------------------------------------------------
   // Dispatcher Mux
@@ -556,15 +560,6 @@ module nts_dispatcher #(
 
       dispatcher_enabled_reg <= 0;
 
-      input0_reg <= 0;
-      input1_reg <= 0;
-      input2_reg <= 0;
-      input3_reg <= 0;
-      input4_reg <= 0;
-      input5_reg <= 0;
-      input6_reg <= 0;
-      input7_reg <= 0;
-
       engine_ctrl_reg <= 0;
       engine_status_reg <= 0;
       engine_data_reg <= 0;
@@ -586,8 +581,6 @@ module nts_dispatcher #(
       nts_state_reg <= STATE_IDLE;
 
       ntp_time_lsb_reg <= 0;
-
-      previous_rx_data_valid <= 8'hFF; // Must not be zero as 00FF used to detect start of frame
 
       systick32_reg <= 32'h01;
 
@@ -620,15 +613,6 @@ module nts_dispatcher #(
 
       engines_ready_reg <= engines_ready_new;
 
-      input0_reg <= input1_reg;
-      input1_reg <= input2_reg;
-      input2_reg <= input3_reg;
-      input3_reg <= input4_reg;
-      input4_reg <= input5_reg;
-      input5_reg <= input6_reg;
-      input6_reg <= input7_reg;
-      input7_reg <= { detect_start_of_frame, i_rx_bad_frame, i_rx_good_frame, rx_data_valid_4bit, mac_rx_corrected };
-
       mini_discard_reg <= mini_discard_new;
       mini_rd_lwdv_reg <= mini_rd_lwdv_new;
       mini_rd_start_reg <= mini_rd_start_new;
@@ -649,11 +633,6 @@ module nts_dispatcher #(
 
       if (ntp_time_lsb_we)
         ntp_time_lsb_reg <= i_ntp_time[31:0];
-
-      //----------------------------------------------------------------
-      // Start of Frame Detector (previous MAC RX DV sampler)
-      //----------------------------------------------------------------
-      previous_rx_data_valid <= i_rx_data_valid;
 
       systick32_reg <= systick32_reg + 1;
 
@@ -705,13 +684,14 @@ module nts_dispatcher #(
   );
 
   counter64 counter_packets_discarded (
-     .i_areset     ( i_areset                         ),
-     .i_clk        ( i_clk                            ),
-     .i_inc        ( counter_packets_discarded_inc    ),
-     .i_rst        ( counter_packets_discarded_rst    ),
-     .i_lsb_sample ( counter_packets_discarded_lsb_we ),
-     .o_msb        ( counter_packets_discarded_msb    ),
-     .o_lsb        ( counter_packets_discarded_lsb    )
+     .i_areset     ( i_areset                            ),
+     .i_clk        ( i_clk                               ),
+     .i_inc        ( counter_packets_discarded_nts_inc |
+                     counter_packets_discarded_other_inc ),
+     .i_rst        ( counter_packets_discarded_rst       ),
+     .i_lsb_sample ( counter_packets_discarded_lsb_we    ),
+     .o_msb        ( counter_packets_discarded_msb       ),
+     .o_lsb        ( counter_packets_discarded_lsb       )
   );
 
   counter64 counter_packets_received (
@@ -727,7 +707,7 @@ module nts_dispatcher #(
   counter64 counter_start_of_frame (
      .i_areset     ( i_areset                  ),
      .i_clk        ( i_clk                     ),
-     .i_inc        ( detect_start_of_frame     ),
+     .i_inc        ( d_start_of_frame          ),
      .i_rst        ( 1'b0                      ),
      .i_lsb_sample ( counter_sof_detect_lsb_we ),
      .o_msb        ( counter_sof_detect_msb    ),
@@ -742,78 +722,6 @@ module nts_dispatcher #(
     for (i = 0; i < ENGINES; i = i + 1)
        if (!i_dispatch_busy[i]) counter = counter + 1;
     engines_ready_new = counter;
-  end
-
-  //----------------------------------------------------------------
-  // MAC RX Data/DataValid pre-processor
-  //
-  //  - Fix byte order of last word to fit rest of message.
-  //    (reduces complexity in rest of design)
-  //
-  //  - Increments byte counters
-  //
-  //----------------------------------------------------------------
-
-  function [63:0] mac_byte_reverse( input [63:0] rxd, input [7:0] rxv );
-  begin : reverse
-    reg [63:0] out;
-    out[56+:8] = rxv[0] ? rxd[0+:8]  : 8'h00;
-    out[48+:8] = rxv[1] ? rxd[8+:8]  : 8'h00;
-    out[40+:8] = rxv[2] ? rxd[16+:8] : 8'h00;
-    out[32+:8] = rxv[3] ? rxd[24+:8] : 8'h00;
-    out[24+:8] = rxv[4] ? rxd[32+:8] : 8'h00;
-    out[16+:8] = rxv[5] ? rxd[40+:8] : 8'h00;
-    out[8+:8]  = rxv[6] ? rxd[48+:8] : 8'h00;
-    out[0+:8]  = rxv[7] ? rxd[56+:8] : 8'h00;
-    mac_byte_reverse = out;
-  end
-  endfunction
-
-  always @*
-  begin : mac_rx_data_processor
-    reg [3:0] bytes;
-    bytes = 0;
-    counter_bytes_rx_we = 0;
-    counter_bytes_rx_new = 0;
-
-    mac_rx_corrected = mac_byte_reverse( i_rx_data, i_rx_data_valid );
-
-    case (i_rx_data_valid)
-      8'b1111_1111: bytes = 8;
-      8'b0111_1111: bytes = 7;
-      8'b0011_1111: bytes = 6;
-      8'b0001_1111: bytes = 5;
-      8'b0000_1111: bytes = 4;
-      8'b0000_0111: bytes = 3;
-      8'b0000_0011: bytes = 2;
-      8'b0000_0001: bytes = 1;
-      8'b0000_0000: bytes = 0;
-      default: ;
-    endcase
-
-    if (counter_bytes_rx_rst) begin
-      counter_bytes_rx_we = 1;
-      counter_bytes_rx_new = 0;
-    end else if (bytes != 0) begin
-      counter_bytes_rx_we = 1;
-      counter_bytes_rx_new = counter_bytes_rx_reg + { 60'h0, bytes };
-    end
-
-    rx_data_valid_4bit = bytes;
-  end
-
-  //----------------------------------------------------------------
-  // Start of Frame Detector
-  //----------------------------------------------------------------
-
-  always @*
-  begin : sof_detector
-    reg [15:0] rx_valid;
-    rx_valid = {previous_rx_data_valid, i_rx_data_valid};
-    detect_start_of_frame = 0;
-    if ( 16'h00FF == rx_valid) begin
-      detect_start_of_frame = 1;
-    end
   end
 
   //----------------------------------------------------------------
@@ -871,6 +779,10 @@ module nts_dispatcher #(
     end //enable_by_ctrl
   end
 
+  //------------------------------------------
+  // Mux engines to bus_read_data_mux
+  //------------------------------------------
+
   always @*
   begin : engine_api_mux
     reg [11:0] id;
@@ -888,125 +800,39 @@ module nts_dispatcher #(
     end
   end
 
-  wire        d_sof;
-  wire        d_bad;
-  wire        d_good;
-  wire  [3:0] d_valid4bits;
-  wire [63:0] d_data0;
+  //------------------------------------------
+  // Preprocessor
+  //  - Determines if packet to be handled as NTS.
+  //  - Converts oc_mac format to 64BE,4DV format.
+  //------------------------------------------
 
-  wire [15:0] d_ether_proto;
-  wire  [3:0] d_ip_version;
+  preprocessor preprocessor (
+    .i_clk           ( i_clk           ),
+    .i_areset        ( i_areset        ),
+    .i_rx_data_valid ( i_rx_data_valid ),
+    .i_rx_data       ( i_rx_data       ),
+    .i_rx_bad_frame  ( i_rx_bad_frame  ),
+    .i_rx_good_frame ( i_rx_good_frame ),
 
-  wire  [3:0] d_ip4_ihl;
-  wire  [7:0] d_ip4_protocol;
-  wire [15:0] d_ip4_total_length;
-  wire [15:0] d_ip4_udp_port_dst;
+    .o_rx_data_be    ( d_data0         ),
+    .o_rx_valid4bit  ( d_valid4bits    ),
+    .o_packet_nts    ( d_is_nts        ),
+    .o_packet_other  ( d_is_other      ),
+    .o_packet_drop   ( d_is_drop       ),
+    .o_ethernet_good ( d_good          ),
+    .o_ethernet_bad  ( d_bad           ),
 
-  wire [15:0] d_ip6_payload_length;
-  wire  [7:0] d_ip6_next;
-  wire [15:0] d_ip6_udp_port_dst;
+    .o_sof ( d_start_of_frame )
+  );
 
-  assign { d_sof, d_bad, d_good, d_valid4bits, d_data0 } = input0_reg;
-
-  assign d_ether_proto        = input1_reg[31:16];
-
-  assign d_ip_version         = input1_reg[15:12];
-
-  assign d_ip4_ihl            = input1_reg[11:8];
-  assign d_ip4_total_length   = input2_reg[63:48];
-  assign d_ip4_protocol       = input2_reg[7:0];
-  assign d_ip4_udp_port_dst   = input4_reg[31:16];
-
-  assign d_ip6_payload_length = input2_reg[47:32];
-  assign d_ip6_next           = input2_reg[31:24];
-  assign d_ip6_udp_port_dst   = input7_reg[63:48];
-
-  localparam [15:0] E_TYPE_IPV4 =  16'h08_00;
-  localparam [15:0] E_TYPE_IPV6 =  16'h86_DD;
-  localparam UDP_LENGTH_NTP_VANILLA = 8      // UDP Header
-                                    + 6 * 8; // NTP Payload
-  localparam  [7:0] IP_PROTO_UDP    = 8'h11; //17
-
-  reg decode_is_nts4;
-  reg decode_is_nts6;
-
-  wire decode_is_nts;
-  wire decode_is_other;
-  assign decode_is_nts   = d_sof & ( decode_is_nts6 | decode_is_nts4 );
-  assign decode_is_other = d_sof & ( !decode_is_nts6 & !decode_is_nts4 );
-
-  always @*
-  begin : decoder_is_ipv4
-    reg port_is_nts;
-    reg length_is_nts;
-
-    decode_is_nts4 = 0;
-
-    case (d_ip4_udp_port_dst)
-      123: port_is_nts = 1;
-      4123: port_is_nts = 1;
-      default: port_is_nts = 0;
-    endcase
-
-    case (d_ip4_total_length)
-      20 + UDP_LENGTH_NTP_VANILLA: length_is_nts = 0;
-      20 + UDP_LENGTH_NTP_VANILLA + 4 + 16: length_is_nts = 0;
-      20 + UDP_LENGTH_NTP_VANILLA + 4 + 20: length_is_nts = 0;
-      default: length_is_nts = 1;
-    endcase
-
-    if (d_ether_proto == E_TYPE_IPV4) begin
-      if (d_ip_version == 4) begin
-        if (d_ip4_ihl == 5) begin
-          if (d_ip4_protocol == IP_PROTO_UDP) begin
-            if (port_is_nts) begin
-              if (length_is_nts) begin
-                decode_is_nts4 = 1;
-              end
-            end
-          end
-        end
-      end
-    end
-  end
-
-  always @*
-  begin : decoder_is_ipv6
-    reg port_is_nts;
-    reg length_is_nts;
-
-    decode_is_nts6 = 0;
-
-    case (d_ip6_udp_port_dst)
-      123: port_is_nts = 1;
-      4123: port_is_nts = 1;
-      default: port_is_nts = 0;
-    endcase
-
-    case (d_ip6_payload_length)
-      UDP_LENGTH_NTP_VANILLA: length_is_nts = 0;
-      UDP_LENGTH_NTP_VANILLA + 4 + 16: length_is_nts = 0;
-      UDP_LENGTH_NTP_VANILLA + 4 + 20: length_is_nts = 0;
-      default: length_is_nts = 1;
-    endcase
-
-    if (d_ether_proto == E_TYPE_IPV6) begin
-      if (d_ip_version == 6) begin
-        if (d_ip6_next == IP_PROTO_UDP) begin
-          if (port_is_nts) begin
-            if (length_is_nts) begin
-              decode_is_nts6 = 1;
-            end
-          end
-        end
-      end
-    end
-  end
+  //------------------------------------------
+  // RX processing (NTS)
+  //------------------------------------------
 
   always @*
   begin : mac_rx_proc_nts
 
-    counter_packets_discarded_inc = 0;
+    counter_packets_discarded_nts_inc = 0;
 
     nts_discard_new = 0;
 
@@ -1021,15 +847,14 @@ module nts_dispatcher #(
     case (nts_state_reg)
       STATE_IDLE:
         begin
-          if (decode_is_nts) begin
+          if (d_is_nts) begin
             if (dispatcher_enabled_reg == 1'b0) begin
-              counter_packets_discarded_inc = 1;
 
             end else if (mux_nts_busy) begin
-              counter_packets_discarded_inc = 1;
+              counter_packets_discarded_nts_inc = 1;
 
             end else if (mux_nts_ready == 1'b0) begin
-              counter_packets_discarded_inc = 1;
+              counter_packets_discarded_nts_inc = 1;
 
             end else begin
               nts_state_we = 1;
@@ -1068,11 +893,13 @@ module nts_dispatcher #(
   end
 
   //------------------------------------------
-  // Current (MAC RX) frame handling
+  // RX processing (other protocols)
   //------------------------------------------
 
   always @*
   begin : mac_rx_proc_mini
+
+    counter_packets_discarded_other_inc = 0;
 
     mini_discard_new = 0;
 
@@ -1087,15 +914,14 @@ module nts_dispatcher #(
     case (mini_state_reg)
       STATE_IDLE:
         begin
-          if (decode_is_other) begin
+          if (d_is_other) begin
             if (dispatcher_enabled_reg == 1'b0) begin
-              //counter_packets_discarded_inc = 1;
 
             end else if (mux_mini_busy) begin
-              //counter_packets_discarded_inc = 1;
+              counter_packets_discarded_other_inc = 1;
 
             end else if (mux_mini_ready == 1'b0) begin
-              //counter_packets_discarded_inc = 1;
+              counter_packets_discarded_other_inc = 1;
 
             end else begin
               mini_state_we = 1;
@@ -1133,5 +959,23 @@ module nts_dispatcher #(
     endcase
   end
 
+  //------------------------------------------
+  // Byte counter
+  //------------------------------------------
+
+  always @*
+  begin : mac_rx_byte_counter
+    counter_bytes_rx_we = 0;
+    counter_bytes_rx_new = 0;
+
+    if (counter_bytes_rx_rst) begin
+      counter_bytes_rx_we = 1;
+      counter_bytes_rx_new = 0;
+    end else if (d_valid4bits != 0) begin
+      counter_bytes_rx_we = 1;
+      counter_bytes_rx_new = counter_bytes_rx_reg + { 60'h0, d_valid4bits }; //TODO optimize
+    end
+
+  end
 
 endmodule

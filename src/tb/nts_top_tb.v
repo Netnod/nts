@@ -47,7 +47,7 @@ module nts_top_tb;
 
   localparam TEST_UI36 = 0;
   localparam TEST_NORMAL = 1;
-  localparam TEST_NTS_PERFORMANCE = 0;
+  localparam TEST_NTS_PERFORMANCE = 1;
   localparam TEST_NTS_PERFORMANCE_DELAY_CYCLES = 10;
 
   localparam [11:0] API_ADDR_ENGINE_BASE        = 12'h000;
@@ -1965,8 +1965,8 @@ module nts_top_tb;
    //   $display("%s:%0d dut.dispatcher.mem_state[1]: %h", `__FILE__, `__LINE__, dut.dispatcher.mem_state_reg[1]);
     //always @*
       //$display("%s:%0d dut.dispatcher.current_mem: %h", `__FILE__, `__LINE__, dut.dispatcher.current_mem_reg);
-    always @*
-      $display("%s:%0d dut.dispatcher.mac_rx_corrected=%h",  `__FILE__, `__LINE__, dut.dispatcher.mac_rx_corrected);
+  //always @*
+  //  $display("%s:%0d dut.dispatcher.mac_rx_corrected=%h",  `__FILE__, `__LINE__, dut.dispatcher.mac_rx_corrected);
     always @*
       $display("%s:%0d dut.engine_extractor_packet_available: %h", `__FILE__, `__LINE__, dut.engine_extractor_packet_available);
     always @*

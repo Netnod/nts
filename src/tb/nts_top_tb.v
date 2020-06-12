@@ -1833,7 +1833,7 @@ module nts_top_tb;
           begin
             if (o_mac_tx_data_valid != 8'h00) $display("%s:%0d TX TX_IDLE illegal data: %h - %h", `__FILE__, `__LINE__, o_mac_tx_data_valid, o_mac_tx_data);
             if (o_mac_tx_start) begin
-              if (TEST_NTS_PERFORMANCE) begin
+              if (TEST_NTP_PERFORMANCE | TEST_NTS_PERFORMANCE) begin
                 tmp_ipg = 0;
               end else begin
                 tmp_ipg = tx_generate_ipg(tx_seed);

@@ -36,8 +36,8 @@ module nts_top_tb;
   localparam DEBUG_ICMP      = 0;
   localparam DEBUG           = 0;
   localparam BENCHMARK       = 1;
-  localparam ENGINES_NTS     = 1;
-  localparam ENGINES_MINI    = 1;
+  localparam ENGINES_NTS     = 16;
+  localparam ENGINES_MINI    = 2;
   localparam ENGINES         = ENGINES_NTS + ENGINES_MINI;
 
   localparam TEST_FUZZ_UI       = 0;
@@ -46,8 +46,12 @@ module nts_top_tb;
   localparam TEST_FUZZ_UI_INC   = 4;
 
   localparam TEST_UI36 = 0;
-  localparam TEST_NORMAL = 1;
-  localparam TEST_NTS_PERFORMANCE = 1;
+  localparam TEST_NORMAL = 0;
+
+  localparam TEST_NTP_PERFORMANCE = 1;
+  localparam TEST_NTP_PERFORMANCE_DELAY_CYCLES = 10;
+
+  localparam TEST_NTS_PERFORMANCE = 0;
   localparam TEST_NTS_PERFORMANCE_DELAY_CYCLES = 10;
 
   localparam [11:0] API_ADDR_ENGINE_BASE        = 12'h000;
@@ -362,6 +366,7 @@ module nts_top_tb;
   // NTS counter used in performance messurements
   //----------------------------------------------------------------
 
+  reg [63:0] ntp_counter;
   reg [63:0] nts_counter;
   reg [63:0] clock; //tick counter used in performance benchmarks
 
@@ -918,6 +923,7 @@ module nts_top_tb;
                                           128'hf001_BBB0_f001_BBB1_f001_BBB2_f001_BBB3 };
   initial begin
     $display("Test start: %s:%0d", `__FILE__, `__LINE__);
+    ntp_counter = 0;
     nts_counter = 0;
 
     i_clk    = 0;
@@ -1074,6 +1080,30 @@ module nts_top_tb;
       end
       #2000;
     end
+
+    if (TEST_NTP_PERFORMANCE) begin : ntp_perf
+      reg [63:0] time_start;
+      reg [63:0] time_elapsed;
+      reg [63:0] bits_per_second;
+      reg [63:0] packets_per_second;
+      reg [63:0] old_ntp_counter;
+      old_ntp_counter = 0;
+      ntp_counter = 0;
+      time_start = clock;
+      time_elapsed = 0;
+      while (time_elapsed < 156_000_000 ) begin
+        send_packet({64656'b0, PACKET_IPV6_VANILLA_NTP}, 880, 0);
+        time_elapsed = clock - time_start;
+        if (ntp_counter != old_ntp_counter) begin
+          old_ntp_counter = ntp_counter;
+          bits_per_second = (ntp_counter * 880 * 156_000_000) / time_elapsed;
+          packets_per_second = (ntp_counter * 156_000_000) / time_elapsed;
+          $display("%s:%0d PERF: Engines: %0d, %0d packets in %0d ticks. bits per second: %0d. packets per second: %0d", `__FILE__, `__LINE__, ENGINES, ntp_counter, time_elapsed, bits_per_second, packets_per_second);
+          #(TEST_NTP_PERFORMANCE_DELAY_CYCLES);
+        end
+      end
+    end
+
     if (TEST_NTS_PERFORMANCE) begin : nts_perf
       reg [63:0] time_start;
       reg [63:0] time_elapsed;
@@ -1695,6 +1725,7 @@ module nts_top_tb;
          garbage = 1;
       end else if (payload_length == 8+6*8) begin
         $display("%s:%0d * TX * NTP Payload Length: (%0d) (%0d) - NTP only, no auth", `__FILE__, `__LINE__, payload_length, payload_length-8);
+        ntp_counter = ntp_counter + 1;
         garbage = 1;
       end else if (payload_length == 8+6*8 + 4 ) begin
         $display("%s:%0d * TX * NTP Payload Length: (%0d) (%0d) - NTP Crypto-NAK KeyID: %h", `__FILE__, `__LINE__, payload_length, payload_length-8, ntpauth_keyid);

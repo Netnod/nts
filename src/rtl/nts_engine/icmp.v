@@ -660,93 +660,93 @@ module icmp #(
     tx_sum_bytes = 0;
     tx_sum_reset = 0;
     tx_sum_reset_value = 0;
-    if (i_process) begin
-      case (icmp_state_reg)
-        ICMP_S_V6_ECHO_COPY:
-          begin
-            ap_addr = OFFSET_ICMP_V6_ECHO_COPY;
-            ap_burst = i_memory_bound - OFFSET_ICMP_V6_ECHO_COPY;
-            ap_rd = 1;
-            tx_address = OFFSET_ICMP_V6_ECHO_COPY;
-            tx_from_rx = 1;
-          end
-        ICMP_S_V6_TRACE_COPY:
-          begin
-            ap_addr = 14; //Start of IP packet
-            ap_burst = tx_icmp_payload_length_reg - ICMP_V6_UNREACHABLE_INITIAL_BYTES;
-            ap_rd = 'b1;
-            tx_address = HEADER_LENGTH_ETHERNET + HEADER_LENGTH_IPV6 + ICMP_V6_UNREACHABLE_INITIAL_BYTES;
-            tx_from_rx = 1;
-          end
-        ICMP_S_V6_UPDATE_LENGTH:
-          begin
-            responder_update_length = 1;
-          end
-        ICMP_S_V6_CSUM_RESET:
-          begin : icmpv6_csum_reset
-            reg [15:0] len;
-            len = 0;
-            len[ADDR_WIDTH+3-1:0] = tx_icmp_payload_length_reg;
-            tx_sum_reset = 1;
-            tx_sum_reset_value = {8'h00, IP_PROTO_ICMPV6 } + len;
-          //$display("%s:%0d: csum_reset: %h len %h (%0d)", `__FILE__, `__LINE__, tx_sum_reset_value, len, len);
-          end
-        ICMP_S_V6_CSUM_CALC:
-          begin
-            tx_address = OFFSET_ETH_IPV6_SRCADDR;
-            tx_sum_en = 1;
-            tx_sum_bytes = tx_icmp_csum_bytes_reg;
-          //$display("%s:%0d: csum bytes %h (%0d)", `__FILE__, `__LINE__, tx_sum_bytes, tx_sum_bytes);
-          end
-        ICMP_S_V6_CSUM_UPDATE:
-          begin
-            tx_address = OFFSET_ETH_IPV6_ICMPV6_CSUM;
-            tx_write_en = 1;
-            tx_write_data = tx_icmp_tmpblock_reg;
-          end
-        ICMP_S_V4_ECHO_COPY:
-          begin
-            ap_addr  = OFFSET_ICMP_V4_ECHO_COPY;
-            ap_burst = i_memory_bound - OFFSET_ICMP_V4_ECHO_COPY;
-            ap_rd = 'b1;
-            tx_address = OFFSET_ICMP_V4_ECHO_COPY;
-            tx_from_rx = 1;
-          end
-        ICMP_S_V4_TRACE_COPY:
-          begin
-           ap_addr = 14; //Start of IP packet
-           ap_burst = ICMPV4_BYTES_TRACEROUTE;
-           ap_rd = 'b1;
-           tx_address = HEADER_LENGTH_ETHERNET + HEADER_LENGTH_IPV4 + ICMP_V4_UNREACHABLE_INITIAL_BYTES;
-           tx_from_rx = 1;
-          end
-        ICMP_S_V4_UPDATE_LENGTH:
-          begin
-            responder_update_length = 1;
-          end
-        ICMP_S_V4_CSUM_RESET:
-          begin
-            tx_sum_reset = 1;
-            tx_sum_reset_value = 0;
-          end
-        ICMP_S_V4_CSUM_CALC:
-          begin
-            tx_address = OFFSET_ETH_IPV4_DATA;
-            tx_sum_en = 1;
-            tx_sum_bytes = tx_icmp_csum_bytes_reg;
-          //$display("%s:%0d: csum bytes %h (%0d)", `__FILE__, `__LINE__, tx_sum_bytes, tx_sum_bytes);
-           end
-        ICMP_S_V4_CSUM_UPDATE:
-          begin
-          //$display("%s:%0d: tx_icmp_tmpblock_reg: %h", `__FILE__, `__LINE__, tx_icmp_tmpblock_reg);
-            tx_address = OFFSET_ETH_IPV4_ICMPV4_CSUM - 6;
-            tx_write_en = 1;
-            tx_write_data = tx_icmp_tmpblock_reg;
-            //$display("%s:%0d: TX[ %0d (dec) ] = %h", `__FILE__, `__LINE__, tx_address, tx_write_data);
-          end
-        default: ;
-      endcase
-    end
+
+    case (icmp_state_reg)
+      ICMP_S_V6_ECHO_COPY:
+        begin
+          ap_addr = OFFSET_ICMP_V6_ECHO_COPY;
+          ap_burst = i_memory_bound - OFFSET_ICMP_V6_ECHO_COPY;
+          ap_rd = 1;
+          tx_address = OFFSET_ICMP_V6_ECHO_COPY;
+          tx_from_rx = 1;
+        end
+      ICMP_S_V6_TRACE_COPY:
+        begin
+          ap_addr = 14; //Start of IP packet
+          ap_burst = tx_icmp_payload_length_reg - ICMP_V6_UNREACHABLE_INITIAL_BYTES;
+          ap_rd = 'b1;
+          tx_address = HEADER_LENGTH_ETHERNET + HEADER_LENGTH_IPV6 + ICMP_V6_UNREACHABLE_INITIAL_BYTES;
+          tx_from_rx = 1;
+        end
+      ICMP_S_V6_UPDATE_LENGTH:
+        begin
+          responder_update_length = 1;
+        end
+      ICMP_S_V6_CSUM_RESET:
+        begin : icmpv6_csum_reset
+          reg [15:0] len;
+          len = 0;
+          len[ADDR_WIDTH+3-1:0] = tx_icmp_payload_length_reg;
+          tx_sum_reset = 1;
+          tx_sum_reset_value = {8'h00, IP_PROTO_ICMPV6 } + len;
+        //$display("%s:%0d: csum_reset: %h len %h (%0d)", `__FILE__, `__LINE__, tx_sum_reset_value, len, len);
+        end
+      ICMP_S_V6_CSUM_CALC:
+        begin
+          tx_address = OFFSET_ETH_IPV6_SRCADDR;
+          tx_sum_en = 1;
+          tx_sum_bytes = tx_icmp_csum_bytes_reg;
+        //$display("%s:%0d: csum bytes %h (%0d)", `__FILE__, `__LINE__, tx_sum_bytes, tx_sum_bytes);
+        end
+      ICMP_S_V6_CSUM_UPDATE:
+        begin
+          tx_address = OFFSET_ETH_IPV6_ICMPV6_CSUM;
+          tx_write_en = 1;
+          tx_write_data = tx_icmp_tmpblock_reg;
+        end
+      ICMP_S_V4_ECHO_COPY:
+        begin
+          ap_addr  = OFFSET_ICMP_V4_ECHO_COPY;
+          ap_burst = i_memory_bound - OFFSET_ICMP_V4_ECHO_COPY;
+          ap_rd = 'b1;
+          tx_address = OFFSET_ICMP_V4_ECHO_COPY;
+          tx_from_rx = 1;
+        end
+      ICMP_S_V4_TRACE_COPY:
+        begin
+         ap_addr = 14; //Start of IP packet
+         ap_burst = ICMPV4_BYTES_TRACEROUTE;
+         ap_rd = 'b1;
+         tx_address = HEADER_LENGTH_ETHERNET + HEADER_LENGTH_IPV4 + ICMP_V4_UNREACHABLE_INITIAL_BYTES;
+         tx_from_rx = 1;
+        end
+      ICMP_S_V4_UPDATE_LENGTH:
+        begin
+          responder_update_length = 1;
+        end
+      ICMP_S_V4_CSUM_RESET:
+        begin
+          tx_sum_reset = 1;
+          tx_sum_reset_value = 0;
+        end
+      ICMP_S_V4_CSUM_CALC:
+        begin
+          tx_address = OFFSET_ETH_IPV4_DATA;
+          tx_sum_en = 1;
+          tx_sum_bytes = tx_icmp_csum_bytes_reg;
+        //$display("%s:%0d: csum bytes %h (%0d)", `__FILE__, `__LINE__, tx_sum_bytes, tx_sum_bytes);
+         end
+      ICMP_S_V4_CSUM_UPDATE:
+        begin
+        //$display("%s:%0d: tx_icmp_tmpblock_reg: %h", `__FILE__, `__LINE__, tx_icmp_tmpblock_reg);
+          tx_address = OFFSET_ETH_IPV4_ICMPV4_CSUM - 6;
+          tx_write_en = 1;
+          tx_write_data = tx_icmp_tmpblock_reg;
+          //$display("%s:%0d: TX[ %0d (dec) ] = %h", `__FILE__, `__LINE__, tx_address, tx_write_data);
+        end
+      default: ;
+    endcase
+
   end
 
 

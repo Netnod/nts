@@ -251,7 +251,7 @@ module preprocessor (
     endcase
 
     case (d_ip4_total_length)
-      20 + UDP_LENGTH_NTP_VANILLA: length_is_nts = 0;
+      20 + UDP_LENGTH_NTP_VANILLA: length_is_nts = 1; //NTS engines processing NTP
       20 + UDP_LENGTH_NTP_VANILLA + 4 + 16: length_is_nts = 0;
       20 + UDP_LENGTH_NTP_VANILLA + 4 + 20: length_is_nts = 0;
       default: length_is_nts = 1;
@@ -293,7 +293,7 @@ module preprocessor (
     endcase
 
     case (d_ip6_payload_length)
-      UDP_LENGTH_NTP_VANILLA: length_is_nts = 0;
+      UDP_LENGTH_NTP_VANILLA: length_is_nts = 1; //NTS engines processing NTP
       UDP_LENGTH_NTP_VANILLA + 4 + 16: length_is_nts = 0;
       UDP_LENGTH_NTP_VANILLA + 4 + 20: length_is_nts = 0;
       default: length_is_nts = 1;

@@ -201,7 +201,7 @@ module nts_top #(
 
   localparam [ENGINES-1:0] SUPPORT_NTS      = {{ENGINES_MINI{1'b0}},{ENGINES_NTS{1'b1}}};
   localparam [ENGINES-1:0] SUPPORT_NTP_AUTH = {{ENGINES_MINI{1'b1}},{ENGINES_NTS{1'b0}}};
-  localparam [ENGINES-1:0] SUPPORT_NTP      = {{ENGINES_MINI{1'b1}},{ENGINES_NTS{1'b0}}};
+  localparam [ENGINES-1:0] SUPPORT_NTP      = {{ENGINES_MINI{1'b0}},{ENGINES_NTS{1'b1}}};
   localparam [ENGINES-1:0] SUPPORT_NET      = {{ENGINES_MINI{1'b1}},{ENGINES_NTS{1'b0}}};
   genvar engine_index;
   generate

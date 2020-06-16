@@ -48,10 +48,10 @@ module nts_top_tb;
   localparam TEST_UI36 = 0;
   localparam TEST_NORMAL = 0;
 
-  localparam TEST_NTP_PERFORMANCE = 1;
+  localparam TEST_NTP_PERFORMANCE = 0;
   localparam TEST_NTP_PERFORMANCE_DELAY_CYCLES = 10;
 
-  localparam TEST_NTS_PERFORMANCE = 0;
+  localparam TEST_NTS_PERFORMANCE = 1;
   localparam TEST_NTS_PERFORMANCE_DELAY_CYCLES = 10;
 
   localparam [11:0] API_ADDR_ENGINE_BASE        = 12'h000;

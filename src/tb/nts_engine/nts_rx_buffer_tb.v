@@ -36,10 +36,10 @@ module nts_rx_buffer_tb;
   reg                     i_areset;
   reg                     i_clk;
   reg                     i_parser_busy;
-  reg                     dispatch_packet_avialable;
-  wire                    dispatch_packet_read;
+  /* verilator lint_off UNUSED */
+  wire                    dispatch_ready;
+  /* verilator lint_on UNUSED */
   reg                     dispatch_fifo_empty;
-  wire                    dispatch_fifo_rd_start;
   reg                     dispatch_fifo_rd_valid;
   reg  [63:0]             dispatch_fifo_rd_data;
 
@@ -52,9 +52,6 @@ module nts_rx_buffer_tb;
   wire                    access_port_rd_dv;
   wire  [63:0]            access_port_rd_data;
 
-  reg rd_start_recieved;
-  reg rd_read_recieved;
-
   reg [64*TEST_BUFF_WORDS-1:0] rd_buf;
 
   reg [15:0] csum;
@@ -63,10 +60,8 @@ module nts_rx_buffer_tb;
      .i_areset(i_areset),
      .i_clk(i_clk),
      .i_parser_busy(i_parser_busy),
-     .i_dispatch_packet_available(dispatch_packet_avialable),
-     .o_dispatch_packet_read(dispatch_packet_read),
+     .o_dispatch_ready(dispatch_ready),
      .i_dispatch_fifo_empty(dispatch_fifo_empty),
-     .o_dispatch_fifo_rd_start(dispatch_fifo_rd_start),
      .i_dispatch_fifo_rd_valid(dispatch_fifo_rd_valid),
      .i_dispatch_fifo_rd_data(dispatch_fifo_rd_data),
      .o_access_port_wait(access_port_wait),
@@ -171,12 +166,55 @@ module nts_rx_buffer_tb;
         #10 ;
       end
     end
+    access_port_addr = 0;
+    access_port_csum_initial = 0;
+    access_port_rd_en = 0;
+    access_port_wordsize = 0;
+    access_port_burstsize = 0;
   end
   endtask
 
   task read_csum (input [10:0] addr, input [15:0] bytes, output [15:0] csum);
   begin
     read_csum_with_init(addr, bytes, 16'h0000, csum);
+  end
+  endtask
+
+  localparam [431:0] PACKET_TCP = {
+    128'hff_fe_fd_fc_fb_fa_98_03_9b_3c_1c_66_08_00_45_00, // ÿþýüûú...<.f..E.
+    128'h00_28_c9_cf_00_00_40_06_df_90_c0_a8_28_01_c0_a8, // .(ÉÏ..@.ß.À¨(.À¨
+    128'h28_1e_00_03_00_04_7b_2a_9e_cf_00_00_00_00_50_02, // (.....{*.Ï....P.
+     48'h05_c8_be_a9_00_00                                // .È¾©..
+  };
+
+  task test_csum_packet_tcp;
+  begin : test_csum_packet_tcp_
+    reg [15:0] csum;
+     if (VERBOSE>0) $display("%s:%0d csum access port tests with a real TCP packet.", `__FILE__, `__LINE__);
+        #100
+    #10;
+    i_areset = 1;
+    #20;
+    i_areset = 0;
+    dispatch_fifo_empty = 'b0;
+    dispatch_fifo_rd_valid = 0;
+    dispatch_fifo_rd_data = 'b00;
+    i_parser_busy = 0;
+    #20;
+    #10 { dispatch_fifo_rd_valid, dispatch_fifo_rd_data } = { 1'b1, PACKET_TCP[431-:64] };
+    #10 { dispatch_fifo_rd_valid, dispatch_fifo_rd_data } = { 1'b1, PACKET_TCP[367-:64] };
+    #10 { dispatch_fifo_rd_valid, dispatch_fifo_rd_data } = { 1'b1, PACKET_TCP[303-:64] };
+    #10 { dispatch_fifo_rd_valid, dispatch_fifo_rd_data } = { 1'b1, PACKET_TCP[239-:64] };
+    #10 { dispatch_fifo_rd_valid, dispatch_fifo_rd_data } = { 1'b1, PACKET_TCP[175-:64] };
+    #10 { dispatch_fifo_rd_valid, dispatch_fifo_rd_data } = { 1'b1, PACKET_TCP[111-:64] };
+    #10 { dispatch_fifo_rd_valid, dispatch_fifo_rd_data } = { 1'b1, PACKET_TCP[47-:48], 16'h0 };
+    #10;
+    dispatch_fifo_empty = 'b1;
+    dispatch_fifo_rd_valid = 0;
+    dispatch_fifo_rd_data = 0;
+    #10;
+    read_csum( 14, 20, csum );
+    `assert ( csum === 16'hffff );
   end
   endtask
 
@@ -195,21 +233,13 @@ module nts_rx_buffer_tb;
         dispatch_fifo_empty = 'b0;
         dispatch_fifo_rd_valid = 0;
         dispatch_fifo_rd_data = 'b00;
-        dispatch_packet_avialable = 0;
         #5 ;
 
         #10 i_areset = 0;
 
-        #10 dispatch_packet_avialable = 'b1;
         #10 dispatch_fifo_empty = 'b0;
-        #10 `assert(dispatch_fifo_rd_start == 'b0);
-        #10 `assert(dispatch_fifo_rd_start == 'b0);
         i_parser_busy = 0;
         #10;
-        if (VERBOSE>0) $display("%s:%0d Waiting for dut to signal ready to receive.", `__FILE__, `__LINE__);
-        while (rd_start_recieved == 'b0) #10;
-        dispatch_packet_avialable = 'b0;
-
         if (VERBOSE>0) $display("%s:%0d Populate test values.", `__FILE__, `__LINE__);
         #10 { dispatch_fifo_rd_valid, dispatch_fifo_rd_data } = { 1'b1, 64'hdeadbeef00000000 };
         #10 { dispatch_fifo_rd_valid, dispatch_fifo_rd_data } = { 1'b1, 64'habad1deac0fef00d };
@@ -219,9 +249,7 @@ module nts_rx_buffer_tb;
         #10 { dispatch_fifo_rd_valid, dispatch_fifo_rd_data } = { 1'b0, 64'h0 };
 
         #10 dispatch_fifo_empty = 'b1;
-        if (VERBOSE>0) $display("%s:%0d Waiting for dut to signal ACK fifo read.", `__FILE__, `__LINE__);
-        while (rd_read_recieved == 'b0) #10;
-        dispatch_fifo_empty = 'b0;
+        #10 dispatch_fifo_empty = 'b0;
 
         if (VERBOSE>0) $display("%s:%0d 64 bit access port tests.", `__FILE__, `__LINE__);
         #100
@@ -446,23 +474,13 @@ module nts_rx_buffer_tb;
         read_csum_with_init(0, 4, 16'h6263, csum);
         `assert(csum == 16'h0001); //overflows comes back in csum algorithm
 
+        test_csum_packet_tcp();
+
         $display("Test stop: %s:%0d.", `__FILE__, `__LINE__);
         #40 $finish;
       end
 
-  always @(posedge i_clk or posedge i_areset)
-  if (i_areset) begin
-    rd_start_recieved <= 0;
-    rd_read_recieved <= 0;
-  end else if (dispatch_fifo_rd_start) begin
-    rd_start_recieved <= 1;
-  end else if (dispatch_packet_read) begin
-    rd_read_recieved <= 1;
-  end
-
   if (VERBOSE>2) begin
-    always @(posedge i_clk)
-      if (dispatch_packet_read==1) $display("%s:%0d dispatch_packet_read.", `__FILE__, `__LINE__);
 
     always @(posedge i_clk)
       begin
@@ -477,16 +495,7 @@ module nts_rx_buffer_tb;
       end
 
     always @*
-      $display("%s:%0d dispatch_packet_read: %b",  `__FILE__, `__LINE__, dispatch_packet_read);
-
-    always @*
-      $display("%s:%0d dispatch_packet_avialable: %b",  `__FILE__, `__LINE__, dispatch_packet_avialable);
-
-    always @*
       $display("%s:%0d dispatch_fifo_empty: %b",  `__FILE__, `__LINE__, dispatch_fifo_empty);
-
-    always @*
-      $display("%s:%0d dispatch_fifo_rd_start: %b",  `__FILE__, `__LINE__, dispatch_fifo_rd_start);
 
     always @*
       $display("%s:%0d dut.memctrl_reg=%h", `__FILE__, `__LINE__, dut.memctrl_reg);

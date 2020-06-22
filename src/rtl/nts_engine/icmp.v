@@ -87,8 +87,6 @@ module icmp #(
 
   output o_tx_from_rx,
 
-  output o_icmp_idle,
-
   output                    o_responder_en,
   output             [63:0] o_responder_data,
   output                    o_responder_update_length,
@@ -445,7 +443,6 @@ module icmp #(
   assign o_responder_length_we = response_packet_total_length_we;
   assign o_responder_length_new = response_packet_total_length_new;
 
-  assign o_icmp_idle       = icmp_state_reg == ICMP_S_IDLE;
   assign o_packet_drop     = icmp_state_reg == ICMP_S_DROP_PACKET;
   assign o_packet_transmit = icmp_state_reg == ICMP_S_TRANSMIT_PACKET;
 

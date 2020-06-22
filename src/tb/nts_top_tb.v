@@ -33,11 +33,12 @@ module nts_top_tb;
 
   localparam DEBUG_CRYPTO_RX = 0;
   localparam DEBUG_MODEL_RX  = 0;
+  localparam DEBUG_GRE       = 1;
   localparam DEBUG_ICMP      = 0;
   localparam DEBUG           = 0;
   localparam BENCHMARK       = 1;
-  localparam ENGINES_NTS     = 16;
-  localparam ENGINES_MINI    = 2;
+  localparam ENGINES_NTS     = 1;
+  localparam ENGINES_MINI    = 1;
   localparam ENGINES         = ENGINES_NTS + ENGINES_MINI;
 
   localparam TEST_FUZZ_UI       = 0;
@@ -46,12 +47,12 @@ module nts_top_tb;
   localparam TEST_FUZZ_UI_INC   = 4;
 
   localparam TEST_UI36 = 0;
-  localparam TEST_NORMAL = 0;
+  localparam TEST_NORMAL = 1;
 
   localparam TEST_NTP_PERFORMANCE = 0;
   localparam TEST_NTP_PERFORMANCE_DELAY_CYCLES = 10;
 
-  localparam TEST_NTS_PERFORMANCE = 1;
+  localparam TEST_NTS_PERFORMANCE = 0;
   localparam TEST_NTS_PERFORMANCE_DELAY_CYCLES = 10;
 
   localparam [11:0] API_ADDR_ENGINE_BASE        = 12'h000;
@@ -149,6 +150,13 @@ module nts_top_tb;
   localparam [11:0] API_ADDR_PARSER_IPV6_5       = API_ADDR_PARSER_BASE + 'h74;
   localparam [11:0] API_ADDR_PARSER_IPV6_6       = API_ADDR_PARSER_BASE + 'h78;
   localparam [11:0] API_ADDR_PARSER_IPV6_7       = API_ADDR_PARSER_BASE + 'h7C;
+  localparam [11:0] API_ADDR_GRE_DST_MAC_MSB = API_ADDR_PARSER_BASE + 'h33;
+  localparam [11:0] API_ADDR_GRE_DST_MAC_LSB = API_ADDR_PARSER_BASE + 'h34;
+  localparam [11:0] API_ADDR_GRE_DST_IP      = API_ADDR_PARSER_BASE + 'h35;
+  localparam [11:0] API_ADDR_GRE_SRC_MAC_MSB = API_ADDR_PARSER_BASE + 'h36;
+  localparam [11:0] API_ADDR_GRE_SRC_MAC_LSB = API_ADDR_PARSER_BASE + 'h37;
+  localparam [11:0] API_ADDR_GRE_SRC_IP      = API_ADDR_PARSER_BASE + 'h39;
+
 
   localparam [11:0] API_ADDR_NTPAUTH_KEYMEM_BASE          = 12'h300;
   localparam [11:0] API_ADDR_NTPAUTH_KEYMEM_NAME0         = API_ADDR_NTPAUTH_KEYMEM_BASE + 'h00;
@@ -322,6 +330,30 @@ module nts_top_tb;
       128'h00_00_d9_c1_24_9c_49_81_79_2f_00_00_00_0c_6b_94, //   ..ÙÁ$.I.y/....k.
       128'h4d_ce_3f_05_51_0d_20_6f_61_5f_36_e9_00_fa_53_25, //   MÎ?.Q. oa_6é.úS%
        16'h94_c8                                            // .È
+  };
+
+  localparam [591:0] PACKET_TCP = {
+    128'hff_fe_fd_fc_fb_fa_64_9d_99_b1_08_9e_08_00_45_00,  // ÿþýüûúd..±....E.
+    128'h00_3c_e9_e5_40_00_40_06_7f_66_c0_a8_28_01_c0_a8,  // .<éå@.@..fÀ¨(.À¨
+    128'h28_1e_d7_3c_00_07_8e_79_cf_43_00_00_00_00_a0_02,  // (.×<...yÏC.... .
+    128'hfa_f0_d1_9e_00_00_02_04_05_b4_04_02_08_0a_0e_a5,  // úðÑ......´.....¥
+     80'hac_2a_00_00_00_00_01_03_03_07                     // ¬*........
+  };
+
+  localparam [431:0] PACKET_TCP2 = {
+    128'hff_fe_fd_fc_fb_fa_98_03_9b_3c_1c_66_08_00_45_00, // ÿþýüûú...<.f..E.
+    128'h00_28_19_5f_00_00_40_06_90_01_c0_a8_28_01_c0_a8, // .(._..@...À¨(.À¨
+    128'h28_1e_00_03_00_04_4c_04_1b_85_00_00_00_00_50_02, // (.....L.......P.
+     48'h05_c8_71_1a_00_00                                // .Èq...
+  };
+
+  localparam [655:0] PACKET_UDP_OPTIONS = {
+    128'hff_fe_fd_fc_fb_fa_98_03_9b_3c_1c_66_08_00_4f_00, // ÿþýüûú...<.f..O.
+    128'h00_44_2b_3c_00_00_40_11_4b_f2_c0_a8_28_01_c0_a8, // .D+<..@.KòÀ¨(.À¨
+    128'h28_1e_01_07_27_04_00_00_00_00_00_00_00_00_00_00, // (...'...........
+    128'h00_00_00_00_00_00_00_00_00_00_00_00_00_00_00_00, // ................
+    128'h00_00_00_00_00_00_00_00_00_00_00_04_00_04_00_08, // ................
+     16'h2e_66                                            // .f
   };
 
   localparam API_ADDR_WIDTH  = 12;
@@ -617,6 +649,17 @@ module nts_top_tb;
   end
   endtask
 
+  task parser_enable_gre ( input [11:0] engine );
+  begin
+    api_write64( {16'h00_00, 48'h12_34_56_78_9a_bc}, engine, API_ADDR_GRE_DST_MAC_MSB );
+    api_write64( {16'h00_00, 48'hfe_dc_ba_98_76_54}, engine, API_ADDR_GRE_SRC_MAC_MSB );
+    api_write32( 32'hb10dfee7, engine, API_ADDR_GRE_DST_IP );
+    api_write32( 32'h13371337, engine, API_ADDR_GRE_SRC_IP );
+
+    set_parser_ctrl_bit( engine, 5'h5, 1'b1 );
+  end
+  endtask
+
   task init_address_resolution( input [11:0] engine );
   begin : address_resoltion
     integer i;
@@ -763,7 +806,7 @@ module nts_top_tb;
   // Design Under Test (DUT)
   //----------------------------------------------------------------
 
-  nts_top #( 
+  nts_top #(
     .ENGINES_NTS(ENGINES_NTS),
     .ENGINES_MINI(ENGINES_MINI),
     .ADDR_WIDTH(ADDR_WIDTH)
@@ -953,6 +996,7 @@ module nts_top_tb;
       for (i = 0; i < 100; i = i + 1) begin
         for (engine = 0; engine < ENGINES; engine = engine + 1) begin
           case (i)
+            1: parser_enable_gre( engine );
             2: init_address_resolution( engine );
             3: parser_enable_ntp( engine );
             4: init_ntp_auth( engine );
@@ -978,7 +1022,12 @@ module nts_top_tb;
           arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'hD0_A1_A2_A3);
           arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'hE0_A1_A2_A3);
           arp_request(48'h85_84_83_82_81_80, 32'h44_43_42_41, 32'hF0_A1_A2_A3);
-        //send_packet({64592'b0, PACKET_PING6}, 944, 0);
+          #2000;
+          send_packet({64944'b0, PACKET_TCP}, 592, 0 );
+          send_packet({65104'b0, PACKET_TCP2}, 432, 0 );
+          send_packet({64880'h0, PACKET_UDP_OPTIONS}, 656, 0);
+          send_packet({64752'h0, PACKET_PING4}, 784, 0);
+          send_packet({64592'b0, PACKET_PING6}, 944, 0);
           send_packet({64944'b0, PACKET_IP4_UDP_TRACEROUTE}, 592, 0);
           send_packet({64784'b0, PACKET_IP6_UDP_TRACEROUTE}, 752, 0);
           send_packet({63376'b0, NTS_TEST_REQUEST_WITH_KEY_IPV4_2_BAD_KEYID}, 2160, 0);
@@ -1067,6 +1116,9 @@ module nts_top_tb;
       $display("%s:%0d: IPv4 NTP AUTH SHA1", `__FILE__, `__LINE__);
       send_packet( { 64624'b0, PACKET_NTP_AUTH_TESTKEYSHA_1 }, 912, 0 );
       #20000;
+      $display("%s:%0d: IPv4 TCP", `__FILE__, `__LINE__);
+      send_packet( { 64944'b0, PACKET_TCP }, 592, 0 );
+      #20000;
       begin : ping
         integer i;
         for (i = 0; i < 3; i = i + 1) begin
@@ -1075,6 +1127,20 @@ module nts_top_tb;
           #2000;
           $display("%s:%0d: ICMPv4 Ping4", `__FILE__, `__LINE__);
           send_packet({64752'h0, PACKET_PING4}, 784, 0);
+          #2000;
+        end
+      end
+      begin : gre
+        integer i;
+        for (i = 0; i < 10; i = i + 1) begin
+          $display("%s:%0d: IPv4 TCP", `__FILE__, `__LINE__);
+          send_packet( { 64944'b0, PACKET_TCP }, 592, 0 );
+          #2000;
+          $display("%s:%0d: IPv4 TCP (2)", `__FILE__, `__LINE__);
+          send_packet({65104'b0, PACKET_TCP2}, 432, 0 );
+          #2000;
+          $display("%s:%0d: IPv4 UDP OPTIONS", `__FILE__, `__LINE__);
+          send_packet({64880'h0, PACKET_UDP_OPTIONS}, 656, 0);
           #2000;
         end
       end
@@ -1729,7 +1795,7 @@ module nts_top_tb;
         garbage = 1;
       end else if (payload_length == 8+6*8 + 4 ) begin
         $display("%s:%0d * TX * NTP Payload Length: (%0d) (%0d) - NTP Crypto-NAK KeyID: %h", `__FILE__, `__LINE__, payload_length, payload_length-8, ntpauth_keyid);
-        if (ntpauth_keyid != 0) 
+        if (ntpauth_keyid != 0)
           $display("%s:%0d * TX * NTP Illegal Crypto-NAK KeyID: %h (expected 0)", `__FILE__, `__LINE__, ntpauth_keyid);
         garbage = 1;
       end else if (payload_length == 8+6*8 + 4 + 16) begin
@@ -1802,6 +1868,54 @@ module nts_top_tb;
   end
   endtask
 
+  task check_gre;
+  begin : check_igre_
+    reg [15:0] ethernet_protocol;
+    reg  [7:0] ip_ihl;
+    reg  [7:0] ip_protocol;
+    reg [15:0] ip_total_length;
+    reg [31:0] ip_src;
+    reg [31:0] ip_dst;
+    reg [15:0] gre_cr0v;
+    reg [15:0] gre_p;
+    reg [31:0] i;
+    reg [31:0] bytes;
+    reg [31:0] payload;
+
+    ethernet_protocol = tx_read_word16( 12 );
+    ip_ihl = tx_read_byte( 14 );
+    ip_protocol = tx_read_byte( 14 + 9 );
+    ip_total_length = tx_read_word16(14 + 2);
+    ip_src = tx_read_word32(14 + 12);
+    ip_dst = tx_read_word32(14 + 16);
+    gre_cr0v = tx_read_word16(14 + 20);
+    gre_p = tx_read_word16(14 + 20 + 2);
+    if (ethernet_protocol == 16'h0800) begin
+      if (ip_ihl == 8'h45) begin
+        if (ip_total_length > 20) begin
+          if (ip_protocol == 47) begin
+            $display("%s:%0d * TX * GRE * Source: %h", `__FILE__, `__LINE__, ip_src);
+            $display("%s:%0d * TX * GRE * Destination: %h", `__FILE__, `__LINE__, ip_dst);
+            $display("%s:%0d * TX * GRE * Protocol: %h", `__FILE__, `__LINE__, gre_p);
+            $display("%s:%0d * TX * GRE * Checksum Present, R0, Version: %h", `__FILE__, `__LINE__, gre_cr0v);
+            $display("%s:%0d * TX * GRE * Total length: %h (%0d dec)", `__FILE__, `__LINE__, ip_total_length, ip_total_length);
+            $display("%s:%0d * TX * GRE * Payload length: %0d (dec)", `__FILE__, `__LINE__, ip_total_length - 24);
+            for (i = 24; i < {16'h0,ip_total_length}; i = i + 4) begin
+              payload = tx_read_word32(14 + i);
+              $display("%s:%0d * TX * GRE * Payload hex, offset = %h, data = %h", `__FILE__, `__LINE__, i+14, payload);
+            end
+            bytes = tx_rec_bytes;
+            for (i = 14 + {16'h0,ip_total_length}; i < bytes; i = i + 4) begin
+              payload = tx_read_word32(i);
+              $display("%s:%0d * TX * GRE * trailing garbage, offset = %h, data = %h", `__FILE__, `__LINE__, i, payload);
+            end
+          end
+        end
+      end
+    end
+  end
+  endtask
+
   always @(posedge i_clk or posedge i_areset)
   begin : tx_checks
     if (i_areset) begin
@@ -1809,6 +1923,7 @@ module nts_top_tb;
       $display("%s:%0d * TX * tx_rec_bytes: %h (%0d)", `__FILE__, `__LINE__, tx_rec_bytes, tx_rec_bytes);
       check_icmp();
       check_ipv4();
+      check_gre();
       check_udp_checksum();
       check_nts();
     end
@@ -1943,12 +2058,37 @@ module nts_top_tb;
     `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.icmp_enabled.icmp.response_done_reg );
     `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.icmp_enabled.icmp.o_packet_drop );
     `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.icmp_enabled.icmp.o_packet_transmit );
-    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.icmp_enabled.icmp.o_icmp_idle );
-    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.icmp_enabled.icmp.o_responder_en );
     `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.icmp_enabled.icmp.o_responder_data );
     `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.icmp_enabled.icmp.o_responder_update_length );
     `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.icmp_enabled.icmp.o_responder_length_we );
     `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.icmp_enabled.icmp.o_responder_length_new );
+  end
+
+  if (DEBUG_GRE>0) begin
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.gre_enabled.gre.i_api_dst_mac_msb_we );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.gre_enabled.gre.i_api_dst_mac_lsb_we );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.gre_enabled.gre.i_api_dst_ipv4_we );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.gre_enabled.gre.i_api_src_mac_msb_we );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.gre_enabled.gre.i_api_src_mac_lsb_we );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.gre_enabled.gre.i_api_src_ipv4_we );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.gre_enabled.gre.o_rx_rd );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.gre_enabled.gre.o_rx_addr );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.gre_enabled.gre.o_rx_burst );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.gre_enabled.gre.o_tx_addr );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.gre_enabled.gre.o_responder_en );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.gre_enabled.gre.o_responder_data );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.gre_enabled.gre.o_responder_update_length );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.gre_enabled.gre.o_responder_length_we );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.gre_enabled.gre.o_responder_length_new );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.gre_enabled.gre.o_packet_transmit );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.gre_enabled.gre.o_packet_drop );
+
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.gre_enabled.gre.state_reg );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.protocol_detect_gre_reg );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.detect_ipv4_reg );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.ipdecode_ip4_ihl_reg );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.detect_ipv4_options_reg );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.detect_ipv4_fragmented_reg );
   end
 
   if (DEBUG>0) begin
@@ -1959,6 +2099,9 @@ module nts_top_tb;
     `always_inspect( dut.genblk1[ENGINES_NTS].engine.tx_buffer.o_dispatch_tx_packet_available );
     `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.state_reg );
     `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.word_counter_overflow_reg);
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.detect_ipv4_reg );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.detect_ipv4_fragmented_reg );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.detect_ipv4_options_reg );
     `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.detect_ipv6_reg );
     `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.ipdecode_ip6_payload_length_reg);
     `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.ipdecode_ip6_next_reg );

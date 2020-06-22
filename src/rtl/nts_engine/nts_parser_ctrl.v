@@ -38,7 +38,7 @@ module nts_parser_ctrl #(
   parameter [15:0] LEN_NTS_COOKIE             = 'h0068,
   parameter [15:0] LEN_NTS_MIN_UNIQUE_IDENT   = 'h0024, //5.3. The string MUST be at least 32 octets long.
   parameter [15:0] LEN_NTS_AUTHENTICATOR      = 'h0028, //TL 4h + KeyId 4h + SIV nonce 10h + SIV tag 10h
-  parameter  [0:0] SUPPORT_NTS = 1,
+  parameter  [0:0] SUPPORT_NTS      = 1,
   parameter  [0:0] SUPPORT_NTP_AUTH = 0,
   parameter  [0:0] SUPPORT_NTP      = 0,
   parameter  [0:0] SUPPORT_NET      = 0,
@@ -47,6 +47,7 @@ module nts_parser_ctrl #(
   parameter  [0:0] DEFAULT_SUPPORT_NTP        = 1'b0,
   parameter  [0:0] DEFAULT_SUPPORT_NTP_MD5    = 1'b0,
   parameter  [0:0] DEFAULT_SUPPORT_NTP_SHA1   = 1'b0,
+  parameter  [0:0] DEFAULT_GRE_FORWARD        = 1'b0,
   parameter        DEBUG_BUFFER = 0
 ) (
   input  wire                         i_areset, // async reset
@@ -161,7 +162,7 @@ module nts_parser_ctrl #(
   //----------------------------------------------------------------
 
   localparam CORE_NAME    = 64'h70_61_72_73_65_72_20_20; //"parser  "
-  localparam CORE_VERSION = 32'h30_2e_30_34;
+  localparam CORE_VERSION = 32'h30_2e_30_36;
 
   localparam ADDR_NAME0        =    0;
   localparam ADDR_NAME1        =    1;
@@ -201,7 +202,18 @@ module nts_parser_ctrl #(
   localparam ADDR_IPV4_CTRL      = 'h31;
   localparam ADDR_IPV6_CTRL      = 'h32;
 
-  localparam ADDR_UDP_PORT_NTP   = 'h38;
+  localparam ADDR_GRE_DST_MAC_MSB = 'h33;
+  localparam ADDR_GRE_DST_MAC_LSB = 'h34;
+  localparam ADDR_GRE_DST_IP      = 'h35;
+  localparam ADDR_GRE_SRC_MAC_MSB = 'h36;
+  localparam ADDR_GRE_SRC_MAC_LSB = 'h37;
+  localparam ADDR_UDP_PORT_NTP    = 'h38; //TODO: reorder regs
+  localparam ADDR_GRE_SRC_IP      = 'h39; //hole in numbering for UDP
+
+  localparam ADDR_GRE_COUNTER_FORWARD_MSB = 'h3a;
+  localparam ADDR_GRE_COUNTER_FORWARD_LSB = 'h3b;
+  localparam ADDR_GRE_COUNTER_DROP_MSB    = 'h3c;
+  localparam ADDR_GRE_COUNTER_DROP_LSB    = 'h3d;
 
   localparam ADDR_MAC_0_MSB = 'h40;
   localparam ADDR_MAC_0_LSB = 'h41;
@@ -345,6 +357,7 @@ module nts_parser_ctrl #(
   localparam [BITS_STATE-1:0] STATE_ARP_RESPOND              = 5'h0c;
   localparam [BITS_STATE-1:0] STATE_PROCESS_NTS              = 5'h0d;
   localparam [BITS_STATE-1:0] STATE_PROCESS_NTP              = 5'h0e;
+  localparam [BITS_STATE-1:0] STATE_PROCESS_GRE              = 5'h0f;
   localparam [BITS_STATE-1:0] STATE_ERROR_GENERAL            = 5'h1d;
   localparam [BITS_STATE-1:0] STATE_TRANSFER_PACKET          = 5'h1e;
   localparam [BITS_STATE-1:0] STATE_DROP_PACKET              = 5'h1f;
@@ -381,12 +394,13 @@ module nts_parser_ctrl #(
   localparam [BITS_VERIFIER_STATE-1:0] VERIFIER_BAD     = 6;
   localparam [BITS_VERIFIER_STATE-1:0] VERIFIER_GOOD    = 7;
 
-  localparam CONFIG_BITS = 5;
+  localparam CONFIG_BITS = 6;
   localparam CONFIG_BIT_VERIFY_IP_CHECKSUMS = 0;
   localparam CONFIG_BIT_SUPPORT_NTS         = 1;
   localparam CONFIG_BIT_SUPPORT_NTP         = 2;
   localparam CONFIG_BIT_SUPPORT_NTP_MD5     = 3;
   localparam CONFIG_BIT_SUPPORT_NTP_SHA1    = 4;
+  localparam CONFIG_BIT_GRE_FORWARD         = 5;
 
   localparam BYTES_TAG_LEN           = 4;
 
@@ -451,6 +465,7 @@ module nts_parser_ctrl #(
   localparam [12:0] IPV4_FRAGMENT_OFFSET = 0;
   localparam  [7:0] IPV4_TTL     = 8'hff;
 
+  localparam  [7:0] IP_PROTO_TCP    = 8'h06;
   localparam  [7:0] IP_PROTO_UDP    = 8'h11; //17
   localparam  [7:0] IP_PROTO_ICMPV4 = 8'h01;
   localparam  [7:0] IP_PROTO_ICMPV6 = 8'h3a; //58
@@ -664,6 +679,10 @@ module nts_parser_ctrl #(
   reg detect_ipv4_we;
   reg detect_ipv4_new;
   reg detect_ipv4_reg;
+  reg detect_ipv4_fragmented_new;
+  reg detect_ipv4_fragmented_reg;
+  reg detect_ipv4_options_new;
+  reg detect_ipv4_options_reg;
   reg detect_ipv6_we;
   reg detect_ipv6_new;
   reg detect_ipv6_reg;
@@ -748,6 +767,14 @@ module nts_parser_ctrl #(
   reg                          ipdecode_ip4_total_length_we;
   reg                   [15:0] ipdecode_ip4_total_length_new;
   reg                   [15:0] ipdecode_ip4_total_length_reg;
+
+  reg                          ipdecode_ip4_fragment_offset_we;
+  reg                   [12:0] ipdecode_ip4_fragment_offset_new;
+  reg                   [12:0] ipdecode_ip4_fragment_offset_reg;
+
+  reg                          ipdecode_ip4_flags_mf_we;
+  reg                          ipdecode_ip4_flags_mf_new;
+  reg                          ipdecode_ip4_flags_mf_reg;
 
   reg                          ipdecode_ip4_protocol_we;
   reg                    [7:0] ipdecode_ip4_protocol_new;
@@ -917,6 +944,9 @@ module nts_parser_ctrl #(
   reg                          protocol_detect_ip6traceroute_reg;
   /* verilator lint_on UNUSED */
 
+  reg                          protocol_detect_gre_new;
+  reg                          protocol_detect_gre_reg;
+
   reg                          protocol_detect_nts_new;
   reg                          protocol_detect_nts_reg;
 
@@ -1060,7 +1090,19 @@ module nts_parser_ctrl #(
 
   wire detect_arp;
   wire detect_arp_good;
-  wire detect_ipv4_bad;
+
+  wire                    gre_responder_en;
+  wire             [63:0] gre_responder_data;
+  wire                    gre_responder_update_length;
+  wire                    gre_responder_length_we;
+  wire [ADDR_WIDTH+3-1:0] gre_responder_length_new;
+  wire                    gre_rx_rd;
+  wire [ADDR_WIDTH+3-1:0] gre_rx_addr;
+  wire [ADDR_WIDTH+3-1:0] gre_rx_burst;
+  wire [ADDR_WIDTH+3-1:0] gre_tx_addr;
+  wire                    gre_tx_from_rx;
+  wire                    gre_packet_transmit;
+  wire                    gre_packet_drop;
 
   wire                    icmp_ap_rd;
   wire [ADDR_WIDTH+3-1:0] icmp_ap_addr;
@@ -1081,7 +1123,6 @@ module nts_parser_ctrl #(
   wire                    icmp_responder_packet_length_we;
   wire [ADDR_WIDTH+3-1:0] icmp_responder_packet_length_new;
 
-  wire                    icmp_idle;
   wire                    icmp_drop;
   wire                    icmp_transmit;
 
@@ -1126,6 +1167,8 @@ module nts_parser_ctrl #(
   assign config_ctrl_default[CONFIG_BIT_SUPPORT_NTP]         = DEFAULT_SUPPORT_NTP;
   assign config_ctrl_default[CONFIG_BIT_SUPPORT_NTP_MD5]     = DEFAULT_SUPPORT_NTP_MD5;
   assign config_ctrl_default[CONFIG_BIT_SUPPORT_NTP_SHA1]    = DEFAULT_SUPPORT_NTP_SHA1;
+  assign config_ctrl_default[CONFIG_BIT_GRE_FORWARD]         = DEFAULT_GRE_FORWARD;
+
 
   assign detect_arp      = ipdecode_ethernet_protocol_reg == E_TYPE_ARP;
 
@@ -1136,8 +1179,6 @@ module nts_parser_ctrl #(
                            ipdecode_arp_hln_reg == ARP_HLN_ETHERNET &&
                            ipdecode_arp_pln_reg == ARP_PLN_IPV4;
 
-
-  assign detect_ipv4_bad = detect_ipv4_reg && ipdecode_ip4_ihl_reg != 5;
 
 
   assign o_busy                 = (i_tx_empty == 'b0) || (state_reg != STATE_IDLE);
@@ -1327,7 +1368,6 @@ module nts_parser_ctrl #(
       .o_responder_update_length ( icmp_update_length ),
       .o_responder_length_we  ( icmp_responder_packet_length_we  ),
       .o_responder_length_new ( icmp_responder_packet_length_new ),
-      .o_icmp_idle ( icmp_idle ),
 
       .o_packet_drop     ( icmp_drop     ),
       .o_packet_transmit ( icmp_transmit )
@@ -1349,9 +1389,164 @@ module nts_parser_ctrl #(
     assign icmp_tx_sum_reset = 0;
     assign icmp_tx_sum_reset_value = 0;
     assign icmp_update_length = 0;
-    assign icmp_idle = 1;
     assign icmp_drop = 1;
     assign icmp_transmit = 0;
+  end
+
+  //----------------------------------------------------------------
+  // Counters - GRE
+  //----------------------------------------------------------------
+
+  wire [31:0] counter_gre_drop_msb;
+  wire [31:0] counter_gre_drop_lsb;
+
+  wire [31:0] counter_gre_forward_msb;
+  wire [31:0] counter_gre_forward_lsb;
+
+  //----------------------------------------------------------------
+  // GRE Implementation, if enabled
+  //----------------------------------------------------------------
+
+  if (SUPPORT_NET) begin : gre_enabled
+    reg counter_gre_drop_lsb_we;
+    reg counter_gre_forward_lsb_we;
+    reg gre_dst_mac_msb_we;
+    reg gre_dst_mac_lsb_we;
+    reg gre_dst_ipv4_we;
+    reg gre_src_mac_msb_we;
+    reg gre_src_mac_lsb_we;
+    reg gre_src_ipv4_we;
+
+    always @*
+    begin : api_gre
+      counter_gre_drop_lsb_we = 0;
+      counter_gre_forward_lsb_we = 0;
+      gre_dst_mac_msb_we = 0;
+      gre_dst_mac_lsb_we = 0;
+      gre_dst_ipv4_we = 0;
+      gre_src_mac_msb_we = 0;
+      gre_src_mac_lsb_we = 0;
+      gre_src_ipv4_we = 0;
+
+      if (i_api_cs) begin
+        if (i_api_we) begin
+          case (i_api_address)
+            ADDR_GRE_DST_MAC_MSB:
+              begin
+                gre_dst_mac_msb_we = 1;
+              end
+            ADDR_GRE_DST_MAC_LSB:
+              begin
+                gre_dst_mac_lsb_we = 1;
+              end
+            ADDR_GRE_DST_IP:
+              begin
+                gre_dst_ipv4_we = 1;
+              end
+            ADDR_GRE_SRC_MAC_MSB:
+              begin
+                gre_src_mac_msb_we = 1;
+              end
+            ADDR_GRE_SRC_MAC_LSB:
+              begin
+                gre_src_mac_lsb_we = 1;
+              end
+            ADDR_GRE_SRC_IP:
+              begin
+                gre_src_ipv4_we = 1;
+              end
+            default: ;
+          endcase
+        end else begin
+          case (i_api_address)
+            ADDR_GRE_COUNTER_DROP_MSB: counter_gre_drop_lsb_we = 1;
+            ADDR_GRE_COUNTER_FORWARD_MSB: counter_gre_forward_lsb_we = 1;
+            default: ;
+          endcase
+        end
+      end
+    end
+
+    ctrl_gre #( .ADDR_WIDTH(ADDR_WIDTH) )  gre (
+      .i_clk( i_clk ),
+      .i_areset ( i_areset ),
+
+      .i_detect_ipv4 ( detect_ipv4_reg ),
+      .i_detect_ipv6 ( detect_ipv6_reg ),
+
+      .i_api_dst_mac_msb_we ( gre_dst_mac_msb_we ),
+      .i_api_dst_mac_lsb_we ( gre_dst_mac_lsb_we ),
+
+      .i_api_dst_ipv4_we ( gre_dst_ipv4_we ),
+
+      .i_api_src_mac_msb_we ( gre_src_mac_msb_we ),
+      .i_api_src_mac_lsb_we ( gre_src_mac_lsb_we ),
+
+      .i_api_src_ipv4_we ( gre_src_ipv4_we ),
+
+      .i_api_wdata ( i_api_write_data ),
+
+      .i_process ( state_reg == STATE_PROCESS_GRE ),
+
+      .i_memory_bound ( memory_bound_reg ),
+      .i_copy_done ( copy_done ),
+
+      .o_rx_rd ( gre_rx_rd ),
+      .o_rx_addr ( gre_rx_addr ),
+      .o_rx_burst ( gre_rx_burst ),
+
+      .o_tx_addr ( gre_tx_addr ),
+      .o_tx_from_rx ( gre_tx_from_rx ),
+
+      .o_responder_en            ( gre_responder_en            ),
+      .o_responder_data          ( gre_responder_data          ),
+      .o_responder_update_length ( gre_responder_update_length ),
+      .o_responder_length_we     ( gre_responder_length_we     ),
+      .o_responder_length_new    ( gre_responder_length_new    ),
+
+      .o_packet_transmit ( gre_packet_transmit ),
+      .o_packet_drop     ( gre_packet_drop     )
+    );
+
+    counter64 counter_gre_forward (
+      .i_areset     ( i_areset                         ),
+      .i_clk        ( i_clk                            ),
+      .i_inc        ( (state_reg == STATE_PROCESS_GRE)
+                      && gre_packet_transmit           ),
+      .i_rst        ( 1'b0                             ),
+      .i_lsb_sample ( counter_gre_forward_lsb_we       ),
+      .o_msb        ( counter_gre_forward_msb          ),
+      .o_lsb        ( counter_gre_forward_lsb          )
+    );
+
+    counter64 counter_gre_drop (
+      .i_areset     ( i_areset                         ),
+      .i_clk        ( i_clk                            ),
+      .i_inc        ( (state_reg == STATE_PROCESS_GRE)
+                      && gre_packet_drop               ),
+      .i_rst        ( 1'b0                             ),
+      .i_lsb_sample ( counter_gre_drop_lsb_we          ),
+      .o_msb        ( counter_gre_drop_msb             ),
+      .o_lsb        ( counter_gre_drop_lsb             )
+    );
+
+  end else begin
+    assign counter_gre_drop_msb = 0;
+    assign counter_gre_drop_lsb = 0;
+    assign counter_gre_forward_msb = 0;
+    assign counter_gre_forward_lsb = 0;
+    assign gre_responder_en = 0;
+    assign gre_responder_data = 0;
+    assign gre_responder_update_length = 0;
+    assign gre_responder_length_we = 0;
+    assign gre_responder_length_new = 0;
+    assign gre_rx_rd = 0;
+    assign gre_rx_addr = 0;
+    assign gre_rx_burst = 0;
+    assign gre_tx_addr = 0;
+    assign gre_tx_from_rx = 0;
+    assign gre_packet_transmit = 0;
+    assign gre_packet_drop = 1;
   end
 
 
@@ -1564,7 +1759,7 @@ module nts_parser_ctrl #(
   //----------------------------------------------------------------
 
   always @*
-  begin
+  begin : api
     addr_ipv4_ctrl_we = 0;
     addr_ipv4_ctrl_new = 0;
 
@@ -1777,6 +1972,12 @@ module nts_parser_ctrl #(
             ADDR_IPV4_CTRL: api_read_data[7:0] = addr_ipv4_ctrl_reg;
             ADDR_IPV6_CTRL: api_read_data[7:0] = addr_ipv6_ctrl_reg;
             ADDR_UDP_PORT_NTP: api_read_data = { config_udp_port_ntp1_reg, config_udp_port_ntp1_reg };
+
+            ADDR_GRE_COUNTER_FORWARD_MSB: api_read_data = counter_gre_forward_msb;
+            ADDR_GRE_COUNTER_FORWARD_LSB: api_read_data = counter_gre_forward_lsb;
+            ADDR_GRE_COUNTER_DROP_MSB: api_read_data = counter_gre_drop_msb;
+            ADDR_GRE_COUNTER_DROP_LSB: api_read_data = counter_gre_drop_lsb;
+
             ADDR_MAC_0_MSB: api_read_data[15:0] = addr_mac0_msb_reg;
             ADDR_MAC_0_LSB: api_read_data       = addr_mac0_lsb_reg;
             ADDR_MAC_1_MSB: api_read_data[15:0] = addr_mac1_msb_reg;
@@ -1957,6 +2158,9 @@ module nts_parser_ctrl #(
       crypto_fsm_reg             <= CRYPTO_FSM_IDLE;
 
       detect_ipv4_reg <= 0;
+      detect_ipv4_fragmented_reg <= 0;
+      detect_ipv4_options_reg <= 0;
+
       detect_ipv6_reg <= 0;
 
       error_cause_reg            <= 'b0;
@@ -1978,11 +2182,13 @@ module nts_parser_ctrl #(
       ipdecode_ethernet_mac_src_reg  <= 0;
       ipdecode_ethernet_protocol_reg <= 0;
 
-      ipdecode_ip4_ihl_reg          <= 'b0;
-      ipdecode_ip4_total_length_reg <= 'b0;
-      ipdecode_ip4_protocol_reg     <= 'b0;
-      ipdecode_ip4_ip_dst_reg       <= 'b0;
-      ipdecode_ip4_ip_src_reg       <= 'b0;
+      ipdecode_ip4_ihl_reg             <= 'b0;
+      ipdecode_ip4_total_length_reg    <= 'b0;
+      ipdecode_ip4_flags_mf_reg        <= 'b0;
+      ipdecode_ip4_fragment_offset_reg <= 'b0;
+      ipdecode_ip4_protocol_reg        <= 'b0;
+      ipdecode_ip4_ip_dst_reg          <= 'b0;
+      ipdecode_ip4_ip_src_reg          <= 'b0;
 
       ipdecode_ip6_priority_reg       <= 'b0;
       ipdecode_ip6_flowlabel_reg      <= 'b0;
@@ -2038,6 +2244,8 @@ module nts_parser_ctrl #(
       protocol_detect_ip6echo_reg       <= 'b0;
       protocol_detect_ip6ns_reg         <= 'b0;
       protocol_detect_ip6traceroute_reg <= 'b0;
+
+      protocol_detect_gre_reg <= 0;
 
       protocol_detect_ntp_reg          <= 'b0;
       protocol_detect_ntpauth_md5_reg  <= 'b0;
@@ -2233,6 +2441,9 @@ module nts_parser_ctrl #(
       if (detect_ipv4_we)
         detect_ipv4_reg <= detect_ipv4_new;
 
+      detect_ipv4_fragmented_reg <= detect_ipv4_fragmented_new;
+      detect_ipv4_options_reg <= detect_ipv4_options_new;
+
       if (detect_ipv6_we)
         detect_ipv6_reg <= detect_ipv6_new;
 
@@ -2287,6 +2498,12 @@ module nts_parser_ctrl #(
 
       if (ipdecode_ip4_ihl_we)
         ipdecode_ip4_ihl_reg <= ipdecode_ip4_ihl_new;
+
+      if (ipdecode_ip4_flags_mf_we)
+        ipdecode_ip4_flags_mf_reg <= ipdecode_ip4_flags_mf_new;
+
+      if (ipdecode_ip4_fragment_offset_we)
+        ipdecode_ip4_fragment_offset_reg <= ipdecode_ip4_fragment_offset_new;
 
       if (ipdecode_ip4_total_length_we)
         ipdecode_ip4_total_length_reg <= ipdecode_ip4_total_length_new;
@@ -2413,6 +2630,8 @@ module nts_parser_ctrl #(
       protocol_detect_icmpv6_reg        <= protocol_detect_icmpv6_new;
       protocol_detect_ip6ns_reg         <= protocol_detect_ip6ns_new;
       protocol_detect_ip6traceroute_reg <= protocol_detect_ip6traceroute_new;
+
+      protocol_detect_gre_reg <= protocol_detect_gre_new;
 
       protocol_detect_ntp_reg          <= protocol_detect_ntp_new;
       protocol_detect_ntpauth_md5_reg  <= protocol_detect_ntpauth_md5_new;
@@ -2921,6 +3140,16 @@ module nts_parser_ctrl #(
             access_port_wordsize_we = 1;
             access_port_wordsize_new = 4; //burst
           end
+        STATE_PROCESS_GRE:
+          if ( gre_rx_rd ) begin
+            access_port_addr_we  = 'b1;
+            access_port_addr_new = gre_rx_addr;
+            access_port_burstsize_we = 'b1;
+            access_port_burstsize_new[ADDR_WIDTH+3-1:0] = gre_rx_burst;
+            access_port_rd_en_new = 1;
+            access_port_wordsize_we = 1;
+            access_port_wordsize_new = 4; //burst
+          end
         STATE_PROCESS_NTS:
           case (nts_state_reg)
             NTS_S_EXTRACT_EXT_FROM_RAM:
@@ -2996,6 +3225,13 @@ module nts_parser_ctrl #(
           copy_bytes_new[ADDR_WIDTH+3-1:0] = icmp_ap_burst;
           copy_tx_addr_we   = 1;
           copy_tx_addr_new  = icmp_tx_addr;
+        end
+      STATE_PROCESS_GRE:
+        if (gre_rx_rd) begin
+          copy_bytes_we     = 1;
+          copy_bytes_new[ADDR_WIDTH+3-1:0] = gre_rx_burst;
+          copy_tx_addr_we   = 1;
+          copy_tx_addr_new  = gre_tx_addr;
         end
       STATE_PROCESS_NTS:
         case (nts_state_reg)
@@ -3383,7 +3619,13 @@ module nts_parser_ctrl #(
           response_packet_total_length_we = icmp_responder_packet_length_we;
           response_packet_total_length_new = icmp_responder_packet_length_new;
         end
-
+      STATE_PROCESS_GRE:
+        begin
+          response_en_new   = gre_responder_en;
+          response_data_new = gre_responder_data;
+          response_packet_total_length_we = gre_responder_length_we;
+          response_packet_total_length_new = gre_responder_length_new;
+        end
       STATE_ARP_RESPOND:
         if (SUPPORT_NET) begin : emit_arp
           reg [6*64-1:0] header;
@@ -3423,13 +3665,13 @@ module nts_parser_ctrl #(
                       response_packet_total_length_we  = 1;
                       response_packet_total_length_new = len + UDP_LENGTH_NTP_VANILLA;
                     end
-  
+
                   end else if (protocol_detect_ntpauth_md5_reg) begin
                     if (SUPPORT_NTP_AUTH) begin
                       response_packet_total_length_we  = 1;
                       response_packet_total_length_new = len + UDP_LENGTH_NTP_VANILLA + 4 /* keyid */ + 16 /* md5 */;
                     end
-  
+
                   end else if (protocol_detect_ntpauth_sha1_reg) begin
                     if (SUPPORT_NTP_AUTH) begin
                       response_packet_total_length_we  = 1;
@@ -3545,6 +3787,15 @@ module nts_parser_ctrl #(
             txctrl_tx_from_rx_we = 1;
             txctrl_tx_from_rx_new = 1;
           end
+        end
+      STATE_PROCESS_GRE:
+        begin
+          //tx_address = gre_tx_addr;
+          if (gre_tx_from_rx) begin
+            txctrl_tx_from_rx_we = 1;
+            txctrl_tx_from_rx_new = 1;
+          end
+          responder_update_length = gre_responder_update_length;
         end
       STATE_PROCESS_NTS:
         case (nts_state_reg)
@@ -4492,15 +4743,28 @@ module nts_parser_ctrl #(
           state_we  = 'b1;
           state_new = STATE_ARP_INIT;
         end else if (detect_ipv4_reg) begin
-          if (config_ctrl_reg[CONFIG_BIT_VERIFY_IP_CHECKSUMS]) begin
-            state_we  = 'b1;
-            state_new = STATE_VERIFY_IPV4;
+          if ( config_ctrl_reg[CONFIG_BIT_VERIFY_IP_CHECKSUMS] ) begin
+            if ( ipdecode_ip4_ihl_reg == 5 ) begin
+              state_we  = 'b1;
+              state_new = STATE_VERIFY_IPV4;
+            end else begin
+              // Header checksum not implemented for large IPv4 headers.
+              // They are just going to be forwarded to GRE, or dropped,
+              // so don't worry about checksum.
+              state_we  = 'b1;
+              state_new = STATE_SELECT_IPV4_HANDLER;
+            end
           end else begin
             state_we  = 'b1;
             state_new = STATE_SELECT_IPV4_HANDLER;
           end
         end else if (detect_ipv6_reg) begin
           case (ipdecode_ip6_next_reg)
+            IP_PROTO_TCP:
+              begin
+                state_we  = 'b1;
+                state_new = STATE_SELECT_IPV6_HANDLER;
+              end
             IP_PROTO_ICMPV6:
               if (config_ctrl_reg[CONFIG_BIT_VERIFY_IP_CHECKSUMS]) begin
                 state_we  = 'b1;
@@ -4538,6 +4802,11 @@ module nts_parser_ctrl #(
             end
           VERIFIER_GOOD:
             case (ipdecode_ip4_protocol_reg)
+              IP_PROTO_TCP:
+                begin
+                  state_we  = 'b1;
+                  state_new = STATE_SELECT_IPV4_HANDLER;
+                end
               IP_PROTO_ICMPV4:
                 begin
                   state_we  = 'b1;
@@ -4599,15 +4868,14 @@ module nts_parser_ctrl #(
           state_we  = 'b1;
           state_new = STATE_PROCESS_NTP;
         end else if (protocol_detect_ip4echo_reg) begin
-          if (icmp_idle) begin
-            state_we  = 'b1;
-            state_new = STATE_PROCESS_ICMP;
-          end
+          state_we  = 'b1;
+          state_new = STATE_PROCESS_ICMP;
         end else if (protocol_detect_ip4traceroute_reg) begin
-          if (icmp_idle) begin
-            state_we  = 'b1;
-            state_new = STATE_PROCESS_ICMP;
-          end
+          state_we  = 'b1;
+          state_new = STATE_PROCESS_ICMP;
+        end else if (protocol_detect_gre_reg && config_ctrl_reg[CONFIG_BIT_GRE_FORWARD]) begin
+          state_we  = 'b1;
+          state_new = STATE_PROCESS_GRE;
         end else begin
           //Unknown packet type
           state_we  = 'b1;
@@ -4655,10 +4923,8 @@ module nts_parser_ctrl #(
           state_we  = 'b1;
           state_new = STATE_PROCESS_NTP;
         end else if (protocol_detect_icmpv6_reg) begin
-          if (icmp_idle) begin
-            state_we = 'b1;
-            state_new = STATE_PROCESS_ICMP;
-          end
+          state_we = 'b1;
+          state_new = STATE_PROCESS_ICMP;
         end else begin
           //Unknown packet type
           state_we  = 'b1;
@@ -4669,6 +4935,14 @@ module nts_parser_ctrl #(
           state_we  = 'b1;
           state_new = STATE_TRANSFER_PACKET;
         end else if (icmp_drop) begin
+          state_we  = 'b1;
+          state_new = STATE_DROP_PACKET;
+        end
+      STATE_PROCESS_GRE:
+        if (gre_packet_transmit) begin
+          state_we  = 'b1;
+          state_new = STATE_TRANSFER_PACKET;
+        end else if (gre_packet_drop) begin
           state_we  = 'b1;
           state_new = STATE_DROP_PACKET;
         end
@@ -4768,6 +5042,8 @@ module nts_parser_ctrl #(
   begin : ipdecode_proc
     detect_ipv4_we = 0;
     detect_ipv4_new = 0;
+    detect_ipv4_fragmented_new = 0;
+    detect_ipv4_options_new = 0;
     detect_ipv6_we = 0;
     detect_ipv6_new = 0;
 
@@ -4800,16 +5076,20 @@ module nts_parser_ctrl #(
   //ipdecode_ip_version_we         = 'b0;
   //ipdecode_ip_version_new        = 'b0;
 
-    ipdecode_ip4_ihl_we            = 'b0;
-    ipdecode_ip4_ihl_new           = 'b0;
-    ipdecode_ip4_total_length_we   = 'b0;
-    ipdecode_ip4_total_length_new  = 'b0;
-    ipdecode_ip4_protocol_we       = 'b0;
-    ipdecode_ip4_protocol_new      = 'b0;
-    ipdecode_ip4_ip_dst_we         = 'b0;
-    ipdecode_ip4_ip_dst_new        = 'b0;
-    ipdecode_ip4_ip_src_we         = 'b0;
-    ipdecode_ip4_ip_src_new        = 'b0;
+    ipdecode_ip4_ihl_we              = 'b0;
+    ipdecode_ip4_ihl_new             = 'b0;
+    ipdecode_ip4_total_length_we     = 'b0;
+    ipdecode_ip4_total_length_new    = 'b0;
+    ipdecode_ip4_flags_mf_we         = 'b0;
+    ipdecode_ip4_flags_mf_new        = 'b0;
+    ipdecode_ip4_fragment_offset_we  = 'b0;
+    ipdecode_ip4_fragment_offset_new = 'b0;
+    ipdecode_ip4_protocol_we         = 'b0;
+    ipdecode_ip4_protocol_new        = 'b0;
+    ipdecode_ip4_ip_dst_we           = 'b0;
+    ipdecode_ip4_ip_dst_new          = 'b0;
+    ipdecode_ip4_ip_src_we           = 'b0;
+    ipdecode_ip4_ip_src_new          = 'b0;
 
     ipdecode_ip6_priority_we        = 'b0;
     ipdecode_ip6_priority_new       = 'b0;
@@ -4882,11 +5162,13 @@ module nts_parser_ctrl #(
           detect_ipv4_we = 1;
           detect_ipv4_new =
                (ipdecode_ethernet_protocol_new == E_TYPE_IPV4)
-            && (ipversion == IP_V4);
+            && (ipversion == IP_V4)
+            && (ipdecode_ip4_ihl_new >= 5);
           detect_ipv6_we = 1;
           detect_ipv6_new =
                (ipdecode_ethernet_protocol_new == E_TYPE_IPV6)
             && (ipversion == IP_V6);
+
         end
 
       end else if (detect_arp) begin
@@ -4924,10 +5206,15 @@ module nts_parser_ctrl #(
       end else if (detect_ipv4_reg && ipdecode_ip4_ihl_reg == 5) begin
         case (word_counter_reg)
           1: begin
-               ipdecode_ip4_total_length_we  = 1;
-               ipdecode_ip4_total_length_new = i_data[63:48];
-               ipdecode_ip4_protocol_we      = 1;
-               ipdecode_ip4_protocol_new     = i_data[7:0];
+               ipdecode_ip4_total_length_we     = 1;
+               ipdecode_ip4_total_length_new    = i_data[63:48];
+               ipdecode_ip4_flags_mf_we         = 1;
+               ipdecode_ip4_flags_mf_new        = i_data[29];
+               ipdecode_ip4_fragment_offset_we  = 1;
+               ipdecode_ip4_fragment_offset_new = i_data[28:16];
+             //TTL = i_data[15:8]
+               ipdecode_ip4_protocol_we         = 1;
+               ipdecode_ip4_protocol_new        = i_data[7:0];
              end
           2: begin
              //ipdecode_ip4_checksum_we  = 'b1;
@@ -5019,6 +5306,18 @@ module nts_parser_ctrl #(
         endcase
       end
     end
+
+    if (detect_ipv4_reg) begin
+      if (ipdecode_ip4_ihl_reg != 5) begin
+        detect_ipv4_options_new = 1;
+      end
+      if (ipdecode_ip4_flags_mf_reg) begin
+        detect_ipv4_fragmented_new = 1;
+      end
+      if (ipdecode_ip4_fragment_offset_reg != 0) begin
+        detect_ipv4_fragmented_new = 1;
+      end
+    end
   end
 
   //----------------------------------------------------------------
@@ -5067,6 +5366,8 @@ module nts_parser_ctrl #(
     protocol_detect_ip6echo_new = 0;
     protocol_detect_ip6ns_new = 0;
     protocol_detect_ip6traceroute_new = 0;
+
+    protocol_detect_gre_new = 0;
 
     protocol_detect_ntp_new = 0;
     protocol_detect_ntpauth_md5_new = 0;
@@ -5162,6 +5463,7 @@ module nts_parser_ctrl #(
       if (detect_ipv6_reg) begin
         if (payload_length_sane_ipv6) begin
           case (ipdecode_ip6_next_reg)
+            IP_PROTO_TCP: protocol_detect_gre_new = 1;
             IP_PROTO_ICMPV6:
               case (ipdecode_icmp_type_reg)
                 ICMP_TYPE_V6_ECHO_REQUEST:
@@ -5195,34 +5497,43 @@ module nts_parser_ctrl #(
       end
       protocol_detect_icmpv6_new = protocol_detect_ip6echo_new || protocol_detect_ip6ns_new || protocol_detect_ip6traceroute_new;
 
-      if (detect_ipv4_reg && !detect_ipv4_bad) begin
-        if (payload_length_sane_ipv4) begin
-          case (ipdecode_ip4_protocol_reg)
-            IP_PROTO_UDP:
-              if (udp_length_sane_ipv4) begin
-                if (ntp_port_match) begin
-                  if (ntp_length) protocol_detect_ntp_new = 1;
-                  if (ntp_md5_length) protocol_detect_ntpauth_md5_new = 1;
-                  if (ntp_sha1_length) protocol_detect_ntpauth_sha1_new = 1;
-                  if (nts_length) protocol_detect_nts_new = 1;
-                end else if (traceroute_port_match) begin
-                  protocol_detect_ip4traceroute_new = 1;
-                end
-              end
-            IP_PROTO_ICMPV4:
-              case (ipdecode_icmp_type_reg)
-                ICMP_TYPE_V4_ECHO_REQUEST:
-                  if (ipdecode_ip4_total_length_reg > (20 + 8) && ipdecode_ip4_total_length_reg <= 1024) begin
-                    protocol_detect_ip4echo_new = 1;
-                  end
-                default: ;
-              endcase
-            default: ;
-          endcase
-        end
-      end
-    end
+      if (detect_ipv4_reg) begin
+        if (detect_ipv4_fragmented_reg) begin
+          protocol_detect_gre_new = 1;
 
+        end else if (detect_ipv4_options_reg) begin
+          protocol_detect_gre_new = 1;
+
+        end else begin
+          if (payload_length_sane_ipv4) begin
+            case (ipdecode_ip4_protocol_reg)
+              IP_PROTO_TCP: protocol_detect_gre_new = 1;
+              IP_PROTO_UDP:
+                if (udp_length_sane_ipv4) begin
+                  if (ntp_port_match) begin
+                    if (ntp_length) protocol_detect_ntp_new = 1;
+                    if (ntp_md5_length) protocol_detect_ntpauth_md5_new = 1;
+                    if (ntp_sha1_length) protocol_detect_ntpauth_sha1_new = 1;
+                    if (nts_length) protocol_detect_nts_new = 1;
+                  end else if (traceroute_port_match) begin
+                    protocol_detect_ip4traceroute_new = 1;
+                  end
+                end
+              IP_PROTO_ICMPV4:
+                case (ipdecode_icmp_type_reg)
+                  ICMP_TYPE_V4_ECHO_REQUEST:
+                    if (ipdecode_ip4_total_length_reg > (20 + 8) && ipdecode_ip4_total_length_reg <= 1024) begin
+                      protocol_detect_ip4echo_new = 1;
+                    end
+                  default: ;
+                endcase
+              default: ;
+            endcase
+          end
+        end
+       end
+
+    end
   end
 
   //----------------------------------------------------------------
@@ -5243,7 +5554,7 @@ module nts_parser_ctrl #(
       timestamp_version_number_we   = 1;
 
     end else if (i_process_initial) begin
-      if (detect_ipv4_reg && detect_ipv4_bad == 'b0) begin
+      if (detect_ipv4_reg) begin
         if (word_counter_reg == 4) begin
           // 47:46 LI (2bit)
           // 45:43 VN (3bit)

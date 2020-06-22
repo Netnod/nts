@@ -47,6 +47,7 @@ DISPATCHER_SRC = \
  ../src/rtl/preprocessor.v \
 
 ENGINE_SRC = \
+ ../src/rtl/nts_engine/ctrl_gre.v \
  ../src/rtl/nts_engine/icmp.v \
  ../src/rtl/nts_engine/ntp_auth.v \
  ../src/rtl/nts_engine/nts_api.v \
@@ -139,6 +140,9 @@ lint_memory:
 	$(VLINT) $(VLINT_FLAGS) ../src/rtl/memory/bram.v
 	$(VLINT) $(VLINT_FLAGS) ../src/rtl/memory/bram_dpge.v
 	$(VLINT) $(VLINT_FLAGS) ../src/rtl/memory/memory_ctrl.v ../src/rtl/memory/bram_dpge.v
+
+lint_gre:
+	$(VLINT) $(VLINT_FLAGS) ../src/rtl/nts_engine/ctrl_gre.v
 
 lint_engine:
 	$(VLINT) $(VLINT_FLAGS) ../src/rtl/nts_engine/nts_api.v

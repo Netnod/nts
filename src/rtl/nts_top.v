@@ -29,7 +29,7 @@
 //
 
 module nts_top #(
-  parameter ENGINES_NTS     = 16,
+  parameter ENGINES_NTS     = 2,
   parameter ENGINES_MINI    = 2,
   parameter ADDR_WIDTH      = 8,
   parameter API_ADDR_WIDTH  = 12,

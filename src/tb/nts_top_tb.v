@@ -739,6 +739,12 @@ module nts_top_tb;
   end
   endtask
 
+  task parser_enable_checksum_checks ( input [11:0] engine );
+  begin
+    set_parser_ctrl_bit( engine, 5'h0, 1'b1 );
+  end
+  endtask
+
   task parser_enable_ntp ( input [11:0] engine );
   begin
     set_parser_ctrl_bit( engine, 5'h2, 1'b1 ); //NTP
@@ -1231,19 +1237,25 @@ module nts_top_tb;
       end
       begin : gre
         integer i;
+        for (i = 0; i < ENGINES; i = i + 1) begin
+          parser_enable_checksum_checks(i[11:0]);
+        end
         for (i = 0; i < 10; i = i + 1) begin
           $display("%s:%0d: IPv4 TCP", `__FILE__, `__LINE__);
           send_packet( { 64944'b0, PACKET_TCP }, 592, 0 );
-          #2000;
+          #4000;
           $display("%s:%0d: IPv4 TCP (2)", `__FILE__, `__LINE__);
           send_packet({65104'b0, PACKET_TCP2}, 432, 0 );
-          #2000;
+          #4000;
           $display("%s:%0d: IPv4 UDP OPTIONS", `__FILE__, `__LINE__);
           send_packet({64880'h0, PACKET_UDP_OPTIONS}, 656, 0);
-          #2000;
+          #4000;
           $display("%s:%0d: IPv4 UDP OPTIONS (2; Large Packet)", `__FILE__, `__LINE__);
           send_packet({53424'h0, PACKET_UDP_OPTIONS_1514BYTES}, 12112, 0);
-          #2000;
+          #10000;
+        end
+        for (i = 0; i < ENGINES; i = i + 1) begin
+          parser_disable_checksum_checks(i[11:0]);
         end
       end
       #2000;
@@ -2185,6 +2197,8 @@ module nts_top_tb;
     `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.gre_enabled.gre.o_packet_transmit );
     `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.gre_enabled.gre.o_packet_drop );
 
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.state_reg );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.verifier_reg );
     `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.gre_enabled.gre.state_reg );
     `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.protocol_detect_gre_reg );
     `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.detect_ipv4_reg );

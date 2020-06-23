@@ -3063,7 +3063,7 @@ module nts_parser_ctrl #(
                 access_port_addr_we          = 'b1;
                 access_port_addr_new         = HEADER_LENGTH_ETHERNET;
                 access_port_burstsize_we     = 'b1;
-                access_port_burstsize_new    = HEADER_LENGTH_IPV4;
+                access_port_burstsize_new    = { 10'b0, ipdecode_ip4_ihl_reg, 2'b00 };
                 access_port_csum_initial_we  = 'b1;
                 access_port_csum_initial_new = 16'h0000;
                 access_port_rd_en_new        = 'b1;
@@ -3458,12 +3458,20 @@ module nts_parser_ctrl #(
           verifier_new = VERIFIER_WAIT_1;
         end
       VERIFIER_WAIT_1:
-        if ((i_access_port_rd_dv == 1'b1) && (i_access_port_rd_data[15:0] == 16'hffff)) begin
-          verifier_we = 1;
-          verifier_new = VERIFIER_GOOD;
+        if ((i_access_port_rd_dv == 1'b1)) begin
+          if (i_access_port_rd_data[15:0] == 16'hffff) begin
+            verifier_we = 1;
+            verifier_new = VERIFIER_GOOD;
+            $display("%s:%0d: Good checksum; %h %h", `__FILE__, `__LINE__, i_access_port_rd_dv, i_access_port_rd_data);
+          end else begin
+            verifier_we = 1;
+            verifier_new = VERIFIER_BAD;
+            $display("%s:%0d: Bad checksum; %h %h", `__FILE__, `__LINE__, i_access_port_rd_dv, i_access_port_rd_data);
+          end
         end else if (i_access_port_wait == 1'b0) begin
           verifier_we = 1;
           verifier_new = VERIFIER_BAD;
+          $display("%s:%0d: No checksum?; %h %h", `__FILE__, `__LINE__, i_access_port_rd_dv, i_access_port_rd_data);
         end
       default: //VERIFIER_BAD, VERIFIER_GOOD:
         begin
@@ -4750,16 +4758,8 @@ module nts_parser_ctrl #(
           state_new = STATE_ARP_INIT;
         end else if (detect_ipv4_reg) begin
           if ( config_ctrl_reg[CONFIG_BIT_VERIFY_IP_CHECKSUMS] ) begin
-            if ( ipdecode_ip4_ihl_reg == 5 ) begin
-              state_we  = 'b1;
-              state_new = STATE_VERIFY_IPV4;
-            end else begin
-              // Header checksum not implemented for large IPv4 headers.
-              // They are just going to be forwarded to GRE, or dropped,
-              // so don't worry about checksum.
-              state_we  = 'b1;
-              state_new = STATE_SELECT_IPV4_HANDLER;
-            end
+            state_we  = 'b1;
+            state_new = STATE_VERIFY_IPV4;
           end else begin
             state_we  = 'b1;
             state_new = STATE_SELECT_IPV4_HANDLER;
@@ -5510,10 +5510,12 @@ module nts_parser_ctrl #(
         end else if (detect_ipv4_options_reg) begin
           protocol_detect_gre_new = 1;
 
+        end else if (ipdecode_ip4_protocol_reg == IP_PROTO_TCP) begin
+          protocol_detect_gre_new = 1;
+
         end else begin
           if (payload_length_sane_ipv4) begin
             case (ipdecode_ip4_protocol_reg)
-              IP_PROTO_TCP: protocol_detect_gre_new = 1;
               IP_PROTO_UDP:
                 if (udp_length_sane_ipv4) begin
                   if (ntp_port_match) begin

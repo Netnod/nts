@@ -711,7 +711,6 @@ module nts_parser_ctrl #(
   reg                   [3:0] last_bytes_new;
   reg                   [3:0] last_bytes_reg;
 
-  reg                          memory_bound_we;
   reg       [ADDR_WIDTH+3-1:0] memory_bound_new;
   reg       [ADDR_WIDTH+3-1:0] memory_bound_reg;
 
@@ -2583,8 +2582,7 @@ module nts_parser_ctrl #(
       if (memory_address_we)
         memory_address_reg <= memory_address_new;
 
-      if (memory_bound_we)
-        memory_bound_reg <= memory_bound_new;
+      memory_bound_reg <= memory_bound_new;
 
       if (muxctrl_ntpauth_we)
         muxctrl_ntpauth_reg <= muxctrl_ntpauth_new;
@@ -2712,13 +2710,16 @@ module nts_parser_ctrl #(
   always @*
   begin : memory_bounds_calc
     reg [ADDR_WIDTH+3-1:0] bounds;
-    memory_bound_we   = 'b0;
-    bounds            = 0;
-    bounds[3:0]       = last_bytes_reg;
-    bounds            = bounds + { word_counter_reg, 3'b000};
-    memory_bound_new  = bounds;
-    if (memory_bound_reg != bounds)
-      memory_bound_we = 'b1;
+    bounds           = 0;
+    bounds[3:0]      = last_bytes_reg;
+    bounds           = bounds + { word_counter_reg, 3'b000 };
+    memory_bound_new = bounds;
+    if ( word_counter_reg == { ADDR_WIDTH{1'b1} } ) begin
+      if ( last_bytes_reg[3] ) begin
+         //Overflow. Saturate memory bound
+         memory_bound_new = { word_counter_reg, 3'b000 };
+      end
+    end
   end
 
   //----------------------------------------------------------------
@@ -2732,7 +2733,12 @@ module nts_parser_ctrl #(
     reg                  carry;
     reg [ADDR_WIDTH-1:0] sum;
 
-    { carry, sum } = { 1'b0, word_counter_reg } + 1;
+    sum = word_counter_reg + 1;
+
+    carry = 0;
+    if ( word_counter_reg == { ADDR_WIDTH{1'b1} } ) begin
+      carry = 1;
+    end
 
     word_counter_we  = 0;
     word_counter_new = 0;

@@ -2205,6 +2205,7 @@ module nts_top_tb;
     `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.ipdecode_ip4_ihl_reg );
     `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.detect_ipv4_options_reg );
     `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.detect_ipv4_fragmented_reg );
+    `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.ipdecode_ip4_protocol_reg );
   end
 
   if (DEBUG>0) begin

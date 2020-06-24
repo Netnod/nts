@@ -5136,6 +5136,7 @@ module nts_parser_ctrl #(
       ipdecode_ethernet_protocol_we  = 'b1;
     //ipdecode_ip_version_we         = 'b1;
       ipdecode_ip4_ihl_we            = 'b1;
+      ipdecode_ip4_protocol_we       = 'b1;
       ipdecode_udp_length_we         = 'b1;
 
     end else if (i_process_initial) begin
@@ -5209,7 +5210,7 @@ module nts_parser_ctrl #(
              end
           default: ;
         endcase
-      end else if (detect_ipv4_reg && ipdecode_ip4_ihl_reg == 5) begin
+      end else if (detect_ipv4_reg) begin
         case (word_counter_reg)
           1: begin
                ipdecode_ip4_total_length_we     = 1;
@@ -5233,14 +5234,16 @@ module nts_parser_ctrl #(
           3: begin
                ipdecode_ip4_ip_dst_we    = 'b1;
                ipdecode_ip4_ip_dst_new   = { ipdecode_ip4_ip_dst_reg[31:16], i_data[63:48] };
-               ipdecode_icmp_type_we     = 'b1;
-               ipdecode_icmp_type_new    = i_data[47:40];
-               ipdecode_udp_port_src_we  = 'b1;
-               ipdecode_udp_port_src_new = i_data[47:32];
-               ipdecode_udp_port_dst_we  = 'b1;
-               ipdecode_udp_port_dst_new = i_data[31:16];
-               ipdecode_udp_length_we    = 'b1;
-               ipdecode_udp_length_new   = i_data[15:0];
+               if (ipdecode_ip4_ihl_reg == 5) begin
+                 ipdecode_icmp_type_we     = 'b1;
+                 ipdecode_icmp_type_new    = i_data[47:40];
+                 ipdecode_udp_port_src_we  = 'b1;
+                 ipdecode_udp_port_src_new = i_data[47:32];
+                 ipdecode_udp_port_dst_we  = 'b1;
+                 ipdecode_udp_port_dst_new = i_data[31:16];
+                 ipdecode_udp_length_we    = 'b1;
+                 ipdecode_udp_length_new   = i_data[15:0];
+               end
              end
           default: ;
         endcase

@@ -247,6 +247,10 @@ module nts_parser_ctrl #(
   localparam ADDR_COUNTER_IPV4_NTP_PASS_LSB = 'h081;
   localparam ADDR_COUNTER_IPV6_NTP_PASS_MSB = 'h082;
   localparam ADDR_COUNTER_IPV6_NTP_PASS_LSB = 'h083;
+  localparam ADDR_COUNTER_IPV4_NTP_DROP_MSB = 'h084;
+  localparam ADDR_COUNTER_IPV4_NTP_DROP_LSB = 'h085;
+  localparam ADDR_COUNTER_IPV6_NTP_DROP_MSB = 'h086;
+  localparam ADDR_COUNTER_IPV6_NTP_DROP_LSB = 'h087;
 
 
   localparam ADDR_COUNTER_IPV6_ND_DROP_MSB = 'h0c0;
@@ -1136,6 +1140,11 @@ module nts_parser_ctrl #(
   wire [31:0] counter_ipv4_ntp_pass_lsb;
   wire [31:0] counter_ipv6_ntp_pass_msb;
   wire [31:0] counter_ipv6_ntp_pass_lsb;
+
+  wire [31:0] counter_ipv4_ntp_drop_msb;
+  wire [31:0] counter_ipv4_ntp_drop_lsb;
+  wire [31:0] counter_ipv6_ntp_drop_msb;
+  wire [31:0] counter_ipv6_ntp_drop_lsb;
 
   wire [31:0] counter_ipv6_nd_drop_msb;
   wire [31:0] counter_ipv6_nd_drop_lsb;
@@ -2074,6 +2083,12 @@ module nts_parser_ctrl #(
           ADDR_COUNTER_IPV4_NTP_PASS_LSB: api_read_data = counter_ipv4_ntp_pass_lsb;
           ADDR_COUNTER_IPV6_NTP_PASS_MSB: api_read_data = counter_ipv6_ntp_pass_msb;
           ADDR_COUNTER_IPV6_NTP_PASS_LSB: api_read_data = counter_ipv6_ntp_pass_lsb;
+
+          ADDR_COUNTER_IPV4_NTP_DROP_MSB: api_read_data = counter_ipv4_ntp_drop_msb;
+          ADDR_COUNTER_IPV4_NTP_DROP_LSB: api_read_data = counter_ipv4_ntp_drop_lsb;
+          ADDR_COUNTER_IPV6_NTP_DROP_MSB: api_read_data = counter_ipv6_ntp_drop_msb;
+          ADDR_COUNTER_IPV6_NTP_DROP_LSB: api_read_data = counter_ipv6_ntp_drop_lsb;
+
           ADDR_COUNTER_IPV6_ND_DROP_MSB: api_read_data = counter_ipv6_nd_drop_msb;
           ADDR_COUNTER_IPV6_ND_DROP_LSB: api_read_data = counter_ipv6_nd_drop_lsb;
           ADDR_COUNTER_IPV6_ND_PASS_MSB: api_read_data = counter_ipv6_nd_pass_msb;
@@ -4768,8 +4783,34 @@ module nts_parser_ctrl #(
   end
 
   if (SUPPORT_NTP) begin
+    reg counter_ipv4_ntp_drop_lsb_we;
     reg counter_ipv4_ntp_pass_lsb_we;
+    reg counter_ipv6_ntp_drop_lsb_we;
     reg counter_ipv6_ntp_pass_lsb_we;
+
+    counter64 counter_ipv4_ntp_drop (
+      .i_areset     ( i_areset                                 ),
+      .i_clk        ( i_clk                                    ),
+      .i_inc        ( basic_ntp_state_reg == BASIC_NTP_S_ERROR
+                      && protocol_detect_ntp_reg
+                      && detect_ipv4_reg                       ),
+      .i_rst        ( 1'b0                                     ),
+      .i_lsb_sample ( counter_ipv4_ntp_drop_lsb_we             ),
+      .o_msb        ( counter_ipv4_ntp_drop_msb                ),
+      .o_lsb        ( counter_ipv4_ntp_drop_lsb                )
+    );
+
+    counter64 counter_ipv6_ntp_drop (
+      .i_areset     ( i_areset                                 ),
+      .i_clk        ( i_clk                                    ),
+      .i_inc        ( basic_ntp_state_reg == BASIC_NTP_S_ERROR
+                      && protocol_detect_ntp_reg
+                      && detect_ipv6_reg                       ),
+      .i_rst        ( 1'b0                                     ),
+      .i_lsb_sample ( counter_ipv6_ntp_drop_lsb_we             ),
+      .o_msb        ( counter_ipv6_ntp_drop_msb                ),
+      .o_lsb        ( counter_ipv6_ntp_drop_lsb                )
+    );
 
     counter64 counter_ipv4_ntp_pass (
       .i_areset     ( i_areset                                           ),
@@ -4796,7 +4837,9 @@ module nts_parser_ctrl #(
     );
 
     always @*
-    begin : api
+    begin : api_ntp
+      counter_ipv4_ntp_drop_lsb_we = 0;
+      counter_ipv6_ntp_drop_lsb_we = 0;
       counter_ipv4_ntp_pass_lsb_we = 0;
       counter_ipv6_ntp_pass_lsb_we = 0;
       if (i_api_cs) begin
@@ -4805,6 +4848,8 @@ module nts_parser_ctrl #(
           case (i_api_address)
             ADDR_COUNTER_IPV4_NTP_PASS_MSB: counter_ipv4_ntp_pass_lsb_we = 1;
             ADDR_COUNTER_IPV6_NTP_PASS_MSB: counter_ipv6_ntp_pass_lsb_we = 1;
+            ADDR_COUNTER_IPV4_NTP_DROP_MSB: counter_ipv4_ntp_drop_lsb_we = 1;
+            ADDR_COUNTER_IPV6_NTP_DROP_MSB: counter_ipv6_ntp_drop_lsb_we = 1;
             default: ;
           endcase
         end
@@ -4815,6 +4860,10 @@ module nts_parser_ctrl #(
     assign counter_ipv4_ntp_pass_lsb = 0;
     assign counter_ipv6_ntp_pass_msb = 0;
     assign counter_ipv6_ntp_pass_lsb = 0;
+    assign counter_ipv4_ntp_drop_msb = 0;
+    assign counter_ipv4_ntp_drop_lsb = 0;
+    assign counter_ipv6_ntp_drop_msb = 0;
+    assign counter_ipv6_ntp_drop_lsb = 0;
   end
 
   //----------------------------------------------------------------

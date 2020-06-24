@@ -242,7 +242,6 @@ module nts_parser_ctrl #(
   localparam ADDR_IPV6_7   = 'h07C;
   localparam ADDR_IPV6_END = 'h07F;
 
-
   localparam ADDR_COUNTER_IPV4_NTP_PASS_MSB = 'h080;
   localparam ADDR_COUNTER_IPV4_NTP_PASS_LSB = 'h081;
   localparam ADDR_COUNTER_IPV6_NTP_PASS_MSB = 'h082;
@@ -251,6 +250,14 @@ module nts_parser_ctrl #(
   localparam ADDR_COUNTER_IPV4_NTP_DROP_LSB = 'h085;
   localparam ADDR_COUNTER_IPV6_NTP_DROP_MSB = 'h086;
   localparam ADDR_COUNTER_IPV6_NTP_DROP_LSB = 'h087;
+  localparam ADDR_COUNTER_IPV4_NTP_MD5_PASS_MSB = 'h088;
+  localparam ADDR_COUNTER_IPV4_NTP_MD5_PASS_LSB = 'h089;
+  localparam ADDR_COUNTER_IPV6_NTP_MD5_PASS_MSB = 'h08a;
+  localparam ADDR_COUNTER_IPV6_NTP_MD5_PASS_LSB = 'h08b;
+  localparam ADDR_COUNTER_IPV4_NTP_SHA1_PASS_MSB = 'h08c;
+  localparam ADDR_COUNTER_IPV4_NTP_SHA1_PASS_LSB = 'h08d;
+  localparam ADDR_COUNTER_IPV6_NTP_SHA1_PASS_MSB = 'h08e;
+  localparam ADDR_COUNTER_IPV6_NTP_SHA1_PASS_LSB = 'h08f;
 
 
   localparam ADDR_COUNTER_IPV6_ND_DROP_MSB = 'h0c0;
@@ -1146,6 +1153,15 @@ module nts_parser_ctrl #(
   wire [31:0] counter_ipv6_ntp_drop_msb;
   wire [31:0] counter_ipv6_ntp_drop_lsb;
 
+  wire [31:0] counter_ipv4_ntp_md5_pass_msb;
+  wire [31:0] counter_ipv4_ntp_md5_pass_lsb;
+  wire [31:0] counter_ipv6_ntp_md5_pass_msb;
+  wire [31:0] counter_ipv6_ntp_md5_pass_lsb;
+  wire [31:0] counter_ipv4_ntp_sha1_pass_msb;
+  wire [31:0] counter_ipv4_ntp_sha1_pass_lsb;
+  wire [31:0] counter_ipv6_ntp_sha1_pass_msb;
+  wire [31:0] counter_ipv6_ntp_sha1_pass_lsb;
+
   wire [31:0] counter_ipv6_nd_drop_msb;
   wire [31:0] counter_ipv6_nd_drop_lsb;
   wire [31:0] counter_ipv6_nd_pass_msb;
@@ -1662,13 +1678,7 @@ module nts_parser_ctrl #(
 //ipv4_arp_drop_cnt
 //ipv4_arp_pass_cnt
 //ipv4_gen_drop_cnt
-//ipv4_ntp_drop_cnt
-//ipv4_ntp_md5_pass_cnt
-//ipv4_ntp_sha1_pass_cnt
 //ipv6_gen_drop_cnt
-//ipv6_ntp_drop_cnt
-//ipv6_ntp_md5_pass_cnt
-//ipv6_ntp_sha1_pass_cnt
 //tx_blocked_cnt
 
   counter64 counter_ipv4checksum_bad (
@@ -2088,6 +2098,15 @@ module nts_parser_ctrl #(
           ADDR_COUNTER_IPV4_NTP_DROP_LSB: api_read_data = counter_ipv4_ntp_drop_lsb;
           ADDR_COUNTER_IPV6_NTP_DROP_MSB: api_read_data = counter_ipv6_ntp_drop_msb;
           ADDR_COUNTER_IPV6_NTP_DROP_LSB: api_read_data = counter_ipv6_ntp_drop_lsb;
+
+          ADDR_COUNTER_IPV4_NTP_MD5_PASS_MSB: api_read_data = counter_ipv4_ntp_md5_pass_msb;
+          ADDR_COUNTER_IPV4_NTP_MD5_PASS_LSB: api_read_data = counter_ipv4_ntp_md5_pass_lsb;
+          ADDR_COUNTER_IPV6_NTP_MD5_PASS_MSB: api_read_data = counter_ipv6_ntp_md5_pass_msb;
+          ADDR_COUNTER_IPV6_NTP_MD5_PASS_LSB: api_read_data = counter_ipv6_ntp_md5_pass_lsb;
+          ADDR_COUNTER_IPV4_NTP_SHA1_PASS_MSB: api_read_data = counter_ipv4_ntp_sha1_pass_msb;
+          ADDR_COUNTER_IPV4_NTP_SHA1_PASS_LSB: api_read_data = counter_ipv4_ntp_sha1_pass_lsb;
+          ADDR_COUNTER_IPV6_NTP_SHA1_PASS_MSB: api_read_data = counter_ipv6_ntp_sha1_pass_msb;
+          ADDR_COUNTER_IPV6_NTP_SHA1_PASS_LSB: api_read_data = counter_ipv6_ntp_sha1_pass_lsb;
 
           ADDR_COUNTER_IPV6_ND_DROP_MSB: api_read_data = counter_ipv6_nd_drop_msb;
           ADDR_COUNTER_IPV6_ND_DROP_LSB: api_read_data = counter_ipv6_nd_drop_lsb;
@@ -4865,6 +4884,91 @@ module nts_parser_ctrl #(
     assign counter_ipv6_ntp_drop_msb = 0;
     assign counter_ipv6_ntp_drop_lsb = 0;
   end
+
+  if (SUPPORT_NTP_AUTH) begin
+    reg counter_ipv4_ntp_md5_pass_lsb_we;
+    reg counter_ipv6_ntp_md5_pass_lsb_we;
+    reg counter_ipv4_ntp_sha1_pass_lsb_we;
+    reg counter_ipv6_ntp_sha1_pass_lsb_we;
+
+    counter64 counter_ipv4_ntp_md5_pass (
+      .i_areset     ( i_areset                                           ),
+      .i_clk        ( i_clk                                              ),
+      .i_inc        ( basic_ntp_state_reg == BASIC_NTP_S_TRANSMIT_PACKET
+                      && protocol_detect_ntpauth_md5_reg
+                      && detect_ipv4_reg                                 ),
+      .i_rst        ( 1'b0                                               ),
+      .i_lsb_sample ( counter_ipv4_ntp_md5_pass_lsb_we                   ),
+      .o_msb        ( counter_ipv4_ntp_md5_pass_msb                      ),
+      .o_lsb        ( counter_ipv4_ntp_md5_pass_lsb                      )
+    );
+
+    counter64 counter_ipv6_ntp_md5_pass (
+      .i_areset     ( i_areset                                           ),
+      .i_clk        ( i_clk                                              ),
+      .i_inc        ( basic_ntp_state_reg == BASIC_NTP_S_TRANSMIT_PACKET
+                      && protocol_detect_ntpauth_md5_reg
+                      && detect_ipv6_reg                                 ),
+      .i_rst        ( 1'b0                                               ),
+      .i_lsb_sample ( counter_ipv6_ntp_md5_pass_lsb_we                   ),
+      .o_msb        ( counter_ipv6_ntp_md5_pass_msb                      ),
+      .o_lsb        ( counter_ipv6_ntp_md5_pass_lsb                      )
+    );
+
+    counter64 counter_ipv4_ntp_sha1_pass (
+      .i_areset     ( i_areset                                           ),
+      .i_clk        ( i_clk                                              ),
+      .i_inc        ( basic_ntp_state_reg == BASIC_NTP_S_TRANSMIT_PACKET
+                      && protocol_detect_ntpauth_sha1_reg
+                      && detect_ipv4_reg                                 ),
+      .i_rst        ( 1'b0                                               ),
+      .i_lsb_sample ( counter_ipv4_ntp_sha1_pass_lsb_we                  ),
+      .o_msb        ( counter_ipv4_ntp_sha1_pass_msb                     ),
+      .o_lsb        ( counter_ipv4_ntp_sha1_pass_lsb                     )
+    );
+
+    counter64 counter_ipv6_ntp_sha1_pass (
+      .i_areset     ( i_areset                                           ),
+      .i_clk        ( i_clk                                              ),
+      .i_inc        ( basic_ntp_state_reg == BASIC_NTP_S_TRANSMIT_PACKET
+                      && protocol_detect_ntpauth_md5_reg
+                      && detect_ipv6_reg                                 ),
+      .i_rst        ( 1'b0                                               ),
+      .i_lsb_sample ( counter_ipv6_ntp_sha1_pass_lsb_we                  ),
+      .o_msb        ( counter_ipv6_ntp_sha1_pass_msb                     ),
+      .o_lsb        ( counter_ipv6_ntp_sha1_pass_lsb                     )
+    );
+
+    always @*
+    begin : api_ntp_auth
+      counter_ipv4_ntp_md5_pass_lsb_we = 0;
+      counter_ipv6_ntp_md5_pass_lsb_we = 0;
+      counter_ipv4_ntp_sha1_pass_lsb_we = 0;
+      counter_ipv6_ntp_sha1_pass_lsb_we = 0;
+      if (i_api_cs) begin
+        if (i_api_we) begin
+        end else begin
+          case (i_api_address)
+            ADDR_COUNTER_IPV4_NTP_MD5_PASS_MSB: counter_ipv4_ntp_md5_pass_lsb_we = 1;
+            ADDR_COUNTER_IPV6_NTP_MD5_PASS_MSB: counter_ipv6_ntp_md5_pass_lsb_we = 1;
+            ADDR_COUNTER_IPV4_NTP_SHA1_PASS_MSB: counter_ipv4_ntp_sha1_pass_lsb_we = 1;
+            ADDR_COUNTER_IPV6_NTP_SHA1_PASS_MSB: counter_ipv6_ntp_sha1_pass_lsb_we = 1;
+            default: ;
+          endcase
+        end
+      end
+    end
+  end else begin
+    assign counter_ipv4_ntp_md5_pass_msb = 0;
+    assign counter_ipv4_ntp_md5_pass_lsb = 0;
+    assign counter_ipv6_ntp_md5_pass_msb = 0;
+    assign counter_ipv6_ntp_md5_pass_lsb = 0;
+    assign counter_ipv4_ntp_sha1_pass_msb = 0;
+    assign counter_ipv4_ntp_sha1_pass_lsb = 0;
+    assign counter_ipv6_ntp_sha1_pass_msb = 0;
+    assign counter_ipv6_ntp_sha1_pass_lsb = 0;
+  end
+
 
   //----------------------------------------------------------------
   // Finite State Machine

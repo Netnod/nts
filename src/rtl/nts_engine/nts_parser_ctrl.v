@@ -4819,9 +4819,15 @@ module nts_parser_ctrl #(
                   state_new = STATE_VERIFY_IPV4_ICMP;
                 end
               IP_PROTO_UDP:
-                begin
+                if (ipdecode_ip4_ihl_reg == 5) begin
                   state_we  = 'b1;
                   state_new = STATE_VERIFY_IPV4_UDP;
+                end else begin
+                  //access_port_proc does not support verifying UDP checksum
+                  //on packets with IHL>5.
+                  //This packet will only be forwarded to GRE (or dropped).
+                  state_we  = 'b1;
+                  state_new = STATE_SELECT_IPV4_HANDLER;
                 end
               default:
                 begin

@@ -47,8 +47,7 @@ module nts_parser_ctrl #(
   parameter  [0:0] DEFAULT_SUPPORT_NTP        = 1'b0,
   parameter  [0:0] DEFAULT_SUPPORT_NTP_MD5    = 1'b0,
   parameter  [0:0] DEFAULT_SUPPORT_NTP_SHA1   = 1'b0,
-  parameter  [0:0] DEFAULT_GRE_FORWARD        = 1'b0,
-  parameter        DEBUG_BUFFER = 0
+  parameter  [0:0] DEFAULT_GRE_FORWARD        = 1'b0
 ) (
   input  wire                         i_areset, // async reset
   input  wire                         i_clk,
@@ -242,6 +241,12 @@ module nts_parser_ctrl #(
   localparam ADDR_IPV6_6   = 'h078;
   localparam ADDR_IPV6_7   = 'h07C;
   localparam ADDR_IPV6_END = 'h07F;
+
+  localparam ADDR_COUNTER_IPV6_ND_DROP_MSB = 'h080;
+  localparam ADDR_COUNTER_IPV6_ND_DROP_LSB = 'h081;
+  localparam ADDR_COUNTER_IPV6_ND_PASS_MSB = 'h082;
+  localparam ADDR_COUNTER_IPV6_ND_PASS_LSB = 'h083;
+
 
   //----------------------------------------------------------------
   // Error causes observable over API
@@ -1017,45 +1022,6 @@ module nts_parser_ctrl #(
   reg [BITS_VERIFIER_STATE-1:0] verifier_reg;
 
   //----------------------------------------------------------------
-  // Debug buffer
-  //----------------------------------------------------------------
-
-  localparam DEBUG_BUFFER_WORDS = 64;
-
-  /* verilator lint_off UNUSED */
-  wire [63:0] debug_buffer_read_data;
-  reg   [5:0] debug_buffer_write_addr;
-  reg  [63:0] debug_buffer_write_data;
-  reg         debug_buffer_write_enable;
-  /* verilator lint_on UNUSED */
-
-
-  if (DEBUG_BUFFER) begin
-    wire  [5:0] debug_buffer_read_addr;
-    reg  [63:0] debug_buffer [0:DEBUG_BUFFER_WORDS-1];
-
-    assign debug_buffer_read_addr = i_api_address[6:1];
-    assign debug_buffer_read_data = debug_buffer[debug_buffer_read_addr];
-
-    always @ (posedge i_clk, posedge i_areset)
-    begin : debug_update
-      integer i;
-      if (i_areset) begin
-        for (i = 0; i < DEBUG_BUFFER_WORDS; i = i + 1) begin
-          debug_buffer[i] <= 0;
-        end
-      end else begin
-        if (debug_buffer_write_enable) begin
-          debug_buffer[debug_buffer_write_addr] <= debug_buffer_write_data;
-        end
-      end
-    end
-
-  end else begin
-    assign debug_buffer_read_data = 0;
-  end
-
-  //----------------------------------------------------------------
   // Wires.
   //----------------------------------------------------------------
 
@@ -1154,6 +1120,65 @@ module nts_parser_ctrl #(
   reg             [15:0] tx_sum_reset_value;
   reg                    tx_sum_en;
   reg [ADDR_WIDTH+3-1:0] tx_sum_bytes;
+
+  //----------------------------------------------------------------
+  // Counters (wires)
+  //----------------------------------------------------------------
+
+  wire [31:0] counter_ipv6_nd_drop_msb;
+  wire [31:0] counter_ipv6_nd_drop_lsb;
+  wire [31:0] counter_ipv6_nd_pass_msb;
+  wire [31:0] counter_ipv6_nd_pass_lsb;
+
+  reg         counter_ipv4checksum_bad_inc;
+  reg         counter_ipv4checksum_bad_lsb_we;
+  wire [31:0] counter_ipv4checksum_bad_msb;
+  wire [31:0] counter_ipv4checksum_bad_lsb;
+
+  reg         counter_ipv4checksum_good_inc;
+  reg         counter_ipv4checksum_good_lsb_we;
+  wire [31:0] counter_ipv4checksum_good_msb;
+  wire [31:0] counter_ipv4checksum_good_lsb;
+
+  reg         counter_ipv4icmp_checksum_bad_inc;
+  reg         counter_ipv4icmp_checksum_bad_lsb_we;
+  wire [31:0] counter_ipv4icmp_checksum_bad_msb;
+  wire [31:0] counter_ipv4icmp_checksum_bad_lsb;
+
+  reg         counter_ipv4icmp_checksum_good_inc;
+  reg         counter_ipv4icmp_checksum_good_lsb_we;
+  wire [31:0] counter_ipv4icmp_checksum_good_msb;
+  wire [31:0] counter_ipv4icmp_checksum_good_lsb;
+
+  reg         counter_ipv4udp_checksum_bad_inc;
+  reg         counter_ipv4udp_checksum_bad_lsb_we;
+  wire [31:0] counter_ipv4udp_checksum_bad_msb;
+  wire [31:0] counter_ipv4udp_checksum_bad_lsb;
+
+  reg         counter_ipv4udp_checksum_good_inc;
+  reg         counter_ipv4udp_checksum_good_lsb_we;
+  wire [31:0] counter_ipv4udp_checksum_good_msb;
+  wire [31:0] counter_ipv4udp_checksum_good_lsb;
+
+  reg         counter_ipv6icmp_checksum_bad_inc;
+  reg         counter_ipv6icmp_checksum_bad_lsb_we;
+  wire [31:0] counter_ipv6icmp_checksum_bad_msb;
+  wire [31:0] counter_ipv6icmp_checksum_bad_lsb;
+
+  reg         counter_ipv6icmp_checksum_good_inc;
+  reg         counter_ipv6icmp_checksum_good_lsb_we;
+  wire [31:0] counter_ipv6icmp_checksum_good_msb;
+  wire [31:0] counter_ipv6icmp_checksum_good_lsb;
+
+  reg         counter_ipv6udp_checksum_bad_inc;
+  reg         counter_ipv6udp_checksum_bad_lsb_we;
+  wire [31:0] counter_ipv6udp_checksum_bad_msb;
+  wire [31:0] counter_ipv6udp_checksum_bad_lsb;
+
+  reg         counter_ipv6udp_checksum_good_inc;
+  reg         counter_ipv6udp_checksum_good_lsb_we;
+  wire [31:0] counter_ipv6udp_checksum_good_msb;
+  wire [31:0] counter_ipv6udp_checksum_good_lsb;
 
   //----------------------------------------------------------------
   // Connectivity for ports etc.
@@ -1302,7 +1327,17 @@ module nts_parser_ctrl #(
   assign tx_header_ethernet_ipv6_udp = { tx_header_ethernet, tx_header_ipv6, tx_header_udp };
 
 
+
+
+
+  //----------------------------------------------------------------
+  // ICMP
+  //----------------------------------------------------------------
+
   if (SUPPORT_NET) begin : icmp_enabled
+    reg counter_ipv6_nd_drop_lsb_we;
+    reg counter_ipv6_nd_pass_lsb_we;
+
     icmp #(
       .ADDR_WIDTH(ADDR_WIDTH)
     ) icmp (
@@ -1371,7 +1406,48 @@ module nts_parser_ctrl #(
       .o_packet_drop     ( icmp_drop     ),
       .o_packet_transmit ( icmp_transmit )
     );
+
+    counter64 counter_ipv6_nd_drop (
+      .i_areset     ( i_areset                               ),
+      .i_clk        ( i_clk                                  ),
+      .i_inc        ( icmp_drop && protocol_detect_ip6ns_reg ),
+      .i_rst        ( 1'b0                                   ),
+      .i_lsb_sample ( counter_ipv6_nd_drop_lsb_we            ),
+      .o_msb        ( counter_ipv6_nd_drop_msb               ),
+      .o_lsb        ( counter_ipv6_nd_drop_lsb               )
+    );
+
+    counter64 counter_ipv6_nd_pass (
+      .i_areset     ( i_areset                                   ),
+      .i_clk        ( i_clk                                      ),
+      .i_inc        ( icmp_transmit && protocol_detect_ip6ns_reg ),
+      .i_rst        ( 1'b0                                       ),
+      .i_lsb_sample ( counter_ipv6_nd_pass_lsb_we                ),
+      .o_msb        ( counter_ipv6_nd_pass_msb                   ),
+      .o_lsb        ( counter_ipv6_nd_pass_lsb                   )
+    );
+
+    always @*
+    begin : api_icmp
+      counter_ipv6_nd_drop_lsb_we = 0;
+      counter_ipv6_nd_pass_lsb_we = 0;
+      if (i_api_cs) begin
+        if (i_api_we) begin
+        end else begin
+          case (i_api_address)
+            ADDR_COUNTER_IPV6_ND_DROP_MSB: counter_ipv6_nd_drop_lsb_we = 1;
+            ADDR_COUNTER_IPV6_ND_PASS_MSB: counter_ipv6_nd_pass_lsb_we = 1;
+            default: ;
+          endcase
+        end
+      end
+    end
+
   end else begin
+    assign counter_ipv6_nd_drop_msb = 0;
+    assign counter_ipv6_nd_drop_lsb = 0;
+    assign counter_ipv6_nd_pass_msb = 0;
+    assign counter_ipv6_nd_pass_lsb = 0;
     assign icmp_ap_rd = 0;
     assign icmp_ap_addr = 0;
     assign icmp_ap_burst = 0;
@@ -1548,60 +1624,33 @@ module nts_parser_ctrl #(
     assign gre_packet_drop = 1;
   end
 
-
   //----------------------------------------------------------------
   // Counters
   //----------------------------------------------------------------
 
-  reg         counter_ipv4checksum_bad_inc;
-  reg         counter_ipv4checksum_bad_lsb_we;
-  wire [31:0] counter_ipv4checksum_bad_msb;
-  wire [31:0] counter_ipv4checksum_bad_lsb;
-
-  reg         counter_ipv4checksum_good_inc;
-  reg         counter_ipv4checksum_good_lsb_we;
-  wire [31:0] counter_ipv4checksum_good_msb;
-  wire [31:0] counter_ipv4checksum_good_lsb;
-
-  reg         counter_ipv4icmp_checksum_bad_inc;
-  reg         counter_ipv4icmp_checksum_bad_lsb_we;
-  wire [31:0] counter_ipv4icmp_checksum_bad_msb;
-  wire [31:0] counter_ipv4icmp_checksum_bad_lsb;
-
-  reg         counter_ipv4icmp_checksum_good_inc;
-  reg         counter_ipv4icmp_checksum_good_lsb_we;
-  wire [31:0] counter_ipv4icmp_checksum_good_msb;
-  wire [31:0] counter_ipv4icmp_checksum_good_lsb;
-
-  reg         counter_ipv4udp_checksum_bad_inc;
-  reg         counter_ipv4udp_checksum_bad_lsb_we;
-  wire [31:0] counter_ipv4udp_checksum_bad_msb;
-  wire [31:0] counter_ipv4udp_checksum_bad_lsb;
-
-  reg         counter_ipv4udp_checksum_good_inc;
-  reg         counter_ipv4udp_checksum_good_lsb_we;
-  wire [31:0] counter_ipv4udp_checksum_good_msb;
-  wire [31:0] counter_ipv4udp_checksum_good_lsb;
-
-  reg         counter_ipv6icmp_checksum_bad_inc;
-  reg         counter_ipv6icmp_checksum_bad_lsb_we;
-  wire [31:0] counter_ipv6icmp_checksum_bad_msb;
-  wire [31:0] counter_ipv6icmp_checksum_bad_lsb;
-
-  reg         counter_ipv6icmp_checksum_good_inc;
-  reg         counter_ipv6icmp_checksum_good_lsb_we;
-  wire [31:0] counter_ipv6icmp_checksum_good_msb;
-  wire [31:0] counter_ipv6icmp_checksum_good_lsb;
-
-  reg         counter_ipv6udp_checksum_bad_inc;
-  reg         counter_ipv6udp_checksum_bad_lsb_we;
-  wire [31:0] counter_ipv6udp_checksum_bad_msb;
-  wire [31:0] counter_ipv6udp_checksum_bad_lsb;
-
-  reg         counter_ipv6udp_checksum_good_inc;
-  reg         counter_ipv6udp_checksum_good_lsb_we;
-  wire [31:0] counter_ipv6udp_checksum_good_msb;
-  wire [31:0] counter_ipv6udp_checksum_good_lsb;
+//TODO
+//bad_eth_frame_cnt
+//bad_ipv4_nbr_cnt
+//bad_ipv6_nbr_cnt
+//bad_mac_drop_cnt
+//bad_md5_dgst_cnt
+//bad_md5_key_cnt
+//bad_sha1_dgst_cnt
+//bad_sha1_key_cnt
+//eth_gen_drop_cnt
+//ipv4_arp_drop_cnt
+//ipv4_arp_pass_cnt
+//ipv4_gen_drop_cnt
+//ipv4_ntp_drop_cnt
+//ipv4_ntp_md5_pass_cnt
+//ipv4_ntp_pass_cnt
+//ipv4_ntp_sha1_pass_cnt
+//ipv6_gen_drop_cnt
+//ipv6_ntp_drop_cnt
+//ipv6_ntp_md5_pass_cnt
+//ipv6_ntp_pass_cnt
+//ipv6_ntp_sha1_pass_cnt
+//tx_blocked_cnt
 
   counter64 counter_ipv4checksum_bad (
      .i_areset     ( i_areset                         ),
@@ -1887,135 +1936,136 @@ module nts_parser_ctrl #(
           endcase
         end
       end else begin
-        if (i_api_address < 128) begin
-          case (i_api_address)
-            ADDR_NAME0: api_read_data = CORE_NAME[63:32];
-            ADDR_NAME1: api_read_data = CORE_NAME[31:0];
-            ADDR_VERSION: api_read_data = CORE_VERSION;
-            ADDR_DUMMY: api_read_data = api_dummy_reg;
-            ADDR_CTRL: api_read_data[CONFIG_BITS-1:0] = config_ctrl_reg;
-            ADDR_STATE: api_read_data[BITS_STATE-1:0] = state_reg; //MSB=0 from init
-            ADDR_STATE_CRYPTO: api_read_data = { 27'h0, crypto_fsm_reg };
-            //ADDR_STATE_ICMP: api_read_data[BITS_ICMP_STATE-1:0] = icmp_state_reg;
-            ADDR_ERROR_STATE: api_read_data[BITS_STATE-1:0] = error_state_reg; //MSB=0 from init
-            ADDR_ERROR_COUNT: api_read_data = error_count_reg;
-            ADDR_ERROR_CAUSE: api_read_data = error_cause_reg;
-            ADDR_ERROR_SIZE: api_read_data[ADDR_WIDTH+3-1:0] = error_size_reg; //MSB=0 from init
+        case (i_api_address)
+          ADDR_NAME0: api_read_data = CORE_NAME[63:32];
+          ADDR_NAME1: api_read_data = CORE_NAME[31:0];
+          ADDR_VERSION: api_read_data = CORE_VERSION;
+          ADDR_DUMMY: api_read_data = api_dummy_reg;
+          ADDR_CTRL: api_read_data[CONFIG_BITS-1:0] = config_ctrl_reg;
+          ADDR_STATE: api_read_data[BITS_STATE-1:0] = state_reg; //MSB=0 from init
+          ADDR_STATE_CRYPTO: api_read_data = { 27'h0, crypto_fsm_reg };
+          //ADDR_STATE_ICMP: api_read_data[BITS_ICMP_STATE-1:0] = icmp_state_reg;
+          ADDR_ERROR_STATE: api_read_data[BITS_STATE-1:0] = error_state_reg; //MSB=0 from init
+          ADDR_ERROR_COUNT: api_read_data = error_count_reg;
+          ADDR_ERROR_CAUSE: api_read_data = error_cause_reg;
+          ADDR_ERROR_SIZE: api_read_data[ADDR_WIDTH+3-1:0] = error_size_reg; //MSB=0 from init
 
-            ADDR_CSUM_IPV4_BAD0:
-              begin
-                counter_ipv4checksum_bad_lsb_we = 1;
-                api_read_data = counter_ipv4checksum_bad_msb;
-              end
-            ADDR_CSUM_IPV4_BAD1: api_read_data = counter_ipv4checksum_bad_lsb;
-            ADDR_CSUM_IPV4_GOOD0:
-              begin
-                counter_ipv4checksum_good_lsb_we = 1;
-                api_read_data = counter_ipv4checksum_good_msb;
-              end
-            ADDR_CSUM_IPV4_GOOD1: api_read_data = counter_ipv4checksum_good_lsb;
+          ADDR_CSUM_IPV4_BAD0:
+            begin
+              counter_ipv4checksum_bad_lsb_we = 1;
+              api_read_data = counter_ipv4checksum_bad_msb;
+            end
+          ADDR_CSUM_IPV4_BAD1: api_read_data = counter_ipv4checksum_bad_lsb;
+          ADDR_CSUM_IPV4_GOOD0:
+            begin
+              counter_ipv4checksum_good_lsb_we = 1;
+              api_read_data = counter_ipv4checksum_good_msb;
+            end
+          ADDR_CSUM_IPV4_GOOD1: api_read_data = counter_ipv4checksum_good_lsb;
 
-            ADDR_CSUM_IPV4_ICMP_BAD0:
-              begin
-                counter_ipv4icmp_checksum_bad_lsb_we = 1;
-                api_read_data = counter_ipv4icmp_checksum_bad_msb;
-              end
-            ADDR_CSUM_IPV4_ICMP_BAD1: api_read_data = counter_ipv4icmp_checksum_bad_lsb;
-            ADDR_CSUM_IPV4_ICMP_GOOD0:
-              begin
-                counter_ipv4icmp_checksum_good_lsb_we = 1;
-                api_read_data = counter_ipv4icmp_checksum_good_msb;
-              end
-            ADDR_CSUM_IPV4_ICMP_GOOD1: api_read_data = counter_ipv4icmp_checksum_good_lsb;
+          ADDR_CSUM_IPV4_ICMP_BAD0:
+            begin
+              counter_ipv4icmp_checksum_bad_lsb_we = 1;
+              api_read_data = counter_ipv4icmp_checksum_bad_msb;
+            end
+          ADDR_CSUM_IPV4_ICMP_BAD1: api_read_data = counter_ipv4icmp_checksum_bad_lsb;
+          ADDR_CSUM_IPV4_ICMP_GOOD0:
+            begin
+              counter_ipv4icmp_checksum_good_lsb_we = 1;
+              api_read_data = counter_ipv4icmp_checksum_good_msb;
+            end
+          ADDR_CSUM_IPV4_ICMP_GOOD1: api_read_data = counter_ipv4icmp_checksum_good_lsb;
 
-            ADDR_CSUM_IPV4_UDP_BAD0:
-              begin
-                counter_ipv4udp_checksum_bad_lsb_we = 1;
-                api_read_data = counter_ipv4udp_checksum_bad_msb;
-              end
-            ADDR_CSUM_IPV4_UDP_BAD1: api_read_data = counter_ipv4udp_checksum_bad_lsb;
-            ADDR_CSUM_IPV4_UDP_GOOD0:
-              begin
-                counter_ipv4udp_checksum_good_lsb_we = 1;
-                api_read_data = counter_ipv4udp_checksum_good_msb;
-              end
-            ADDR_CSUM_IPV4_UDP_GOOD1: api_read_data = counter_ipv4udp_checksum_good_lsb;
+          ADDR_CSUM_IPV4_UDP_BAD0:
+            begin
+              counter_ipv4udp_checksum_bad_lsb_we = 1;
+              api_read_data = counter_ipv4udp_checksum_bad_msb;
+            end
+          ADDR_CSUM_IPV4_UDP_BAD1: api_read_data = counter_ipv4udp_checksum_bad_lsb;
+          ADDR_CSUM_IPV4_UDP_GOOD0:
+            begin
+              counter_ipv4udp_checksum_good_lsb_we = 1;
+              api_read_data = counter_ipv4udp_checksum_good_msb;
+            end
+          ADDR_CSUM_IPV4_UDP_GOOD1: api_read_data = counter_ipv4udp_checksum_good_lsb;
 
-            ADDR_CSUM_IPV6_ICMP_BAD0:
-              begin
-                counter_ipv6icmp_checksum_bad_lsb_we = 1;
-                api_read_data = counter_ipv6icmp_checksum_bad_msb;
-              end
-            ADDR_CSUM_IPV6_ICMP_BAD1: api_read_data = counter_ipv6icmp_checksum_bad_lsb;
-            ADDR_CSUM_IPV6_ICMP_GOOD0:
-              begin
-                counter_ipv6icmp_checksum_good_lsb_we = 1;
-                api_read_data = counter_ipv6icmp_checksum_good_msb;
-              end
-            ADDR_CSUM_IPV6_ICMP_GOOD1: api_read_data = counter_ipv6icmp_checksum_good_lsb;
+          ADDR_CSUM_IPV6_ICMP_BAD0:
+            begin
+              counter_ipv6icmp_checksum_bad_lsb_we = 1;
+              api_read_data = counter_ipv6icmp_checksum_bad_msb;
+            end
+          ADDR_CSUM_IPV6_ICMP_BAD1: api_read_data = counter_ipv6icmp_checksum_bad_lsb;
+          ADDR_CSUM_IPV6_ICMP_GOOD0:
+            begin
+              counter_ipv6icmp_checksum_good_lsb_we = 1;
+              api_read_data = counter_ipv6icmp_checksum_good_msb;
+            end
+          ADDR_CSUM_IPV6_ICMP_GOOD1: api_read_data = counter_ipv6icmp_checksum_good_lsb;
 
-            ADDR_CSUM_IPV6_UDP_BAD0:
-              begin
-                counter_ipv6udp_checksum_bad_lsb_we = 1;
-                api_read_data = counter_ipv6udp_checksum_bad_msb;
-              end
-            ADDR_CSUM_IPV6_UDP_BAD1: api_read_data = counter_ipv6udp_checksum_bad_lsb;
-            ADDR_CSUM_IPV6_UDP_GOOD0:
-              begin
-                counter_ipv6udp_checksum_good_lsb_we = 1;
-                api_read_data = counter_ipv6udp_checksum_good_msb;
-              end
-            ADDR_CSUM_IPV6_UDP_GOOD1: api_read_data = counter_ipv6udp_checksum_good_lsb;
+          ADDR_CSUM_IPV6_UDP_BAD0:
+            begin
+              counter_ipv6udp_checksum_bad_lsb_we = 1;
+              api_read_data = counter_ipv6udp_checksum_bad_msb;
+            end
+          ADDR_CSUM_IPV6_UDP_BAD1: api_read_data = counter_ipv6udp_checksum_bad_lsb;
+          ADDR_CSUM_IPV6_UDP_GOOD0:
+            begin
+              counter_ipv6udp_checksum_good_lsb_we = 1;
+              api_read_data = counter_ipv6udp_checksum_good_msb;
+            end
+          ADDR_CSUM_IPV6_UDP_GOOD1: api_read_data = counter_ipv6udp_checksum_good_lsb;
 
-            ADDR_MAC_CTRL: api_read_data[3:0] = addr_mac_ctrl_reg;
-            ADDR_IPV4_CTRL: api_read_data[7:0] = addr_ipv4_ctrl_reg;
-            ADDR_IPV6_CTRL: api_read_data[7:0] = addr_ipv6_ctrl_reg;
-            ADDR_UDP_PORT_NTP: api_read_data = { config_udp_port_ntp1_reg, config_udp_port_ntp1_reg };
+          ADDR_MAC_CTRL: api_read_data[3:0] = addr_mac_ctrl_reg;
+          ADDR_IPV4_CTRL: api_read_data[7:0] = addr_ipv4_ctrl_reg;
+          ADDR_IPV6_CTRL: api_read_data[7:0] = addr_ipv6_ctrl_reg;
+          ADDR_UDP_PORT_NTP: api_read_data = { config_udp_port_ntp1_reg, config_udp_port_ntp1_reg };
 
-            ADDR_GRE_COUNTER_FORWARD_MSB: api_read_data = counter_gre_forward_msb;
-            ADDR_GRE_COUNTER_FORWARD_LSB: api_read_data = counter_gre_forward_lsb;
-            ADDR_GRE_COUNTER_DROP_MSB: api_read_data = counter_gre_drop_msb;
-            ADDR_GRE_COUNTER_DROP_LSB: api_read_data = counter_gre_drop_lsb;
+          ADDR_GRE_COUNTER_FORWARD_MSB: api_read_data = counter_gre_forward_msb;
+          ADDR_GRE_COUNTER_FORWARD_LSB: api_read_data = counter_gre_forward_lsb;
+          ADDR_GRE_COUNTER_DROP_MSB: api_read_data = counter_gre_drop_msb;
+          ADDR_GRE_COUNTER_DROP_LSB: api_read_data = counter_gre_drop_lsb;
 
-            ADDR_MAC_0_MSB: api_read_data[15:0] = addr_mac0_msb_reg;
-            ADDR_MAC_0_LSB: api_read_data       = addr_mac0_lsb_reg;
-            ADDR_MAC_1_MSB: api_read_data[15:0] = addr_mac1_msb_reg;
-            ADDR_MAC_1_LSB: api_read_data       = addr_mac1_lsb_reg;
-            ADDR_MAC_2_MSB: api_read_data[15:0] = addr_mac2_msb_reg;
-            ADDR_MAC_2_LSB: api_read_data       = addr_mac2_lsb_reg;
-            ADDR_MAC_3_MSB: api_read_data[15:0] = addr_mac3_msb_reg;
-            ADDR_MAC_3_LSB: api_read_data       = addr_mac3_lsb_reg;
+          ADDR_MAC_0_MSB: api_read_data[15:0] = addr_mac0_msb_reg;
+          ADDR_MAC_0_LSB: api_read_data       = addr_mac0_lsb_reg;
+          ADDR_MAC_1_MSB: api_read_data[15:0] = addr_mac1_msb_reg;
+          ADDR_MAC_1_LSB: api_read_data       = addr_mac1_lsb_reg;
+          ADDR_MAC_2_MSB: api_read_data[15:0] = addr_mac2_msb_reg;
+          ADDR_MAC_2_LSB: api_read_data       = addr_mac2_lsb_reg;
+          ADDR_MAC_3_MSB: api_read_data[15:0] = addr_mac3_msb_reg;
+          ADDR_MAC_3_LSB: api_read_data       = addr_mac3_lsb_reg;
 
-            ADDR_IPV4_0: api_read_data = addr_ipv4_0_reg;
-            ADDR_IPV4_1: api_read_data = addr_ipv4_1_reg;
-            ADDR_IPV4_2: api_read_data = addr_ipv4_2_reg;
-            ADDR_IPV4_3: api_read_data = addr_ipv4_3_reg;
-            ADDR_IPV4_4: api_read_data = addr_ipv4_4_reg;
-            ADDR_IPV4_5: api_read_data = addr_ipv4_5_reg;
-            ADDR_IPV4_6: api_read_data = addr_ipv4_6_reg;
-            ADDR_IPV4_7: api_read_data = addr_ipv4_7_reg;
+          ADDR_IPV4_0: api_read_data = addr_ipv4_0_reg;
+          ADDR_IPV4_1: api_read_data = addr_ipv4_1_reg;
+          ADDR_IPV4_2: api_read_data = addr_ipv4_2_reg;
+          ADDR_IPV4_3: api_read_data = addr_ipv4_3_reg;
+          ADDR_IPV4_4: api_read_data = addr_ipv4_4_reg;
+          ADDR_IPV4_5: api_read_data = addr_ipv4_5_reg;
+          ADDR_IPV4_6: api_read_data = addr_ipv4_6_reg;
+          ADDR_IPV4_7: api_read_data = addr_ipv4_7_reg;
 
-            ADDR_IPV6_0 + 0: api_read_data = addr_ipv6_0_reg[127-0*32-:32];
-            ADDR_IPV6_0 + 1: api_read_data = addr_ipv6_0_reg[127-1*32-:32];
-            ADDR_IPV6_0 + 2: api_read_data = addr_ipv6_0_reg[127-2*32-:32];
-            ADDR_IPV6_0 + 3: api_read_data = addr_ipv6_0_reg[127-3*32-:32];
-            ADDR_IPV6_1 + 0: api_read_data = addr_ipv6_1_reg[127-0*32-:32];
-            ADDR_IPV6_1 + 1: api_read_data = addr_ipv6_1_reg[127-1*32-:32];
-            ADDR_IPV6_1 + 2: api_read_data = addr_ipv6_1_reg[127-2*32-:32];
-            ADDR_IPV6_1 + 3: api_read_data = addr_ipv6_1_reg[127-3*32-:32];
-            ADDR_IPV6_2 + 0: api_read_data = addr_ipv6_2_reg[127-0*32-:32];
-            ADDR_IPV6_2 + 1: api_read_data = addr_ipv6_2_reg[127-1*32-:32];
-            ADDR_IPV6_2 + 2: api_read_data = addr_ipv6_2_reg[127-2*32-:32];
-            ADDR_IPV6_2 + 3: api_read_data = addr_ipv6_2_reg[127-3*32-:32];
-            ADDR_IPV6_3 + 0: api_read_data = addr_ipv6_3_reg[127-0*32-:32];
-            ADDR_IPV6_3 + 1: api_read_data = addr_ipv6_3_reg[127-1*32-:32];
-            ADDR_IPV6_3 + 2: api_read_data = addr_ipv6_3_reg[127-2*32-:32];
-            ADDR_IPV6_3 + 3: api_read_data = addr_ipv6_3_reg[127-3*32-:32];
-            default: ;
-          endcase
-        end else begin
-          api_read_data = (i_api_address[0]) ? debug_buffer_read_data[31:0] : debug_buffer_read_data[63:32];
-        end
+          ADDR_IPV6_0 + 0: api_read_data = addr_ipv6_0_reg[127-0*32-:32];
+          ADDR_IPV6_0 + 1: api_read_data = addr_ipv6_0_reg[127-1*32-:32];
+          ADDR_IPV6_0 + 2: api_read_data = addr_ipv6_0_reg[127-2*32-:32];
+          ADDR_IPV6_0 + 3: api_read_data = addr_ipv6_0_reg[127-3*32-:32];
+          ADDR_IPV6_1 + 0: api_read_data = addr_ipv6_1_reg[127-0*32-:32];
+          ADDR_IPV6_1 + 1: api_read_data = addr_ipv6_1_reg[127-1*32-:32];
+          ADDR_IPV6_1 + 2: api_read_data = addr_ipv6_1_reg[127-2*32-:32];
+          ADDR_IPV6_1 + 3: api_read_data = addr_ipv6_1_reg[127-3*32-:32];
+          ADDR_IPV6_2 + 0: api_read_data = addr_ipv6_2_reg[127-0*32-:32];
+          ADDR_IPV6_2 + 1: api_read_data = addr_ipv6_2_reg[127-1*32-:32];
+          ADDR_IPV6_2 + 2: api_read_data = addr_ipv6_2_reg[127-2*32-:32];
+          ADDR_IPV6_2 + 3: api_read_data = addr_ipv6_2_reg[127-3*32-:32];
+          ADDR_IPV6_3 + 0: api_read_data = addr_ipv6_3_reg[127-0*32-:32];
+          ADDR_IPV6_3 + 1: api_read_data = addr_ipv6_3_reg[127-1*32-:32];
+          ADDR_IPV6_3 + 2: api_read_data = addr_ipv6_3_reg[127-2*32-:32];
+          ADDR_IPV6_3 + 3: api_read_data = addr_ipv6_3_reg[127-3*32-:32];
+
+          ADDR_COUNTER_IPV6_ND_DROP_MSB: api_read_data = counter_ipv6_nd_drop_msb;
+          ADDR_COUNTER_IPV6_ND_DROP_LSB: api_read_data = counter_ipv6_nd_drop_lsb;
+          ADDR_COUNTER_IPV6_ND_PASS_MSB: api_read_data = counter_ipv6_nd_pass_msb;
+          ADDR_COUNTER_IPV6_ND_PASS_LSB: api_read_data = counter_ipv6_nd_pass_lsb;
+          default: ;
+        endcase
       end
     end
   end
@@ -2045,39 +2095,6 @@ module nts_parser_ctrl #(
       error_state_we = 1;
       error_state_new = state_previous_reg;
     end
-  end
-
-  //----------------------------------------------------------------
-  // API debug buffer
-  //----------------------------------------------------------------
-
-  always @*
-  begin : api_debug_write
-    reg [ADDR_WIDTH-1:0] tmp;
-    debug_buffer_write_enable = 0;
-    debug_buffer_write_addr = 0;
-    debug_buffer_write_data = 0;
-    if (DEBUG_BUFFER) begin
-      debug_buffer_write_data = i_data;
-      case (state_reg)
-        STATE_IDLE:
-          if (i_process_initial) begin
-            debug_buffer_write_addr = 0;
-            debug_buffer_write_enable = 1;
-          end
-        STATE_COPY:
-          if (i_process_initial) begin
-            if (word_counter_reg < (DEBUG_BUFFER_WORDS-1)) begin
-              tmp = word_counter_reg + 1;
-              if (tmp[ADDR_WIDTH-1:6] == 0) begin
-                debug_buffer_write_addr = tmp[5:0];
-                debug_buffer_write_enable = 1;
-              end
-            end
-          end
-        default: ;
-      endcase
-    end //if DEBUG_BUFFER
   end
 
   //----------------------------------------------------------------

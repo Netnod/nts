@@ -242,10 +242,17 @@ module nts_parser_ctrl #(
   localparam ADDR_IPV6_7   = 'h07C;
   localparam ADDR_IPV6_END = 'h07F;
 
-  localparam ADDR_COUNTER_IPV6_ND_DROP_MSB = 'h080;
-  localparam ADDR_COUNTER_IPV6_ND_DROP_LSB = 'h081;
-  localparam ADDR_COUNTER_IPV6_ND_PASS_MSB = 'h082;
-  localparam ADDR_COUNTER_IPV6_ND_PASS_LSB = 'h083;
+
+  localparam ADDR_COUNTER_IPV4_NTP_PASS_MSB = 'h080;
+  localparam ADDR_COUNTER_IPV4_NTP_PASS_LSB = 'h081;
+  localparam ADDR_COUNTER_IPV6_NTP_PASS_MSB = 'h082;
+  localparam ADDR_COUNTER_IPV6_NTP_PASS_LSB = 'h083;
+
+
+  localparam ADDR_COUNTER_IPV6_ND_DROP_MSB = 'h0c0;
+  localparam ADDR_COUNTER_IPV6_ND_DROP_LSB = 'h0c1;
+  localparam ADDR_COUNTER_IPV6_ND_PASS_MSB = 'h0c2;
+  localparam ADDR_COUNTER_IPV6_ND_PASS_LSB = 'h0c3;
 
 
   //----------------------------------------------------------------
@@ -1125,6 +1132,11 @@ module nts_parser_ctrl #(
   // Counters (wires)
   //----------------------------------------------------------------
 
+  wire [31:0] counter_ipv4_ntp_pass_msb;
+  wire [31:0] counter_ipv4_ntp_pass_lsb;
+  wire [31:0] counter_ipv6_ntp_pass_msb;
+  wire [31:0] counter_ipv6_ntp_pass_lsb;
+
   wire [31:0] counter_ipv6_nd_drop_msb;
   wire [31:0] counter_ipv6_nd_drop_lsb;
   wire [31:0] counter_ipv6_nd_pass_msb;
@@ -1643,12 +1655,10 @@ module nts_parser_ctrl #(
 //ipv4_gen_drop_cnt
 //ipv4_ntp_drop_cnt
 //ipv4_ntp_md5_pass_cnt
-//ipv4_ntp_pass_cnt
 //ipv4_ntp_sha1_pass_cnt
 //ipv6_gen_drop_cnt
 //ipv6_ntp_drop_cnt
 //ipv6_ntp_md5_pass_cnt
-//ipv6_ntp_pass_cnt
 //ipv6_ntp_sha1_pass_cnt
 //tx_blocked_cnt
 
@@ -2060,6 +2070,10 @@ module nts_parser_ctrl #(
           ADDR_IPV6_3 + 2: api_read_data = addr_ipv6_3_reg[127-2*32-:32];
           ADDR_IPV6_3 + 3: api_read_data = addr_ipv6_3_reg[127-3*32-:32];
 
+          ADDR_COUNTER_IPV4_NTP_PASS_MSB: api_read_data = counter_ipv4_ntp_pass_msb;
+          ADDR_COUNTER_IPV4_NTP_PASS_LSB: api_read_data = counter_ipv4_ntp_pass_lsb;
+          ADDR_COUNTER_IPV6_NTP_PASS_MSB: api_read_data = counter_ipv6_ntp_pass_msb;
+          ADDR_COUNTER_IPV6_NTP_PASS_LSB: api_read_data = counter_ipv6_ntp_pass_lsb;
           ADDR_COUNTER_IPV6_ND_DROP_MSB: api_read_data = counter_ipv6_nd_drop_msb;
           ADDR_COUNTER_IPV6_ND_DROP_LSB: api_read_data = counter_ipv6_nd_drop_lsb;
           ADDR_COUNTER_IPV6_ND_PASS_MSB: api_read_data = counter_ipv6_nd_pass_msb;
@@ -4610,12 +4624,22 @@ module nts_parser_ctrl #(
       BASIC_NTP_S_WRITE_HEADER:
         if (response_done_reg) begin
           if (protocol_detect_ntpauth_md5_reg) begin
-            basic_ntp_state_we = 1;
-            basic_ntp_state_new = BASIC_NTP_S_RXAUTH_MD5;
+            if (SUPPORT_NTP_AUTH) begin
+              basic_ntp_state_we = 1;
+              basic_ntp_state_new = BASIC_NTP_S_RXAUTH_MD5;
+            end else begin
+              basic_ntp_state_we = 1;
+              basic_ntp_state_new = BASIC_NTP_S_ERROR;
+            end
 
           end else if (protocol_detect_ntpauth_sha1_reg) begin
-            basic_ntp_state_we = 1;
-            basic_ntp_state_new = BASIC_NTP_S_RXAUTH_SHA1;
+            if (SUPPORT_NTP_AUTH) begin
+              basic_ntp_state_we = 1;
+              basic_ntp_state_new = BASIC_NTP_S_RXAUTH_SHA1;
+            end else begin
+              basic_ntp_state_we = 1;
+              basic_ntp_state_new = BASIC_NTP_S_ERROR;
+            end
 
           end else begin
             basic_ntp_state_we = 1;
@@ -4623,16 +4647,26 @@ module nts_parser_ctrl #(
           end
         end
       BASIC_NTP_S_RXAUTH_MD5:
-        if (i_ntpauth_ready) begin
+        if (SUPPORT_NTP_AUTH) begin
+          if (i_ntpauth_ready) begin
+            basic_ntp_state_we = 1;
+            basic_ntp_state_new = BASIC_NTP_S_RXAUTH_WAIT;
+            ntpauth_md5 = 1;
+          end
+        end else begin
           basic_ntp_state_we = 1;
-          basic_ntp_state_new = BASIC_NTP_S_RXAUTH_WAIT;
-          ntpauth_md5 = 1;
+          basic_ntp_state_new = BASIC_NTP_S_ERROR;
         end
       BASIC_NTP_S_RXAUTH_SHA1:
-        if (i_ntpauth_ready) begin
+        if (SUPPORT_NTP_AUTH) begin
+          if (i_ntpauth_ready) begin
+            basic_ntp_state_we = 1;
+            basic_ntp_state_new = BASIC_NTP_S_RXAUTH_WAIT;
+            ntpauth_sha1 = 1;
+          end
+        end else begin
           basic_ntp_state_we = 1;
-          basic_ntp_state_new = BASIC_NTP_S_RXAUTH_WAIT;
-          ntpauth_sha1 = 1;
+          basic_ntp_state_new = BASIC_NTP_S_ERROR;
         end
       BASIC_NTP_S_RXAUTH_WAIT:
         if (i_ntpauth_ready) begin
@@ -4731,6 +4765,56 @@ module nts_parser_ctrl #(
           basic_ntp_state_new = BASIC_NTP_S_ERROR;
         end
     endcase
+  end
+
+  if (SUPPORT_NTP) begin
+    reg counter_ipv4_ntp_pass_lsb_we;
+    reg counter_ipv6_ntp_pass_lsb_we;
+
+    counter64 counter_ipv4_ntp_pass (
+      .i_areset     ( i_areset                                           ),
+      .i_clk        ( i_clk                                              ),
+      .i_inc        ( basic_ntp_state_reg == BASIC_NTP_S_TRANSMIT_PACKET
+                      && protocol_detect_ntp_reg
+                      && detect_ipv4_reg                                 ),
+      .i_rst        ( 1'b0                                               ),
+      .i_lsb_sample ( counter_ipv4_ntp_pass_lsb_we                       ),
+      .o_msb        ( counter_ipv4_ntp_pass_msb                          ),
+      .o_lsb        ( counter_ipv4_ntp_pass_lsb                          )
+    );
+
+    counter64 counter_ipv6_ntp_pass (
+      .i_areset     ( i_areset                                           ),
+      .i_clk        ( i_clk                                              ),
+      .i_inc        ( basic_ntp_state_reg == BASIC_NTP_S_TRANSMIT_PACKET
+                      && protocol_detect_ntp_reg
+                      && detect_ipv6_reg                                 ),
+      .i_rst        ( 1'b0                                               ),
+      .i_lsb_sample ( counter_ipv6_ntp_pass_lsb_we                       ),
+      .o_msb        ( counter_ipv6_ntp_pass_msb                          ),
+      .o_lsb        ( counter_ipv6_ntp_pass_lsb                          )
+    );
+
+    always @*
+    begin : api
+      counter_ipv4_ntp_pass_lsb_we = 0;
+      counter_ipv6_ntp_pass_lsb_we = 0;
+      if (i_api_cs) begin
+        if (i_api_we) begin
+        end else begin
+          case (i_api_address)
+            ADDR_COUNTER_IPV4_NTP_PASS_MSB: counter_ipv4_ntp_pass_lsb_we = 1;
+            ADDR_COUNTER_IPV6_NTP_PASS_MSB: counter_ipv6_ntp_pass_lsb_we = 1;
+            default: ;
+          endcase
+        end
+      end
+    end
+  end else begin
+    assign counter_ipv4_ntp_pass_msb = 0;
+    assign counter_ipv4_ntp_pass_lsb = 0;
+    assign counter_ipv6_ntp_pass_msb = 0;
+    assign counter_ipv6_ntp_pass_lsb = 0;
   end
 
   //----------------------------------------------------------------

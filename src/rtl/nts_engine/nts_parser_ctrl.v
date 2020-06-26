@@ -137,6 +137,8 @@ module nts_parser_ctrl #(
   output wire                         o_ntpauth_transmit,
   input  wire                         i_ntpauth_ready,
   input  wire                         i_ntpauth_good,
+  input  wire                         i_ntpauth_bad_digest,
+  input  wire                         i_ntpauth_bad_key,
 
   output wire                         o_muxctrl_timestamp_ipv4,
   output wire                         o_muxctrl_timestamp_ipv6,
@@ -258,7 +260,16 @@ module nts_parser_ctrl #(
   localparam ADDR_COUNTER_IPV4_NTP_SHA1_PASS_LSB = 'h08d;
   localparam ADDR_COUNTER_IPV6_NTP_SHA1_PASS_MSB = 'h08e;
   localparam ADDR_COUNTER_IPV6_NTP_SHA1_PASS_LSB = 'h08f;
-
+  localparam ADDR_COUNTER_BAD_MD5_DIGEST_MSB     = 'h090;
+  localparam ADDR_COUNTER_BAD_MD5_DIGEST_LSB     = 'h091;
+  localparam ADDR_COUNTER_BAD_MD5_KEY_MSB        = 'h092;
+  localparam ADDR_COUNTER_BAD_MD5_KEY_LSB        = 'h093;
+  localparam ADDR_COUNTER_BAD_SHA1_DIGEST_MSB    = 'h094;
+  localparam ADDR_COUNTER_BAD_SHA1_DIGEST_LSB    = 'h095;
+  localparam ADDR_COUNTER_BAD_SHA1_KEY_MSB       = 'h096;
+  localparam ADDR_COUNTER_BAD_SHA1_KEY_LSB       = 'h097;
+  localparam ADDR_COUNTER_BAD_MAC_MSB            = 'h098;
+  localparam ADDR_COUNTER_BAD_MAC_LSB            = 'h099;
 
   localparam ADDR_COUNTER_IPV6_ND_DROP_MSB = 'h0c0;
   localparam ADDR_COUNTER_IPV6_ND_DROP_LSB = 'h0c1;
@@ -1154,6 +1165,21 @@ module nts_parser_ctrl #(
   wire [31:0] counter_ipv6udp_checksum_good_msb;
   wire [31:0] counter_ipv6udp_checksum_good_lsb;
 
+  wire [31:0] counter_bad_md5_digest_msb;
+  wire [31:0] counter_bad_md5_digest_lsb;
+
+  wire [31:0] counter_bad_md5_key_msb;
+  wire [31:0] counter_bad_md5_key_lsb;
+
+  wire [31:0] counter_bad_sha1_digest_msb;
+  wire [31:0] counter_bad_sha1_digest_lsb;
+
+  wire [31:0] counter_bad_sha1_key_msb;
+  wire [31:0] counter_bad_sha1_key_lsb;
+
+  wire [31:0] counter_bad_mac_msb;
+  wire [31:0] counter_bad_mac_lsb;
+
   //----------------------------------------------------------------
   // Connectivity for ports etc.
   //----------------------------------------------------------------
@@ -1606,11 +1632,6 @@ module nts_parser_ctrl #(
 //bad_eth_frame_cnt
 //bad_ipv4_nbr_cnt
 //bad_ipv6_nbr_cnt
-//bad_mac_drop_cnt
-//bad_md5_dgst_cnt
-//bad_md5_key_cnt
-//bad_sha1_dgst_cnt
-//bad_sha1_key_cnt
 //eth_gen_drop_cnt
 //ipv4_arp_drop_cnt
 //ipv4_arp_pass_cnt
@@ -1965,6 +1986,17 @@ module nts_parser_ctrl #(
           ADDR_COUNTER_IPV4_NTP_SHA1_PASS_LSB: api_read_data = counter_ipv4_ntp_sha1_pass_lsb;
           ADDR_COUNTER_IPV6_NTP_SHA1_PASS_MSB: api_read_data = counter_ipv6_ntp_sha1_pass_msb;
           ADDR_COUNTER_IPV6_NTP_SHA1_PASS_LSB: api_read_data = counter_ipv6_ntp_sha1_pass_lsb;
+
+          ADDR_COUNTER_BAD_MD5_DIGEST_MSB: api_read_data = counter_bad_md5_digest_msb;
+          ADDR_COUNTER_BAD_MD5_DIGEST_LSB: api_read_data = counter_bad_md5_digest_lsb;
+          ADDR_COUNTER_BAD_MD5_KEY_MSB: api_read_data = counter_bad_md5_key_msb;
+          ADDR_COUNTER_BAD_MD5_KEY_LSB: api_read_data = counter_bad_md5_key_lsb;
+          ADDR_COUNTER_BAD_SHA1_DIGEST_MSB: api_read_data = counter_bad_sha1_digest_msb;
+          ADDR_COUNTER_BAD_SHA1_DIGEST_LSB: api_read_data = counter_bad_sha1_digest_lsb;
+          ADDR_COUNTER_BAD_SHA1_KEY_MSB: api_read_data = counter_bad_sha1_key_msb;
+          ADDR_COUNTER_BAD_SHA1_KEY_LSB: api_read_data = counter_bad_sha1_key_lsb;
+          ADDR_COUNTER_BAD_MAC_MSB: api_read_data = counter_bad_mac_msb;
+          ADDR_COUNTER_BAD_MAC_LSB: api_read_data = counter_bad_mac_lsb;
 
           ADDR_COUNTER_IPV6_ND_DROP_MSB: api_read_data = counter_ipv6_nd_drop_msb;
           ADDR_COUNTER_IPV6_ND_DROP_LSB: api_read_data = counter_ipv6_nd_drop_lsb;
@@ -4607,6 +4639,11 @@ module nts_parser_ctrl #(
   end
 
   if (SUPPORT_NTP_AUTH) begin
+    reg counter_bad_md5_digest_lsb_we;
+    reg counter_bad_md5_key_lsb_we;
+    reg counter_bad_sha1_digest_lsb_we;
+    reg counter_bad_sha1_key_lsb_we;
+    reg counter_bad_mac_lsb_we;
     reg counter_ipv4_ntp_md5_pass_lsb_we;
     reg counter_ipv6_ntp_md5_pass_lsb_we;
     reg counter_ipv4_ntp_sha1_pass_lsb_we;
@@ -4660,12 +4697,71 @@ module nts_parser_ctrl #(
       .o_lsb        ( counter_ipv6_ntp_sha1_pass_lsb                     )
     );
 
+    counter64 counter_bad_md5_digest (
+      .i_areset     ( i_areset                          ),
+      .i_clk        ( i_clk                             ),
+      .i_inc        ( protocol_detect_ntpauth_md5_reg
+                      && i_ntpauth_bad_digest           ),
+      .i_rst        ( 1'b0                              ),
+      .i_lsb_sample ( counter_bad_md5_digest_lsb_we     ),
+      .o_msb        ( counter_bad_md5_digest_msb        ),
+      .o_lsb        ( counter_bad_md5_digest_lsb        )
+    );
+
+    counter64 counter_bad_md5_key (
+      .i_areset     ( i_areset                         ),
+      .i_clk        ( i_clk                            ),
+      .i_inc        ( protocol_detect_ntpauth_md5_reg
+                      && i_ntpauth_bad_key             ),
+      .i_rst        ( 1'b0                             ),
+      .i_lsb_sample ( counter_bad_md5_key_lsb_we       ),
+      .o_msb        ( counter_bad_md5_key_msb          ),
+      .o_lsb        ( counter_bad_md5_key_lsb          )
+    );
+
+    counter64 counter_bad_sha1_digest (
+      .i_areset     ( i_areset                          ),
+      .i_clk        ( i_clk                             ),
+      .i_inc        ( protocol_detect_ntpauth_sha1_reg
+                      && i_ntpauth_bad_digest           ),
+      .i_rst        ( 1'b0                              ),
+      .i_lsb_sample ( counter_bad_sha1_digest_lsb_we    ),
+      .o_msb        ( counter_bad_sha1_digest_msb       ),
+      .o_lsb        ( counter_bad_sha1_digest_lsb       )
+    );
+
+    counter64 counter_bad_sha1_key (
+      .i_areset     ( i_areset                         ),
+      .i_clk        ( i_clk                            ),
+      .i_inc        ( protocol_detect_ntpauth_sha1_reg
+                      && i_ntpauth_bad_key             ),
+      .i_rst        ( 1'b0                             ),
+      .i_lsb_sample ( counter_bad_sha1_key_lsb_we      ),
+      .o_msb        ( counter_bad_sha1_key_msb         ),
+      .o_lsb        ( counter_bad_sha1_key_lsb         )
+    );
+
+    counter64 counter_bad_mac (
+      .i_areset     ( i_areset                                  ),
+      .i_clk        ( i_clk                                     ),
+      .i_inc        ( i_ntpauth_bad_key || i_ntpauth_bad_digest ),
+      .i_rst        ( 1'b0                                      ),
+      .i_lsb_sample ( counter_bad_mac_lsb_we                    ),
+      .o_msb        ( counter_bad_mac_msb                       ),
+      .o_lsb        ( counter_bad_mac_lsb                       )
+    );
+
     always @*
     begin : api_ntp_auth
       counter_ipv4_ntp_md5_pass_lsb_we = 0;
       counter_ipv6_ntp_md5_pass_lsb_we = 0;
       counter_ipv4_ntp_sha1_pass_lsb_we = 0;
       counter_ipv6_ntp_sha1_pass_lsb_we = 0;
+      counter_bad_md5_digest_lsb_we = 0;
+      counter_bad_md5_key_lsb_we = 0;
+      counter_bad_sha1_digest_lsb_we = 0;
+      counter_bad_sha1_key_lsb_we = 0;
+      counter_bad_mac_lsb_we = 0;
       if (i_api_cs) begin
         if (i_api_we) begin
         end else begin
@@ -4674,12 +4770,31 @@ module nts_parser_ctrl #(
             ADDR_COUNTER_IPV6_NTP_MD5_PASS_MSB: counter_ipv6_ntp_md5_pass_lsb_we = 1;
             ADDR_COUNTER_IPV4_NTP_SHA1_PASS_MSB: counter_ipv4_ntp_sha1_pass_lsb_we = 1;
             ADDR_COUNTER_IPV6_NTP_SHA1_PASS_MSB: counter_ipv6_ntp_sha1_pass_lsb_we = 1;
+            ADDR_COUNTER_BAD_MD5_DIGEST_MSB: counter_bad_md5_digest_lsb_we = 1;
+            ADDR_COUNTER_BAD_MD5_KEY_MSB: counter_bad_md5_key_lsb_we = 1;
+            ADDR_COUNTER_BAD_SHA1_DIGEST_MSB: counter_bad_sha1_digest_lsb_we = 1;
+            ADDR_COUNTER_BAD_SHA1_KEY_MSB: counter_bad_sha1_key_lsb_we = 1;
+            ADDR_COUNTER_BAD_MAC_MSB: counter_bad_mac_lsb_we = 1;
             default: ;
           endcase
         end
       end
     end
-  end else begin
+  end else begin : ntpauth_disabled
+    /* verilator lint_off UNUSED */
+    wire dontcare;
+    /* verilator lint_on UNUSED */
+    assign dontcare = i_ntpauth_bad_digest || i_ntpauth_bad_key;
+    assign counter_bad_md5_digest_msb = 0;
+    assign counter_bad_md5_digest_lsb = 0;
+    assign counter_bad_md5_key_msb = 0;
+    assign counter_bad_md5_key_lsb = 0;
+    assign counter_bad_sha1_digest_msb = 0;
+    assign counter_bad_sha1_digest_lsb = 0;
+    assign counter_bad_sha1_key_msb = 0;
+    assign counter_bad_sha1_key_lsb = 0;
+    assign counter_bad_mac_msb = 0;
+    assign counter_bad_mac_lsb = 0;
     assign counter_ipv4_ntp_md5_pass_msb = 0;
     assign counter_ipv4_ntp_md5_pass_lsb = 0;
     assign counter_ipv6_ntp_md5_pass_msb = 0;

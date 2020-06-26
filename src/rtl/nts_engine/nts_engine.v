@@ -221,6 +221,8 @@ module nts_engine #(
   /* verilator lint_on UNUSED */
   wire                         ntpauth_parser_ready;
   wire                         ntpauth_parser_good;
+  wire                         ntpauth_parser_bad_key;
+  wire                         ntpauth_parser_bad_digest;
   /* verilator lint_off UNUSED */
   wire                         parser_ntpauth_transmit;
   /* verilator lint_on UNUSED */
@@ -898,11 +900,13 @@ module nts_engine #(
    .o_crypto_op_c2s_verify_auth(parser_crypto_op_c2s_verify_auth),
    .o_crypto_op_s2c_generate_auth(parser_crypto_op_s2c_generate_auth),
 
-   .o_ntpauth_md5      ( parser_ntpauth_md5      ),
-   .o_ntpauth_sha1     ( parser_ntpauth_sha1     ),
-   .o_ntpauth_transmit ( parser_ntpauth_transmit ),
-   .i_ntpauth_ready    ( ntpauth_parser_ready    ),
-   .i_ntpauth_good     ( ntpauth_parser_good     ),
+   .o_ntpauth_md5        ( parser_ntpauth_md5        ),
+   .o_ntpauth_sha1       ( parser_ntpauth_sha1       ),
+   .o_ntpauth_transmit   ( parser_ntpauth_transmit   ),
+   .i_ntpauth_ready      ( ntpauth_parser_ready      ),
+   .i_ntpauth_good       ( ntpauth_parser_good       ),
+   .i_ntpauth_bad_digest ( ntpauth_parser_bad_digest ),
+   .i_ntpauth_bad_key    ( ntpauth_parser_bad_key    ),
 
    .o_muxctrl_crypto(parser_muxctrl_crypto),
 
@@ -994,8 +998,10 @@ module nts_engine #(
       .i_auth_sha1 ( parser_ntpauth_sha1     ),
       .i_tx        ( parser_ntpauth_transmit ),
 
-      .o_ready ( ntpauth_parser_ready    ),
-      .o_good  ( ntpauth_parser_good     ),
+      .o_ready      ( ntpauth_parser_ready      ),
+      .o_good       ( ntpauth_parser_good       ),
+      .o_bad_digest ( ntpauth_parser_bad_digest ),
+      .o_bad_key    ( ntpauth_parser_bad_key    ),
 
       .i_rx_reset ( i_dispatch_rx_fifo_rd_start ),
       .i_rx_valid ( i_dispatch_rx_fifo_rd_valid ),
@@ -1018,8 +1024,10 @@ module nts_engine #(
       .o_tx_data  ( ntpauth_txbuf_write_data )
     );
   end else begin
-    assign ntpauth_parser_ready = 0;
+    assign ntpauth_parser_bad_digest = 0;
+    assign ntpauth_parser_bad_key = 0;
     assign ntpauth_parser_good = 0;
+    assign ntpauth_parser_ready = 0;
     assign ntpauth_txbuf_write_en = 0;
     assign ntpauth_txbuf_address = 0;
     assign ntpauth_txbuf_write_data = 0;

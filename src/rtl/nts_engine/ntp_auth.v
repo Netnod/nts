@@ -37,6 +37,8 @@ module ntp_auth (
   input wire          i_tx,
   output wire         o_good,
   output wire         o_ready,
+  output wire         o_bad_digest,
+  output wire         o_bad_key,
 
   input wire          i_rx_reset,
   input wire          i_rx_valid,
@@ -133,6 +135,12 @@ module ntp_auth (
   // Output Registers
   //----------------------------------------------------------------
 
+  reg bad_digest_new;
+  reg bad_digest_reg;
+
+  reg bad_key_new;
+  reg bad_key_reg;
+
   reg good_we;
   reg good_new;
   reg good_reg;
@@ -163,6 +171,9 @@ module ntp_auth (
   //----------------------------------------------------------------
   // Output
   //----------------------------------------------------------------
+
+  assign o_bad_digest = bad_digest_reg;
+  assign o_bad_key = bad_key_reg;
 
   assign o_ready = ready_reg;
   assign o_good = good_reg;
@@ -309,17 +320,22 @@ module ntp_auth (
   // Wires
   //----------------------------------------------------------------
 
-  reg          txout_done;
-
   reg result_md5_good;
   reg result_md5_bad;
+  reg result_md5_bad_digest;
+  reg result_md5_bad_key;
+
   reg result_sha1_good;
   reg result_sha1_bad;
+  reg result_sha1_bad_digest;
+  reg result_sha1_bad_key;
+
   reg start_md5_auth;
   reg start_md5_tx;
   reg start_sha1_auth;
   reg start_sha1_tx;
 
+  reg txout_done;
 
   //----------------------------------------------------------------
   // MD5 core
@@ -425,6 +441,8 @@ module ntp_auth (
 
     algo_we = 0;
     algo_new = 0;
+    bad_digest_new = 0;
+    bad_key_new = 0;
     good_we = 0;
     good_new = 0;
     ready_we = 0;
@@ -468,10 +486,19 @@ module ntp_auth (
       ready_new = 1;
 
     end else if (result_md5_bad || result_sha1_bad) begin
+
       good_we = 1;
       good_new = 0;
       ready_we = 1;
       ready_new = 1;
+
+      if (result_md5_bad_digest || result_sha1_bad_digest) begin
+        bad_digest_new = 1;
+      end
+
+      if (result_md5_bad_key || result_sha1_bad_key) begin
+        bad_key_new = 1;
+      end
 
     end else if (txout_done) begin
       ready_we = 1;
@@ -493,6 +520,8 @@ module ntp_auth (
     md5_next = 0;
     result_md5_good = 0;
     result_md5_bad = 0;
+    result_md5_bad_digest = 0;
+    result_md5_bad_key = 0;
     case (fsm_md5_reg)
       FSM_MD5_IDLE:
         if (start_md5_auth) begin
@@ -507,7 +536,9 @@ module ntp_auth (
           FSM_KEY_ERROR:
             begin
               fsm_md5_we = 1;
-              fsm_md5_new = FSM_MD5_ERROR;
+              fsm_md5_new = FSM_MD5_IDLE;
+              result_md5_bad = 1;
+              result_md5_bad_key = 1;
             end
           FSM_KEY_SUCCESS:
             begin
@@ -552,6 +583,7 @@ module ntp_auth (
             result_md5_good = 1;
           end else begin
             result_md5_bad = 1;
+            result_md5_bad_digest = 1;
           end
         end
       FSM_MD5_TXAUTH_INIT:
@@ -600,16 +632,11 @@ module ntp_auth (
           fsm_md5_we = 1;
           fsm_md5_new = FSM_MD5_IDLE;
         end
-      FSM_MD5_ERROR:
-        begin
-          fsm_md5_we = 1;
-          fsm_md5_new = FSM_MD5_IDLE;
-          result_md5_bad = 1;
-        end
       default:
         begin
           fsm_md5_we = 1;
           fsm_md5_new = FSM_MD5_ERROR;
+          result_md5_bad = 1;
         end
     endcase
   end
@@ -623,6 +650,8 @@ module ntp_auth (
     fsm_sha1_we = 0;
     fsm_sha1_new = FSM_SHA1_IDLE;
     result_sha1_bad = 0;
+    result_sha1_bad_digest = 0;
+    result_sha1_bad_key = 0;
     result_sha1_good = 0;
     sha1_block_we = 0;
     sha1_block_new = 0;
@@ -642,7 +671,9 @@ module ntp_auth (
           FSM_KEY_ERROR:
             begin
               fsm_sha1_we = 1;
-              fsm_sha1_new = FSM_SHA1_ERROR;
+              fsm_sha1_new = FSM_SHA1_IDLE;
+              result_sha1_bad = 1;
+              result_sha1_bad_key = 1;
             end
           FSM_KEY_SUCCESS:
             begin
@@ -697,6 +728,7 @@ module ntp_auth (
             result_sha1_good = 1;
           end else begin
             result_sha1_bad = 1;
+            result_sha1_bad_digest = 1;
           end
         end
       FSM_SHA1_TXAUTH_INIT:
@@ -758,16 +790,11 @@ module ntp_auth (
           fsm_sha1_we = 1;
           fsm_sha1_new = FSM_SHA1_IDLE;
          end
-      FSM_SHA1_ERROR:
+      default:
         begin
           fsm_sha1_we = 1;
           fsm_sha1_new = FSM_SHA1_IDLE;
           result_sha1_bad = 1;
-        end
-      default:
-        begin
-          fsm_sha1_we = 1;
-          fsm_sha1_new = FSM_SHA1_ERROR;
         end
     endcase
   end
@@ -921,6 +948,8 @@ module ntp_auth (
   begin : reg_update
     if (i_areset) begin
       algo_reg <= 0;
+      bad_digest_reg <= 0;
+      bad_key_reg <= 0;
       fsm_key_reg <= FSM_KEY_IDLE;
       fsm_md5_reg <= FSM_MD5_IDLE;
       fsm_sha1_reg <= FSM_SHA1_IDLE;
@@ -961,6 +990,9 @@ module ntp_auth (
     end else begin
       if (algo_we)
         algo_reg <= algo_new;
+
+      bad_digest_reg <= bad_digest_new;
+      bad_key_reg <= bad_key_new;
 
       if (fsm_key_we)
         fsm_key_reg <= fsm_key_new;

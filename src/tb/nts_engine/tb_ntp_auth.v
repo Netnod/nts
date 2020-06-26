@@ -151,9 +151,11 @@ module tb_ntp_auth;
 
   reg  i_auth_md5;
   reg  i_auth_sha1;
+  reg  i_tx;
   wire o_ready;
   wire o_good;
-  reg  i_tx;
+  wire o_bad_digest;
+  wire o_bad_key;
 
   //----------------------------------------------------------------
   // Wires to DUT, Design Under Test. Received data, BE order.
@@ -199,11 +201,13 @@ module tb_ntp_auth;
     .i_areset         ( i_areset         ),
     .i_clk            ( i_clk            ),
 
-    .i_auth_md5  ( i_auth_md5  ),
-    .i_auth_sha1 ( i_auth_sha1 ),
-    .i_tx        ( i_tx        ),
-    .o_ready     ( o_ready     ),
-    .o_good      ( o_good      ),
+    .i_auth_md5  ( i_auth_md5   ),
+    .i_auth_sha1 ( i_auth_sha1  ),
+    .i_tx        ( i_tx         ),
+    .o_ready     ( o_ready      ),
+    .o_good      ( o_good       ),
+    .o_bad_digest( o_bad_digest ),
+    .o_bad_key   ( o_bad_key    ),
 
     .i_rx_reset       ( i_rx_reset       ),
     .i_rx_valid       ( i_rx_valid       ),
@@ -377,6 +381,8 @@ module tb_ntp_auth;
     i_auth_md5 = 0;
     busy_wait();
     `test( "test_bad_md5_digest", o_good === 1'b0 );
+    `test( "test_bad_md5_digest", o_bad_digest === 1'b1 );
+    `test( "test_bad_md5_digest", o_bad_key === 1'b0 );
 
     i_tx = 1;
     #( CLOCK_PERIOD );
@@ -445,6 +451,8 @@ module tb_ntp_auth;
     i_auth_md5 = 0;
     busy_wait();
     `test( "test_good_md5_digest", o_good === 1'b1 );
+    `test( "test_good_md5_digest", o_bad_digest === 1'b0 );
+    `test( "test_good_md5_digest", o_bad_key === 1'b0 );
 
     timestamp( 8'ha0 );
 
@@ -485,6 +493,8 @@ module tb_ntp_auth;
     i_auth_md5 = 0;
     busy_wait();
     `test( "test_wrong_keyid", o_good === 1'b0 );
+    `test( "test_wrong_keyid", o_bad_digest === 1'b0 );
+    `test( "test_wrong_keyid", o_bad_key === 1'b1 );
 
     i_tx = 1;
     #( CLOCK_PERIOD );
@@ -524,6 +534,8 @@ module tb_ntp_auth;
     i_auth_md5 = 0;
     busy_wait();
     `test( "test_ipv6_good_md5_digest", o_good === 1'b1 );
+    `test( "test_ipv6_good_md5_digest", o_bad_digest === 1'b0 );
+    `test( "test_ipv6_good_md5_digest", o_bad_key === 1'b0 );
 
     timestamp( 8'ha0 );
 
@@ -565,6 +577,8 @@ module tb_ntp_auth;
     i_auth_md5 = 0;
     busy_wait();
     `test( "test_ipv4_good_md5_digest", o_good === 1'b1 );
+    `test( "test_ipv4_good_md5_digest", o_bad_digest === 1'b0 );
+    `test( "test_ipv4_good_md5_digest", o_bad_key === 1'b0 );
 
     timestamp( 8'ha0 );
 
@@ -606,6 +620,8 @@ module tb_ntp_auth;
     i_auth_sha1 = 0;
     busy_wait();
     `test( "test_ipv4_good_sha1", o_good === 1'b1 );
+    `test( "test_ipv4_good_sha1", o_bad_digest === 1'b0 );
+    `test( "test_ipv4_good_sha1", o_bad_key === 1'b0 );
 
     timestamp( 8'ha0 );
 

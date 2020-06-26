@@ -565,87 +565,6 @@ module nts_parser_ctrl #(
   reg                   [2:0] access_port_wordsize_new;
   reg                   [2:0] access_port_wordsize_reg;
 
-  reg          addr_ipv4_ctrl_we;
-  reg    [7:0] addr_ipv4_ctrl_new;
-  reg    [7:0] addr_ipv4_ctrl_reg;
-
-  reg [31 : 0] addr_ipv4_new;
-  reg [31 : 0] addr_ipv4_0_reg;
-  reg          addr_ipv4_0_we;
-  reg [31 : 0] addr_ipv4_1_reg;
-  reg          addr_ipv4_1_we;
-  reg [31 : 0] addr_ipv4_2_reg;
-  reg          addr_ipv4_2_we;
-  reg [31 : 0] addr_ipv4_3_reg;
-  reg          addr_ipv4_3_we;
-  reg [31 : 0] addr_ipv4_4_reg;
-  reg          addr_ipv4_4_we;
-  reg [31 : 0] addr_ipv4_5_reg;
-  reg          addr_ipv4_5_we;
-  reg [31 : 0] addr_ipv4_6_reg;
-  reg          addr_ipv4_6_we;
-  reg [31 : 0] addr_ipv4_7_reg;
-  reg          addr_ipv4_7_we;
-
-  reg          addr_ipv6_ctrl_we;
-  reg    [7:0] addr_ipv6_ctrl_new;
-  reg    [7:0] addr_ipv6_ctrl_reg;
-
-  reg    [7:0] addr_ipv6_we;
-  reg   [31:0] addr_ipv6_new;
-  reg    [2:0] addr_ipv6_index;
-  reg  [127:0] addr_ipv6_0_reg;
-  reg  [127:0] addr_ipv6_1_reg;
-  reg  [127:0] addr_ipv6_2_reg;
-  reg  [127:0] addr_ipv6_3_reg;
-  reg  [127:0] addr_ipv6_4_reg;
-  reg  [127:0] addr_ipv6_5_reg;
-  reg  [127:0] addr_ipv6_6_reg;
-  reg  [127:0] addr_ipv6_7_reg;
-
-  reg          addr_mac_ctrl_we;
-  reg    [3:0] addr_mac_ctrl_new;
-  reg    [3:0] addr_mac_ctrl_reg;
-
-  reg [15 : 0] addr_mac_msb_new;
-  reg [31 : 0] addr_mac_lsb_new;
-  reg [31 : 0] addr_mac0_lsb_reg;
-  reg [15 : 0] addr_mac0_msb_reg;
-  reg          addr_mac0_lsb_we;
-  reg          addr_mac0_msb_we;
-  reg [31 : 0] addr_mac1_lsb_reg;
-  reg [15 : 0] addr_mac1_msb_reg;
-  reg          addr_mac1_lsb_we;
-  reg          addr_mac1_msb_we;
-  reg [31 : 0] addr_mac2_lsb_reg;
-  reg [15 : 0] addr_mac2_msb_reg;
-  reg          addr_mac2_lsb_we;
-  reg          addr_mac2_msb_we;
-  reg [31 : 0] addr_mac3_lsb_reg;
-  reg [15 : 0] addr_mac3_msb_reg;
-  reg          addr_mac3_lsb_we;
-  reg          addr_mac3_msb_we;
-
-  reg          addr_match_arp_new;
-  reg          addr_match_arp_reg;
-  reg [47 : 0] addr_match_arp_mac_new;
-  reg [47 : 0] addr_match_arp_mac_reg;
-
-  /* verilator lint_off UNUSED */
-  reg          addr_match_ethernet_new;
-  reg          addr_match_ethernet_reg;
-
-  reg          addr_match_icmpv6ns_new;
-  reg          addr_match_icmpv6ns_reg;
-  reg [47 : 0] addr_match_icmpv6ns_mac_new;
-  reg [47 : 0] addr_match_icmpv6ns_mac_reg;
-
-  reg          addr_match_ipv4_new;
-  reg          addr_match_ipv4_reg;
-
-  reg          addr_match_ipv6_new;
-  reg          addr_match_ipv6_reg;
-  /* verilator lint_on UNUSED */
 
   reg                    config_ctrl_we;
   reg  [CONFIG_BITS-1:0] config_ctrl_new;
@@ -851,10 +770,10 @@ module nts_parser_ctrl #(
   reg                          ipdecode_icmp_echo_d0_we;
   reg                   [15:0] ipdecode_icmp_echo_d0_new;
   reg                   [15:0] ipdecode_icmp_echo_d0_reg;
-  /* verilator lint_on UNUSED */
   reg                          ipdecode_icmp_ta_we;
   reg                  [127:0] ipdecode_icmp_ta_new;
   reg                  [127:0] ipdecode_icmp_ta_reg;
+  /* verilator lint_on UNUSED */
 
   reg       [ADDR_WIDTH+3-1:0] ipdecode_offset_ntp_ext_new;
   reg       [ADDR_WIDTH+3-1:0] ipdecode_offset_ntp_ext_reg;
@@ -1042,6 +961,24 @@ module nts_parser_ctrl #(
   //----------------------------------------------------------------
   // Wires.
   //----------------------------------------------------------------
+
+  wire  [31:0] addr_ipv4 [0:7];
+  wire [127:0] addr_ipv6 [0:7];
+  wire  [47:0] addr_mac  [0:3];
+
+  wire   [7:0] addr_ipv4_ctrl;
+  wire   [7:0] addr_ipv6_ctrl;
+  wire   [3:0] addr_mac_ctrl;
+
+  /* verilator lint_off UNUSED */
+  wire         addr_match_arp;
+  wire  [47:0] addr_match_arp_mac;
+  wire         addr_match_ethernet;
+  wire         addr_match_ipv4;
+  wire         addr_match_ipv6;
+  wire         addr_match_icmpv6ns;
+  wire  [47:0] addr_match_icmpv6ns_mac;
+  /* verilator lint_on UNUSED */
 
   reg [31:0] api_read_data;
 
@@ -1334,14 +1271,14 @@ module nts_parser_ctrl #(
 
   assign tx_header_ethernet_arp = {
                                     ipdecode_ethernet_mac_src_reg,
-                                    addr_match_arp_mac_reg,
+                                    addr_match_arp_mac,
                                     E_TYPE_ARP,
                                     ARP_HRD_ETHERNET,
                                     ARP_PRO_IPV4,
                                     ARP_HLN_ETHERNET,
                                     ARP_PLN_IPV4,
                                     ARP_OP_REPLY,
-                                    addr_match_arp_mac_reg,
+                                    addr_match_arp_mac,
                                     ipdecode_arp_tpa_reg,
                                     ipdecode_arp_sha_reg,
                                     ipdecode_arp_spa_reg
@@ -1364,9 +1301,6 @@ module nts_parser_ctrl #(
   assign tx_header_ethernet_ipv6_udp = { tx_header_ethernet, tx_header_ipv6, tx_header_udp };
 
 
-
-
-
   //----------------------------------------------------------------
   // ICMP
   //----------------------------------------------------------------
@@ -1383,7 +1317,7 @@ module nts_parser_ctrl #(
 
       .i_ethernet_dst    ( ipdecode_ethernet_mac_dst_reg ),
       .i_ethernet_src    ( ipdecode_ethernet_mac_src_reg ),
-      .i_ethernet_ns6src ( addr_match_icmpv6ns_mac_reg ),
+      .i_ethernet_ns6src ( addr_match_icmpv6ns_mac       ),
 
       .i_ip4_dst ( ipdecode_ip4_ip_dst_reg ),
       .i_ip4_src ( ipdecode_ip4_ip_src_reg ),
@@ -1407,10 +1341,10 @@ module nts_parser_ctrl #(
       .i_pd_ip6_echo  ( protocol_detect_ip6echo_reg       ),
       .i_pd_ip6_trace ( protocol_detect_ip6traceroute_reg ),
 
-      .i_match_addr_ethernet ( addr_match_ethernet_reg ),
-      .i_match_addr_ip4      ( addr_match_ipv4_reg     ),
-      .i_match_addr_ip6      ( addr_match_ipv6_reg     ),
-      .i_match_addr_ip6_ns   ( addr_match_icmpv6ns_reg ),
+      .i_match_addr_ethernet ( addr_match_ethernet ),
+      .i_match_addr_ip4      ( addr_match_ipv4     ),
+      .i_match_addr_ip6      ( addr_match_ipv6     ),
+      .i_match_addr_ip6_ns   ( addr_match_icmpv6ns ),
 
       .i_copy_done ( copy_done ),
 
@@ -1837,39 +1771,6 @@ module nts_parser_ctrl #(
 
   always @*
   begin : api
-    addr_ipv4_ctrl_we = 0;
-    addr_ipv4_ctrl_new = 0;
-
-    addr_ipv4_0_we = 0;
-    addr_ipv4_1_we = 0;
-    addr_ipv4_2_we = 0;
-    addr_ipv4_3_we = 0;
-    addr_ipv4_4_we = 0;
-    addr_ipv4_5_we = 0;
-    addr_ipv4_6_we = 0;
-    addr_ipv4_7_we = 0;
-    addr_ipv4_new = i_api_write_data;
-
-    addr_ipv6_we    = 0;
-    addr_ipv6_new   = 0;
-    addr_ipv6_index = 0;
-
-    addr_ipv6_ctrl_we = 0;
-    addr_ipv6_ctrl_new = 0;
-
-    addr_mac_ctrl_we = 0;
-    addr_mac_ctrl_new = 0;
-
-    addr_mac0_lsb_we = 0;
-    addr_mac0_msb_we = 0;
-    addr_mac1_lsb_we = 0;
-    addr_mac1_msb_we = 0;
-    addr_mac2_lsb_we = 0;
-    addr_mac2_msb_we = 0;
-    addr_mac3_lsb_we = 0;
-    addr_mac3_msb_we = 0;
-    addr_mac_msb_new = i_api_write_data[15:0];
-    addr_mac_lsb_new = i_api_write_data;
 
     api_dummy_we = 0;
     api_dummy_new = 0;
@@ -1908,21 +1809,6 @@ module nts_parser_ctrl #(
               config_ctrl_we = 1;
               config_ctrl_new = i_api_write_data[CONFIG_BITS-1:0];
             end
-          ADDR_MAC_CTRL:
-            begin
-              addr_mac_ctrl_we = 1;
-              addr_mac_ctrl_new = i_api_write_data[3:0];
-            end
-          ADDR_IPV4_CTRL:
-            begin
-              addr_ipv4_ctrl_we = 1;
-              addr_ipv4_ctrl_new = i_api_write_data[7:0];
-            end
-          ADDR_IPV6_CTRL:
-            begin
-              addr_ipv6_ctrl_we = 1;
-              addr_ipv6_ctrl_new = i_api_write_data[7:0];
-            end
           ADDR_UDP_PORT_NTP:
             begin
               config_udp_port_ntp0_we = 1;
@@ -1930,40 +1816,8 @@ module nts_parser_ctrl #(
               config_udp_port_ntp1_we = 1;
               config_udp_port_ntp1_new = i_api_write_data[31:16];
             end
-          ADDR_MAC_0_MSB: addr_mac0_msb_we = 1;
-          ADDR_MAC_0_LSB: addr_mac0_lsb_we = 1;
-          ADDR_MAC_1_MSB: addr_mac1_msb_we = 1;
-          ADDR_MAC_1_LSB: addr_mac1_lsb_we = 1;
-          ADDR_MAC_2_MSB: addr_mac2_msb_we = 1;
-          ADDR_MAC_2_LSB: addr_mac2_lsb_we = 1;
-          ADDR_MAC_3_MSB: addr_mac3_msb_we = 1;
-          ADDR_MAC_3_LSB: addr_mac3_lsb_we = 1;
-
-          ADDR_IPV4_0: addr_ipv4_0_we = 1;
-          ADDR_IPV4_1: addr_ipv4_1_we = 1;
-          ADDR_IPV4_2: addr_ipv4_2_we = 1;
-          ADDR_IPV4_3: addr_ipv4_3_we = 1;
-          ADDR_IPV4_4: addr_ipv4_4_we = 1;
-          ADDR_IPV4_5: addr_ipv4_5_we = 1;
-          ADDR_IPV4_6: addr_ipv4_6_we = 1;
-          ADDR_IPV4_7: addr_ipv4_7_we = 1;
           default: ;
         endcase
-        if (i_api_address >= ADDR_IPV6_0 && i_api_address <= ADDR_IPV6_END) begin
-           addr_ipv6_new   = i_api_write_data;
-           addr_ipv6_index = 2'h3 - i_api_address[1:0];
-           case (i_api_address[4:2])
-             3'h0: addr_ipv6_we = 8'b0000_0001;
-             3'h1: addr_ipv6_we = 8'b0000_0010;
-             3'h2: addr_ipv6_we = 8'b0000_0100;
-             3'h3: addr_ipv6_we = 8'b0000_1000;
-             3'h4: addr_ipv6_we = 8'b0001_0000;
-             3'h5: addr_ipv6_we = 8'b0010_0000;
-             3'h6: addr_ipv6_we = 8'b0100_0000;
-             3'h7: addr_ipv6_we = 8'b1000_0000;
-            default: ;
-          endcase
-        end
       end else begin
         case (i_api_address)
           ADDR_NAME0: api_read_data = CORE_NAME[63:32];
@@ -2044,9 +1898,10 @@ module nts_parser_ctrl #(
             end
           ADDR_CSUM_IPV6_UDP_GOOD1: api_read_data = counter_ipv6udp_checksum_good_lsb;
 
-          ADDR_MAC_CTRL: api_read_data[3:0] = addr_mac_ctrl_reg;
-          ADDR_IPV4_CTRL: api_read_data[7:0] = addr_ipv4_ctrl_reg;
-          ADDR_IPV6_CTRL: api_read_data[7:0] = addr_ipv6_ctrl_reg;
+          ADDR_MAC_CTRL: api_read_data[3:0] = addr_mac_ctrl;
+          ADDR_IPV4_CTRL: api_read_data[7:0] = addr_ipv4_ctrl;
+          ADDR_IPV6_CTRL: api_read_data[7:0] = addr_ipv6_ctrl;
+
           ADDR_UDP_PORT_NTP: api_read_data = { config_udp_port_ntp1_reg, config_udp_port_ntp1_reg };
 
           ADDR_GRE_COUNTER_FORWARD_MSB: api_read_data = counter_gre_forward_msb;
@@ -2054,40 +1909,40 @@ module nts_parser_ctrl #(
           ADDR_GRE_COUNTER_DROP_MSB: api_read_data = counter_gre_drop_msb;
           ADDR_GRE_COUNTER_DROP_LSB: api_read_data = counter_gre_drop_lsb;
 
-          ADDR_MAC_0_MSB: api_read_data[15:0] = addr_mac0_msb_reg;
-          ADDR_MAC_0_LSB: api_read_data       = addr_mac0_lsb_reg;
-          ADDR_MAC_1_MSB: api_read_data[15:0] = addr_mac1_msb_reg;
-          ADDR_MAC_1_LSB: api_read_data       = addr_mac1_lsb_reg;
-          ADDR_MAC_2_MSB: api_read_data[15:0] = addr_mac2_msb_reg;
-          ADDR_MAC_2_LSB: api_read_data       = addr_mac2_lsb_reg;
-          ADDR_MAC_3_MSB: api_read_data[15:0] = addr_mac3_msb_reg;
-          ADDR_MAC_3_LSB: api_read_data       = addr_mac3_lsb_reg;
+          ADDR_MAC_0_MSB: api_read_data[15:0] = addr_mac[0][47:32];
+          ADDR_MAC_0_LSB: api_read_data       = addr_mac[0][31:0];
+          ADDR_MAC_1_MSB: api_read_data[15:0] = addr_mac[1][47:32];
+          ADDR_MAC_1_LSB: api_read_data       = addr_mac[1][31:0];
+          ADDR_MAC_2_MSB: api_read_data[15:0] = addr_mac[2][47:32];
+          ADDR_MAC_2_LSB: api_read_data       = addr_mac[2][31:0];
+          ADDR_MAC_3_MSB: api_read_data[15:0] = addr_mac[3][47:32];
+          ADDR_MAC_3_LSB: api_read_data       = addr_mac[3][31:0];
 
-          ADDR_IPV4_0: api_read_data = addr_ipv4_0_reg;
-          ADDR_IPV4_1: api_read_data = addr_ipv4_1_reg;
-          ADDR_IPV4_2: api_read_data = addr_ipv4_2_reg;
-          ADDR_IPV4_3: api_read_data = addr_ipv4_3_reg;
-          ADDR_IPV4_4: api_read_data = addr_ipv4_4_reg;
-          ADDR_IPV4_5: api_read_data = addr_ipv4_5_reg;
-          ADDR_IPV4_6: api_read_data = addr_ipv4_6_reg;
-          ADDR_IPV4_7: api_read_data = addr_ipv4_7_reg;
+          ADDR_IPV4_0: api_read_data = addr_ipv4[0];
+          ADDR_IPV4_1: api_read_data = addr_ipv4[1];
+          ADDR_IPV4_2: api_read_data = addr_ipv4[2];
+          ADDR_IPV4_3: api_read_data = addr_ipv4[3];
+          ADDR_IPV4_4: api_read_data = addr_ipv4[4];
+          ADDR_IPV4_5: api_read_data = addr_ipv4[5];
+          ADDR_IPV4_6: api_read_data = addr_ipv4[6];
+          ADDR_IPV4_7: api_read_data = addr_ipv4[7];
 
-          ADDR_IPV6_0 + 0: api_read_data = addr_ipv6_0_reg[127-0*32-:32];
-          ADDR_IPV6_0 + 1: api_read_data = addr_ipv6_0_reg[127-1*32-:32];
-          ADDR_IPV6_0 + 2: api_read_data = addr_ipv6_0_reg[127-2*32-:32];
-          ADDR_IPV6_0 + 3: api_read_data = addr_ipv6_0_reg[127-3*32-:32];
-          ADDR_IPV6_1 + 0: api_read_data = addr_ipv6_1_reg[127-0*32-:32];
-          ADDR_IPV6_1 + 1: api_read_data = addr_ipv6_1_reg[127-1*32-:32];
-          ADDR_IPV6_1 + 2: api_read_data = addr_ipv6_1_reg[127-2*32-:32];
-          ADDR_IPV6_1 + 3: api_read_data = addr_ipv6_1_reg[127-3*32-:32];
-          ADDR_IPV6_2 + 0: api_read_data = addr_ipv6_2_reg[127-0*32-:32];
-          ADDR_IPV6_2 + 1: api_read_data = addr_ipv6_2_reg[127-1*32-:32];
-          ADDR_IPV6_2 + 2: api_read_data = addr_ipv6_2_reg[127-2*32-:32];
-          ADDR_IPV6_2 + 3: api_read_data = addr_ipv6_2_reg[127-3*32-:32];
-          ADDR_IPV6_3 + 0: api_read_data = addr_ipv6_3_reg[127-0*32-:32];
-          ADDR_IPV6_3 + 1: api_read_data = addr_ipv6_3_reg[127-1*32-:32];
-          ADDR_IPV6_3 + 2: api_read_data = addr_ipv6_3_reg[127-2*32-:32];
-          ADDR_IPV6_3 + 3: api_read_data = addr_ipv6_3_reg[127-3*32-:32];
+          ADDR_IPV6_0 + 0: api_read_data = addr_ipv6[0][127-0*32-:32];
+          ADDR_IPV6_0 + 1: api_read_data = addr_ipv6[0][127-1*32-:32];
+          ADDR_IPV6_0 + 2: api_read_data = addr_ipv6[0][127-2*32-:32];
+          ADDR_IPV6_0 + 3: api_read_data = addr_ipv6[0][127-3*32-:32];
+          ADDR_IPV6_1 + 0: api_read_data = addr_ipv6[1][127-0*32-:32];
+          ADDR_IPV6_1 + 1: api_read_data = addr_ipv6[1][127-1*32-:32];
+          ADDR_IPV6_1 + 2: api_read_data = addr_ipv6[1][127-2*32-:32];
+          ADDR_IPV6_1 + 3: api_read_data = addr_ipv6[1][127-3*32-:32];
+          ADDR_IPV6_2 + 0: api_read_data = addr_ipv6[2][127-0*32-:32];
+          ADDR_IPV6_2 + 1: api_read_data = addr_ipv6[2][127-1*32-:32];
+          ADDR_IPV6_2 + 2: api_read_data = addr_ipv6[2][127-2*32-:32];
+          ADDR_IPV6_2 + 3: api_read_data = addr_ipv6[2][127-3*32-:32];
+          ADDR_IPV6_3 + 0: api_read_data = addr_ipv6[3][127-0*32-:32];
+          ADDR_IPV6_3 + 1: api_read_data = addr_ipv6[3][127-1*32-:32];
+          ADDR_IPV6_3 + 2: api_read_data = addr_ipv6[3][127-2*32-:32];
+          ADDR_IPV6_3 + 3: api_read_data = addr_ipv6[3][127-3*32-:32];
 
           ADDR_COUNTER_IPV4_NTP_PASS_MSB: api_read_data = counter_ipv4_ntp_pass_msb;
           ADDR_COUNTER_IPV4_NTP_PASS_LSB: api_read_data = counter_ipv4_ntp_pass_lsb;
@@ -2160,50 +2015,6 @@ module nts_parser_ctrl #(
       access_port_csum_initial_reg <= 'b0;
       access_port_rd_en_reg        <= 'b0;
       access_port_wordsize_reg     <= 'b0;
-
-      addr_ipv4_ctrl_reg <= 0;
-
-      addr_ipv4_0_reg <= 0;
-      addr_ipv4_1_reg <= 0;
-      addr_ipv4_2_reg <= 0;
-      addr_ipv4_3_reg <= 0;
-      addr_ipv4_4_reg <= 0;
-      addr_ipv4_5_reg <= 0;
-      addr_ipv4_6_reg <= 0;
-      addr_ipv4_7_reg <= 0;
-
-      addr_ipv6_ctrl_reg <= 0;
-
-      addr_ipv6_0_reg <= 0;
-      addr_ipv6_1_reg <= 0;
-      addr_ipv6_2_reg <= 0;
-      addr_ipv6_3_reg <= 0;
-      addr_ipv6_4_reg <= 0;
-      addr_ipv6_5_reg <= 0;
-      addr_ipv6_6_reg <= 0;
-      addr_ipv6_7_reg <= 0;
-
-      addr_mac_ctrl_reg <= 0;
-
-      addr_mac0_lsb_reg <= 0;
-      addr_mac0_msb_reg <= 0;
-      addr_mac1_lsb_reg <= 0;
-      addr_mac1_msb_reg <= 0;
-      addr_mac2_lsb_reg <= 0;
-      addr_mac2_msb_reg <= 0;
-      addr_mac3_lsb_reg <= 0;
-      addr_mac3_msb_reg <= 0;
-
-      addr_match_arp_reg          <= 0;
-      addr_match_arp_mac_reg      <= 0;
-
-      addr_match_ethernet_reg     <= 0;
-
-      addr_match_icmpv6ns_reg     <= 0;
-      addr_match_icmpv6ns_mac_reg <= 0;
-
-      addr_match_ipv4_reg     <= 0;
-      addr_match_ipv6_reg     <= 0;
 
       api_dummy_reg              <= 32'h64_75_4d_79; //"duMy"
 
@@ -2380,103 +2191,11 @@ module nts_parser_ctrl #(
       if (access_port_wordsize_we)
         access_port_wordsize_reg <= access_port_wordsize_new;
 
-      if (addr_ipv4_ctrl_we)
-        addr_ipv4_ctrl_reg <= addr_ipv4_ctrl_new;
-
-      if (addr_ipv4_0_we)
-        addr_ipv4_0_reg <= addr_ipv4_new;
-
-      if (addr_ipv4_1_we)
-        addr_ipv4_1_reg <= addr_ipv4_new;
-
-      if (addr_ipv4_2_we)
-        addr_ipv4_2_reg <= addr_ipv4_new;
-
-      if (addr_ipv4_3_we)
-        addr_ipv4_3_reg <= addr_ipv4_new;
-
-      if (addr_ipv4_4_we)
-        addr_ipv4_4_reg <= addr_ipv4_new;
-
-      if (addr_ipv4_5_we)
-        addr_ipv4_5_reg <= addr_ipv4_new;
-
-      if (addr_ipv4_6_we)
-        addr_ipv4_6_reg <= addr_ipv4_new;
-
-      if (addr_ipv4_7_we)
-        addr_ipv4_7_reg <= addr_ipv4_new;
-
-      if (addr_ipv6_ctrl_we)
-        addr_ipv6_ctrl_reg <= addr_ipv6_ctrl_new;
-
-      if (addr_ipv6_we[0])
-        addr_ipv6_0_reg[addr_ipv6_index*32+:32] <= addr_ipv6_new;
-
-      if (addr_ipv6_we[1])
-        addr_ipv6_1_reg[addr_ipv6_index*32+:32] <= addr_ipv6_new;
-
-      if (addr_ipv6_we[2])
-        addr_ipv6_2_reg[addr_ipv6_index*32+:32] <= addr_ipv6_new;
-
-      if (addr_ipv6_we[3])
-        addr_ipv6_3_reg[addr_ipv6_index*32+:32] <= addr_ipv6_new;
-
-      if (addr_ipv6_we[4])
-        addr_ipv6_4_reg[addr_ipv6_index*32+:32] <= addr_ipv6_new;
-
-      if (addr_ipv6_we[5])
-        addr_ipv6_5_reg[addr_ipv6_index*32+:32] <= addr_ipv6_new;
-
-      if (addr_ipv6_we[6])
-        addr_ipv6_6_reg[addr_ipv6_index*32+:32] <= addr_ipv6_new;
-
-      if (addr_ipv6_we[7])
-        addr_ipv6_7_reg[addr_ipv6_index*32+:32] <= addr_ipv6_new;
-
-      if (addr_mac_ctrl_we)
-        addr_mac_ctrl_reg <= addr_mac_ctrl_new;
-
-      if (addr_mac0_lsb_we)
-        addr_mac0_lsb_reg <= addr_mac_lsb_new;
-
-      if (addr_mac0_msb_we)
-        addr_mac0_msb_reg <= addr_mac_msb_new;
-
-      if (addr_mac1_lsb_we)
-        addr_mac1_lsb_reg <= addr_mac_lsb_new;
-
-      if (addr_mac1_msb_we)
-        addr_mac1_msb_reg <= addr_mac_msb_new;
-
-      if (addr_mac2_lsb_we)
-        addr_mac2_lsb_reg <= addr_mac_lsb_new;
-
-      if (addr_mac2_msb_we)
-        addr_mac2_msb_reg <= addr_mac_msb_new;
-
-      if (addr_mac3_lsb_we)
-        addr_mac3_lsb_reg <= addr_mac_lsb_new;
-
-      if (addr_mac3_msb_we)
-        addr_mac3_msb_reg <= addr_mac_msb_new;
-
-      addr_match_arp_reg     <= addr_match_arp_new;
-      addr_match_arp_mac_reg <= addr_match_arp_mac_new;
-
-      addr_match_ethernet_reg <= addr_match_ethernet_new;
-
-      addr_match_icmpv6ns_reg     <= addr_match_icmpv6ns_new;
-      addr_match_icmpv6ns_mac_reg <= addr_match_icmpv6ns_mac_new;
-
-      addr_match_ipv4_reg <= addr_match_ipv4_new;
-      addr_match_ipv6_reg <= addr_match_ipv6_new;
+      if (api_dummy_we)
+        api_dummy_reg <= api_dummy_new;
 
       if (basic_ntp_state_we)
         basic_ntp_state_reg <= basic_ntp_state_new;
-
-      if (api_dummy_we)
-        api_dummy_reg <= api_dummy_new;
 
       if (config_ctrl_we)
         config_ctrl_reg <= config_ctrl_new;
@@ -2522,7 +2241,6 @@ module nts_parser_ctrl #(
 
       if (error_state_we)
         error_state_reg <= error_state_new;
-
 
       if (ipdecode_arp_hrd_we)
         ipdecode_arp_hrd_reg <= ipdecode_arp_hrd_new;
@@ -5213,7 +4931,7 @@ module nts_parser_ctrl #(
           state_new = STATE_DROP_PACKET;
         end
       STATE_ARP_INIT:
-        if (detect_arp_good && addr_match_arp_reg) begin
+        if (detect_arp_good && addr_match_arp) begin
           state_we  = 'b1;
           state_new = STATE_ARP_RESPOND;
         end else begin
@@ -6012,117 +5730,520 @@ module nts_parser_ctrl #(
     end
   end
 
-  //----------------------------------------------------------------
-  // Address Matcher
-  //----------------------------------------------------------------
+  if (SUPPORT_NET) begin : addr_matcher_enabled
+    reg          addr_ipv4_ctrl_we;
+    reg    [7:0] addr_ipv4_ctrl_new;
+    reg    [7:0] addr_ipv4_ctrl_reg;
 
-  always @*
-  begin : address_matcher
-    integer i;
-    reg   [1:0] j;
-    reg  [47:0] hw [0:3];
-    reg  [31:0] v4 [0:7];
-    reg [127:0] v6 [0:7];
+    reg [31 : 0] addr_ipv4_new;
+    reg [31 : 0] addr_ipv4_0_reg;
+    reg          addr_ipv4_0_we;
+    reg [31 : 0] addr_ipv4_1_reg;
+    reg          addr_ipv4_1_we;
+    reg [31 : 0] addr_ipv4_2_reg;
+    reg          addr_ipv4_2_we;
+    reg [31 : 0] addr_ipv4_3_reg;
+    reg          addr_ipv4_3_we;
+    reg [31 : 0] addr_ipv4_4_reg;
+    reg          addr_ipv4_4_we;
+    reg [31 : 0] addr_ipv4_5_reg;
+    reg          addr_ipv4_5_we;
+    reg [31 : 0] addr_ipv4_6_reg;
+    reg          addr_ipv4_6_we;
+    reg [31 : 0] addr_ipv4_7_reg;
+    reg          addr_ipv4_7_we;
 
-    //TODO: rfc4443 4.2 mandates handling IPv6 multicast echo reply differently that unicast
+    reg          addr_ipv6_ctrl_we;
+    reg    [7:0] addr_ipv6_ctrl_new;
+    reg    [7:0] addr_ipv6_ctrl_reg;
 
-    addr_match_arp_new = 0;
-    addr_match_arp_mac_new = 0;
-    addr_match_ethernet_new = 0;
-    addr_match_icmpv6ns_new = 0;
-    addr_match_icmpv6ns_mac_new = 0;
-    addr_match_ipv4_new = 0;
-    addr_match_ipv6_new = 0;
+    reg    [7:0] addr_ipv6_we;
+    reg   [31:0] addr_ipv6_new;
+    reg    [2:0] addr_ipv6_index;
+    reg  [127:0] addr_ipv6_0_reg;
+    reg  [127:0] addr_ipv6_1_reg;
+    reg  [127:0] addr_ipv6_2_reg;
+    reg  [127:0] addr_ipv6_3_reg;
+    reg  [127:0] addr_ipv6_4_reg;
+    reg  [127:0] addr_ipv6_5_reg;
+    reg  [127:0] addr_ipv6_6_reg;
+    reg  [127:0] addr_ipv6_7_reg;
 
-    hw[0] = { addr_mac0_msb_reg, addr_mac0_lsb_reg };
-    hw[1] = { addr_mac1_msb_reg, addr_mac1_lsb_reg };
-    hw[2] = { addr_mac2_msb_reg, addr_mac2_lsb_reg };
-    hw[3] = { addr_mac3_msb_reg, addr_mac3_lsb_reg };
+    reg          addr_mac_ctrl_we;
+    reg    [3:0] addr_mac_ctrl_new;
+    reg    [3:0] addr_mac_ctrl_reg;
 
-    v4[0] = addr_ipv4_0_reg;
-    v4[1] = addr_ipv4_1_reg;
-    v4[2] = addr_ipv4_2_reg;
-    v4[3] = addr_ipv4_3_reg;
-    v4[4] = addr_ipv4_4_reg;
-    v4[5] = addr_ipv4_5_reg;
-    v4[6] = addr_ipv4_6_reg;
-    v4[7] = addr_ipv4_7_reg;
+    reg [15 : 0] addr_mac_msb_new;
+    reg [31 : 0] addr_mac_lsb_new;
+    reg [31 : 0] addr_mac0_lsb_reg;
+    reg [15 : 0] addr_mac0_msb_reg;
+    reg          addr_mac0_lsb_we;
+    reg          addr_mac0_msb_we;
+    reg [31 : 0] addr_mac1_lsb_reg;
+    reg [15 : 0] addr_mac1_msb_reg;
+    reg          addr_mac1_lsb_we;
+    reg          addr_mac1_msb_we;
+    reg [31 : 0] addr_mac2_lsb_reg;
+    reg [15 : 0] addr_mac2_msb_reg;
+    reg          addr_mac2_lsb_we;
+    reg          addr_mac2_msb_we;
+    reg [31 : 0] addr_mac3_lsb_reg;
+    reg [15 : 0] addr_mac3_msb_reg;
+    reg          addr_mac3_lsb_we;
+    reg          addr_mac3_msb_we;
 
-    v6[0] = addr_ipv6_0_reg;
-    v6[1] = addr_ipv6_1_reg;
-    v6[2] = addr_ipv6_2_reg;
-    v6[3] = addr_ipv6_3_reg;
-    v6[4] = addr_ipv6_4_reg;
-    v6[5] = addr_ipv6_5_reg;
-    v6[6] = addr_ipv6_6_reg;
-    v6[7] = addr_ipv6_7_reg;
+    reg          addr_match_arp_new;
+    reg          addr_match_arp_reg;
+    reg [47 : 0] addr_match_arp_mac_new;
+    reg [47 : 0] addr_match_arp_mac_reg;
+
+    reg          addr_match_ethernet_new;
+    reg          addr_match_ethernet_reg;
+
+    reg          addr_match_icmpv6ns_new;
+    reg          addr_match_icmpv6ns_reg;
+    reg [47 : 0] addr_match_icmpv6ns_mac_new;
+    reg [47 : 0] addr_match_icmpv6ns_mac_reg;
+
+    reg          addr_match_ipv4_new;
+    reg          addr_match_ipv4_reg;
+
+    reg          addr_match_ipv6_new;
+    reg          addr_match_ipv6_reg;
 
     //----------------------------------------------------------------
-    // ARP matcher
+    // Address Matcher
     //----------------------------------------------------------------
 
-    for (i = 0; i < 8; i = i + 1) begin
-      j = i[1:0];
-      if (addr_ipv4_ctrl_reg[i] && addr_mac_ctrl_reg[j]) begin
-        if (ipdecode_arp_tpa_reg == v4[i]) begin
-          addr_match_arp_new = 1;
-          addr_match_arp_mac_new = hw[j];
+    always @*
+    begin : address_matcher
+      integer i;
+      reg   [1:0] j;
+      reg  [47:0] hw [0:3];
+      reg  [31:0] v4 [0:7];
+      reg [127:0] v6 [0:7];
+
+      //TODO: rfc4443 4.2 mandates handling IPv6 multicast echo reply differently that unicast
+
+      addr_match_arp_new = 0;
+      addr_match_arp_mac_new = 0;
+      addr_match_ethernet_new = 0;
+      addr_match_icmpv6ns_new = 0;
+      addr_match_icmpv6ns_mac_new = 0;
+      addr_match_ipv4_new = 0;
+      addr_match_ipv6_new = 0;
+
+      hw[0] = { addr_mac0_msb_reg, addr_mac0_lsb_reg };
+      hw[1] = { addr_mac1_msb_reg, addr_mac1_lsb_reg };
+      hw[2] = { addr_mac2_msb_reg, addr_mac2_lsb_reg };
+      hw[3] = { addr_mac3_msb_reg, addr_mac3_lsb_reg };
+
+      v4[0] = addr_ipv4_0_reg;
+      v4[1] = addr_ipv4_1_reg;
+      v4[2] = addr_ipv4_2_reg;
+      v4[3] = addr_ipv4_3_reg;
+      v4[4] = addr_ipv4_4_reg;
+      v4[5] = addr_ipv4_5_reg;
+      v4[6] = addr_ipv4_6_reg;
+      v4[7] = addr_ipv4_7_reg;
+
+      v6[0] = addr_ipv6_0_reg;
+      v6[1] = addr_ipv6_1_reg;
+      v6[2] = addr_ipv6_2_reg;
+      v6[3] = addr_ipv6_3_reg;
+      v6[4] = addr_ipv6_4_reg;
+      v6[5] = addr_ipv6_5_reg;
+      v6[6] = addr_ipv6_6_reg;
+      v6[7] = addr_ipv6_7_reg;
+
+      //----------------------------------------------------------------
+      // ARP matcher
+      //----------------------------------------------------------------
+
+      for (i = 0; i < 8; i = i + 1) begin
+        j = i[1:0];
+        if (addr_ipv4_ctrl_reg[i] && addr_mac_ctrl_reg[j]) begin
+          if (ipdecode_arp_tpa_reg == v4[i]) begin
+            addr_match_arp_new = 1;
+            addr_match_arp_mac_new = hw[j];
+          end
+        end
+      end
+
+      //----------------------------------------------------------------
+      // ICMP v6 Neighbour Solicitation matcher
+      //----------------------------------------------------------------
+
+      for (i = 0; i < 8; i = i + 1) begin
+        j = i[1:0];
+        if (addr_ipv6_ctrl_reg[i] && addr_mac_ctrl_reg[j]) begin
+          if (ipdecode_icmp_ta_reg == v6[i]) begin
+            addr_match_icmpv6ns_new = 1;
+            addr_match_icmpv6ns_mac_new = hw[j];
+          end
+        end
+      end
+
+      //----------------------------------------------------------------
+      // Ethernet Matcher
+      //----------------------------------------------------------------
+
+      for (i = 0; i < 4; i = i + 1) begin
+        j = i[1:0];
+        if (addr_mac_ctrl_reg[j]) begin
+          if (ipdecode_ethernet_mac_dst_reg == hw[j]) begin
+            addr_match_ethernet_new = 1;
+          end
+        end
+      end
+
+      //----------------------------------------------------------------
+      // IPv6 Matcher
+      //----------------------------------------------------------------
+
+      for (i = 0; i < 8; i = i + 1) begin
+        j = i[1:0];
+        if (addr_ipv6_ctrl_reg[i]) begin
+          if (ipdecode_ip6_ip_dst_reg == v6[i]) begin
+            addr_match_ipv6_new = 1;
+          end
+        end
+      end
+
+      //----------------------------------------------------------------
+      // IPv4 Matcher
+      //----------------------------------------------------------------
+
+      for (i = 0; i < 8; i = i + 1) begin
+        j = i[1:0];
+        if (addr_ipv4_ctrl_reg[i]) begin
+          if (ipdecode_ip4_ip_dst_reg == v4[i]) begin
+            addr_match_ipv4_new = 1;
+          end
         end
       end
     end
 
     //----------------------------------------------------------------
-    // ICMP v6 Neighbour Solicitation matcher
+    // Address Matcher APIs
     //----------------------------------------------------------------
 
-    for (i = 0; i < 8; i = i + 1) begin
-      j = i[1:0];
-      if (addr_ipv6_ctrl_reg[i] && addr_mac_ctrl_reg[j]) begin
-        if (ipdecode_icmp_ta_reg == v6[i]) begin
-          addr_match_icmpv6ns_new = 1;
-          addr_match_icmpv6ns_mac_new = hw[j];
+    always @*
+    begin
+      addr_ipv4_ctrl_we = 0;
+      addr_ipv4_ctrl_new = 0;
+
+      addr_ipv4_0_we = 0;
+      addr_ipv4_1_we = 0;
+      addr_ipv4_2_we = 0;
+      addr_ipv4_3_we = 0;
+      addr_ipv4_4_we = 0;
+      addr_ipv4_5_we = 0;
+      addr_ipv4_6_we = 0;
+      addr_ipv4_7_we = 0;
+
+      addr_ipv4_new = i_api_write_data;
+
+      addr_ipv6_we    = 0;
+      addr_ipv6_new   = 0;
+      addr_ipv6_index = 0;
+
+      addr_ipv6_ctrl_we = 0;
+      addr_ipv6_ctrl_new = 0;
+
+      addr_mac_ctrl_we = 0;
+      addr_mac_ctrl_new = 0;
+
+      addr_mac0_lsb_we = 0;
+
+      addr_mac0_msb_we = 0;
+      addr_mac1_lsb_we = 0;
+      addr_mac1_msb_we = 0;
+      addr_mac2_lsb_we = 0;
+      addr_mac2_msb_we = 0;
+      addr_mac3_lsb_we = 0;
+      addr_mac3_msb_we = 0;
+
+      addr_mac_msb_new = i_api_write_data[15:0];
+      addr_mac_lsb_new = i_api_write_data;
+
+      if (i_api_cs) begin
+        if (i_api_we) begin
+            case (i_api_address)
+            ADDR_MAC_CTRL:
+              begin
+                addr_mac_ctrl_we = 1;
+                addr_mac_ctrl_new = i_api_write_data[3:0];
+              end
+            ADDR_IPV4_CTRL:
+              begin
+                addr_ipv4_ctrl_we = 1;
+                addr_ipv4_ctrl_new = i_api_write_data[7:0];
+              end
+            ADDR_IPV6_CTRL:
+              begin
+              addr_ipv6_ctrl_we = 1;
+                addr_ipv6_ctrl_new = i_api_write_data[7:0];
+              end
+            ADDR_MAC_0_MSB: addr_mac0_msb_we = 1;
+            ADDR_MAC_0_LSB: addr_mac0_lsb_we = 1;
+            ADDR_MAC_1_MSB: addr_mac1_msb_we = 1;
+            ADDR_MAC_1_LSB: addr_mac1_lsb_we = 1;
+            ADDR_MAC_2_MSB: addr_mac2_msb_we = 1;
+            ADDR_MAC_2_LSB: addr_mac2_lsb_we = 1;
+            ADDR_MAC_3_MSB: addr_mac3_msb_we = 1;
+            ADDR_MAC_3_LSB: addr_mac3_lsb_we = 1;
+            ADDR_IPV4_0: addr_ipv4_0_we = 1;
+            ADDR_IPV4_1: addr_ipv4_1_we = 1;
+            ADDR_IPV4_2: addr_ipv4_2_we = 1;
+            ADDR_IPV4_3: addr_ipv4_3_we = 1;
+            ADDR_IPV4_4: addr_ipv4_4_we = 1;
+            ADDR_IPV4_5: addr_ipv4_5_we = 1;
+            ADDR_IPV4_6: addr_ipv4_6_we = 1;
+            ADDR_IPV4_7: addr_ipv4_7_we = 1;
+            default: ;
+          endcase
+          if (i_api_address >= ADDR_IPV6_0 && i_api_address <= ADDR_IPV6_END) begin
+             addr_ipv6_new   = i_api_write_data;
+             addr_ipv6_index = 2'h3 - i_api_address[1:0];
+             case (i_api_address[4:2])
+               3'h0: addr_ipv6_we = 8'b0000_0001;
+               3'h1: addr_ipv6_we = 8'b0000_0010;
+               3'h2: addr_ipv6_we = 8'b0000_0100;
+               3'h3: addr_ipv6_we = 8'b0000_1000;
+               3'h4: addr_ipv6_we = 8'b0001_0000;
+               3'h5: addr_ipv6_we = 8'b0010_0000;
+               3'h6: addr_ipv6_we = 8'b0100_0000;
+               3'h7: addr_ipv6_we = 8'b1000_0000;
+              default: ;
+            endcase
+          end
         end
       end
     end
 
     //----------------------------------------------------------------
-    // Ethernet Matcher
+    // Address Matcher Registers
     //----------------------------------------------------------------
 
-    for (i = 0; i < 4; i = i + 1) begin
-      j = i[1:0];
-      if (addr_mac_ctrl_reg[j]) begin
-        if (ipdecode_ethernet_mac_dst_reg == hw[j]) begin
-          addr_match_ethernet_new = 1;
-        end
+    always @ (posedge i_clk, posedge i_areset)
+    begin
+      if (i_areset == 1'b1) begin
+        addr_ipv4_0_reg <= 0;
+        addr_ipv4_1_reg <= 0;
+        addr_ipv4_2_reg <= 0;
+        addr_ipv4_3_reg <= 0;
+        addr_ipv4_4_reg <= 0;
+        addr_ipv4_5_reg <= 0;
+        addr_ipv4_6_reg <= 0;
+        addr_ipv4_7_reg <= 0;
+
+        addr_ipv4_ctrl_reg <= 0;
+
+        addr_ipv6_ctrl_reg <= 0;
+
+        addr_ipv6_0_reg <= 0;
+        addr_ipv6_1_reg <= 0;
+        addr_ipv6_2_reg <= 0;
+        addr_ipv6_3_reg <= 0;
+        addr_ipv6_4_reg <= 0;
+        addr_ipv6_5_reg <= 0;
+        addr_ipv6_6_reg <= 0;
+        addr_ipv6_7_reg <= 0;
+
+        addr_mac_ctrl_reg <= 0;
+
+        addr_mac0_lsb_reg <= 0;
+        addr_mac0_msb_reg <= 0;
+        addr_mac1_lsb_reg <= 0;
+        addr_mac1_msb_reg <= 0;
+        addr_mac2_lsb_reg <= 0;
+        addr_mac2_msb_reg <= 0;
+        addr_mac3_lsb_reg <= 0;
+        addr_mac3_msb_reg <= 0;
+
+        addr_match_arp_reg          <= 0;
+        addr_match_arp_mac_reg      <= 0;
+
+        addr_match_ethernet_reg     <= 0;
+
+        addr_match_icmpv6ns_reg     <= 0;
+        addr_match_icmpv6ns_mac_reg <= 0;
+
+        addr_match_ipv4_reg     <= 0;
+        addr_match_ipv6_reg     <= 0;
+      end else begin
+        if (addr_ipv4_ctrl_we)
+          addr_ipv4_ctrl_reg <= addr_ipv4_ctrl_new;
+
+        if (addr_ipv4_0_we)
+          addr_ipv4_0_reg <= addr_ipv4_new;
+
+        if (addr_ipv4_1_we)
+          addr_ipv4_1_reg <= addr_ipv4_new;
+
+        if (addr_ipv4_2_we)
+          addr_ipv4_2_reg <= addr_ipv4_new;
+
+        if (addr_ipv4_3_we)
+          addr_ipv4_3_reg <= addr_ipv4_new;
+
+        if (addr_ipv4_4_we)
+          addr_ipv4_4_reg <= addr_ipv4_new;
+
+        if (addr_ipv4_5_we)
+          addr_ipv4_5_reg <= addr_ipv4_new;
+
+        if (addr_ipv4_6_we)
+          addr_ipv4_6_reg <= addr_ipv4_new;
+
+        if (addr_ipv4_7_we)
+          addr_ipv4_7_reg <= addr_ipv4_new;
+
+        if (addr_ipv6_ctrl_we)
+          addr_ipv6_ctrl_reg <= addr_ipv6_ctrl_new;
+
+        if (addr_ipv6_we[0])
+          addr_ipv6_0_reg[addr_ipv6_index*32+:32] <= addr_ipv6_new;
+
+        if (addr_ipv6_we[1])
+          addr_ipv6_1_reg[addr_ipv6_index*32+:32] <= addr_ipv6_new;
+
+        if (addr_ipv6_we[2])
+          addr_ipv6_2_reg[addr_ipv6_index*32+:32] <= addr_ipv6_new;
+
+        if (addr_ipv6_we[3])
+          addr_ipv6_3_reg[addr_ipv6_index*32+:32] <= addr_ipv6_new;
+
+        if (addr_ipv6_we[4])
+          addr_ipv6_4_reg[addr_ipv6_index*32+:32] <= addr_ipv6_new;
+
+        if (addr_ipv6_we[5])
+          addr_ipv6_5_reg[addr_ipv6_index*32+:32] <= addr_ipv6_new;
+
+        if (addr_ipv6_we[6])
+          addr_ipv6_6_reg[addr_ipv6_index*32+:32] <= addr_ipv6_new;
+
+        if (addr_ipv6_we[7])
+          addr_ipv6_7_reg[addr_ipv6_index*32+:32] <= addr_ipv6_new;
+
+        if (addr_mac_ctrl_we)
+          addr_mac_ctrl_reg <= addr_mac_ctrl_new;
+
+        if (addr_mac0_lsb_we)
+          addr_mac0_lsb_reg <= addr_mac_lsb_new;
+
+        if (addr_mac0_msb_we)
+          addr_mac0_msb_reg <= addr_mac_msb_new;
+
+        if (addr_mac1_lsb_we)
+          addr_mac1_lsb_reg <= addr_mac_lsb_new;
+
+        if (addr_mac1_msb_we)
+          addr_mac1_msb_reg <= addr_mac_msb_new;
+
+        if (addr_mac2_lsb_we)
+          addr_mac2_lsb_reg <= addr_mac_lsb_new;
+
+        if (addr_mac2_msb_we)
+          addr_mac2_msb_reg <= addr_mac_msb_new;
+
+        if (addr_mac3_lsb_we)
+            addr_mac3_lsb_reg <= addr_mac_lsb_new;
+
+        if (addr_mac3_msb_we)
+          addr_mac3_msb_reg <= addr_mac_msb_new;
+
+        addr_match_arp_reg     <= addr_match_arp_new;
+        addr_match_arp_mac_reg <= addr_match_arp_mac_new;
+
+        addr_match_ethernet_reg <= addr_match_ethernet_new;
+
+        addr_match_icmpv6ns_reg     <= addr_match_icmpv6ns_new;
+        addr_match_icmpv6ns_mac_reg <= addr_match_icmpv6ns_mac_new;
+
+        addr_match_ipv4_reg <= addr_match_ipv4_new;
+        addr_match_ipv6_reg <= addr_match_ipv6_new;
       end
     end
 
-    //----------------------------------------------------------------
-    // IPv6 Matcher
-    //----------------------------------------------------------------
+    assign addr_ipv4[0] = addr_ipv4_0_reg;
+    assign addr_ipv4[1] = addr_ipv4_1_reg;
+    assign addr_ipv4[2] = addr_ipv4_2_reg;
+    assign addr_ipv4[3] = addr_ipv4_3_reg;
+    assign addr_ipv4[4] = addr_ipv4_4_reg;
+    assign addr_ipv4[5] = addr_ipv4_5_reg;
+    assign addr_ipv4[6] = addr_ipv4_6_reg;
+    assign addr_ipv4[7] = addr_ipv4_7_reg;
 
-    for (i = 0; i < 8; i = i + 1) begin
-      j = i[1:0];
-      if (addr_ipv6_ctrl_reg[i]) begin
-        if (ipdecode_ip6_ip_dst_reg == v6[i]) begin
-          addr_match_ipv6_new = 1;
-        end
-      end
-    end
+    assign addr_ipv6[0] = addr_ipv6_0_reg;
+    assign addr_ipv6[1] = addr_ipv6_1_reg;
+    assign addr_ipv6[2] = addr_ipv6_2_reg;
+    assign addr_ipv6[3] = addr_ipv6_3_reg;
+    assign addr_ipv6[4] = addr_ipv6_4_reg;
+    assign addr_ipv6[5] = addr_ipv6_5_reg;
+    assign addr_ipv6[6] = addr_ipv6_6_reg;
+    assign addr_ipv6[7] = addr_ipv6_7_reg;
 
-    //----------------------------------------------------------------
-    // IPv4 Matcher
-    //----------------------------------------------------------------
+    assign addr_mac[0] = { addr_mac0_msb_reg, addr_mac0_lsb_reg };
+    assign addr_mac[1] = { addr_mac1_msb_reg, addr_mac1_lsb_reg };
+    assign addr_mac[2] = { addr_mac2_msb_reg, addr_mac2_lsb_reg };
+    assign addr_mac[3] = { addr_mac3_msb_reg, addr_mac3_lsb_reg };
 
-    for (i = 0; i < 8; i = i + 1) begin
-      j = i[1:0];
-      if (addr_ipv4_ctrl_reg[i]) begin
-        if (ipdecode_ip4_ip_dst_reg == v4[i]) begin
-          addr_match_ipv4_new = 1;
-        end
-      end
-    end
+    assign addr_ipv4_ctrl = addr_ipv4_ctrl_reg;
+    assign addr_ipv6_ctrl = addr_ipv6_ctrl_reg;
+    assign addr_mac_ctrl = addr_mac_ctrl_reg;
+
+    assign addr_match_arp = addr_match_arp_reg;
+    assign addr_match_arp_mac = addr_match_arp_mac_reg;
+
+    assign addr_match_ethernet = addr_match_ethernet_reg;
+
+    assign addr_match_icmpv6ns_mac = addr_match_icmpv6ns_mac_reg;
+    assign addr_match_icmpv6ns = addr_match_icmpv6ns_reg;
+
+    assign addr_match_ipv4 = addr_match_ipv4_reg;
+    assign addr_match_ipv6 = addr_match_ipv6_reg;
+
+
+  end else begin
+    assign addr_ipv4[0] = 0;
+    assign addr_ipv4[1] = 0;
+    assign addr_ipv4[2] = 0;
+    assign addr_ipv4[3] = 0;
+    assign addr_ipv4[4] = 0;
+    assign addr_ipv4[5] = 0;
+    assign addr_ipv4[6] = 0;
+    assign addr_ipv4[7] = 0;
+
+    assign addr_ipv6[0] = 0;
+    assign addr_ipv6[1] = 0;
+    assign addr_ipv6[2] = 0;
+    assign addr_ipv6[3] = 0;
+    assign addr_ipv6[4] = 0;
+    assign addr_ipv6[5] = 0;
+    assign addr_ipv6[6] = 0;
+    assign addr_ipv6[7] = 0;
+
+    assign addr_mac[0] = 0;
+    assign addr_mac[1] = 0;
+    assign addr_mac[2] = 0;
+    assign addr_mac[3] = 0;
+
+    assign addr_ipv4_ctrl = 0;
+    assign addr_ipv6_ctrl = 0;
+    assign addr_mac_ctrl = 0;
+
+    assign addr_match_arp = 0;
+    assign addr_match_arp_mac = 0;
+
+    assign addr_match_ethernet = 0;
+
+    assign addr_match_icmpv6ns = 0;
+    assign addr_match_icmpv6ns_mac = 0;
+
+    assign addr_match_ipv4 = 0;
+    assign addr_match_ipv6 = 0;
   end
 
   //----------------------------------------------------------------

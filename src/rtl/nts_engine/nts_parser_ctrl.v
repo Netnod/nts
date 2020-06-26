@@ -1520,6 +1520,9 @@ module nts_parser_ctrl #(
       .i_detect_ipv4 ( detect_ipv4_reg ),
       .i_detect_ipv6 ( detect_ipv6_reg ),
 
+      .i_addr_match_ipv4 ( addr_match_ipv4 ),
+      .i_addr_match_ipv6 ( addr_match_ipv6 ),
+
       .i_api_dst_mac_msb_we ( gre_dst_mac_msb_we ),
       .i_api_dst_mac_lsb_we ( gre_dst_mac_lsb_we ),
 

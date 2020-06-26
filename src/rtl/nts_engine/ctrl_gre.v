@@ -35,6 +35,8 @@ module ctrl_gre #(
 
   input i_detect_ipv4,
   input i_detect_ipv6,
+  input i_addr_match_ipv4,
+  input i_addr_match_ipv6,
 
   input        i_api_dst_mac_msb_we,
   input        i_api_dst_mac_lsb_we,
@@ -401,7 +403,10 @@ module ctrl_gre #(
     case (state_reg)
       STATE_IDLE:
         if (i_process) begin
-          if (i_detect_ipv4 | i_detect_ipv6) begin
+          if (i_detect_ipv4 && i_addr_match_ipv4) begin
+            state_we = 1;
+            state_new = STATE_INIT;
+          end else if (i_detect_ipv6 && i_addr_match_ipv6) begin
             state_we = 1;
             state_new = STATE_INIT;
           end else begin

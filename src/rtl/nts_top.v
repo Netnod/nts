@@ -79,13 +79,6 @@ module nts_top #(
   wire [ENGINES-1:0] engine_busy;
   wire [ENGINES-1:0] engine_dispatch_rx_ready;
 
-  /* verilator lint_off UNUSED */
-  wire [ENGINES-1:0] engine_debug_detect_nts_cookie;
-  wire [ENGINES-1:0] engine_debug_detect_nts_cookie_placeholder;
-  wire [ENGINES-1:0] engine_debug_detect_unique_identifier;
-  wire [ENGINES-1:0] engine_debug_detect_nts_authenticator;
-  /* verilator lint_on UNUSED */
-
   wire [LAST_DATA_VALID_WIDTH * ENGINES - 1 : 0] dispatch_engine_rx_data_last_valid;
   wire                         [ENGINES - 1 : 0] dispatch_engine_rx_fifo_empty;
   wire                         [ENGINES - 1 : 0] dispatch_engine_rx_fifo_rd_valid;
@@ -241,12 +234,7 @@ module nts_top #(
         .i_api_address(api_address),
         .i_api_write_data(api_write_data),
         .o_api_read_data(api_read_data[API_RW_WIDTH*engine_index+:API_RW_WIDTH]),
-        .o_api_read_data_valid(api_read_data_valid[engine_index]),
-
-        .o_detect_unique_identifier(engine_debug_detect_unique_identifier[engine_index]),
-        .o_detect_nts_cookie(engine_debug_detect_nts_cookie[engine_index]),
-        .o_detect_nts_cookie_placeholder(engine_debug_detect_nts_cookie_placeholder[engine_index]),
-        .o_detect_nts_authenticator(engine_debug_detect_nts_authenticator[engine_index])
+        .o_api_read_data_valid(api_read_data_valid[engine_index])
       );
     end
   endgenerate

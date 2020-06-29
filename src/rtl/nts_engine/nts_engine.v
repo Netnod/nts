@@ -64,12 +64,7 @@ module nts_engine #(
   input  wire [31:0]           i_api_write_data,
   output wire [31:0]           o_api_read_data,
   output wire                  o_api_read_data_valid,
-  output wire                  o_api_busy,
-
-  output wire                  o_detect_unique_identifier,
-  output wire                  o_detect_nts_cookie,
-  output wire                  o_detect_nts_cookie_placeholder,
-  output wire                  o_detect_nts_authenticator
+  output wire                  o_api_busy
 );
 
   //----------------------------------------------------------------
@@ -157,11 +152,6 @@ module nts_engine #(
 
   wire [ACCESS_PORT_WIDTH-1:0] access_port_rd_data;
   reg                   [63:0] access_port_rd_data_parser;
-
-  wire                         detect_unique_identifier;
-  wire                         detect_nts_cookie;
-  wire                         detect_nts_cookie_placeholder;
-  wire                         detect_nts_authenticator;
 
   /* verilator lint_off UNUSED */
   wire                         api_cs_cookie;
@@ -331,11 +321,6 @@ module nts_engine #(
   assign busy = (~ctrl_reg[0]) || parser_busy;
 
   assign o_busy                          = busy;
-
-  assign o_detect_unique_identifier      = detect_unique_identifier;
-  assign o_detect_nts_cookie             = detect_nts_cookie;
-  assign o_detect_nts_cookie_placeholder = detect_nts_cookie_placeholder;
-  assign o_detect_nts_authenticator      = detect_nts_authenticator;
 
   //----------------------------------------------------------------
   // Statistics counters and Debug registers
@@ -918,12 +903,8 @@ module nts_engine #(
    .o_statistics_nts_bad_auth(parser_statistics_nts_bad_auth),
    .o_statistics_nts_bad_cookie(parser_statistics_nts_bad_cookie),
    .o_statistics_nts_bad_keyid(parser_statistics_nts_bad_keyid),
-   .o_statistics_nts_processed(parser_statistics_nts_processed),
+   .o_statistics_nts_processed(parser_statistics_nts_processed)
 
-   .o_detect_unique_identifier(detect_unique_identifier),
-   .o_detect_nts_cookie(detect_nts_cookie),
-   .o_detect_nts_cookie_placeholder(detect_nts_cookie_placeholder),
-   .o_detect_nts_authenticator(detect_nts_authenticator)
   );
 
   //----------------------------------------------------------------

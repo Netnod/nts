@@ -2228,10 +2228,9 @@ module nts_top_tb;
     `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.o_tx_w_data);
     `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.o_tx_update_length);
     `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.o_tx_transfer);
+    `always_inspect( dut.genblk1[0].engine.parser.nts_enabled.cookies_count_reg);
     always @*
      $display("%s:%0d dut.genblk1[0].engine.parser.protocol_detect_ip4echo_reg: %h", `__FILE__, `__LINE__, dut.genblk1[0].engine.parser.protocol_detect_ip4echo_reg);
-    always @*
-     $display("%s:%0d dut.genblk1[0].engine.parser.cookies_count_reg: %h", `__FILE__, `__LINE__, dut.genblk1[0].engine.parser.cookies_count_reg);
     always @*
      $display("%s:%0d dut.genblk1[0].engine.parser_muxctrl_ntpauth: %h", `__FILE__, `__LINE__, dut.genblk1[0].engine.parser_muxctrl_ntpauth);
     always @*
@@ -2357,11 +2356,11 @@ module nts_top_tb;
         old_parser_state_crypto <= 0;
       end else begin
 
-        if (old_parser_state_crypto != dut.genblk1[0].engine.parser.crypto_fsm_reg) begin
+        if (old_parser_state_crypto != dut.genblk1[0].engine.parser.nts_enabled.crypto_fsm_reg) begin
           old_tick_counter_crypto <= tick_counter;
-          old_parser_state_crypto <= dut.genblk1[0].engine.parser.crypto_fsm_reg;
+          old_parser_state_crypto <= dut.genblk1[0].engine.parser.nts_enabled.crypto_fsm_reg;
           $display("%s:%0d BENCHMARK: dut.genblk1[0].engine.parser.crypto_fsm_reg %h -> %h (hex): %0d ticks", `__FILE__, `__LINE__,
-            old_parser_state_crypto, dut.genblk1[0].engine.parser.crypto_fsm_reg, tick_counter - old_tick_counter_crypto);
+            old_parser_state_crypto, dut.genblk1[0].engine.parser.nts_enabled.crypto_fsm_reg, tick_counter - old_tick_counter_crypto);
         end
       end
     end
@@ -2406,11 +2405,11 @@ module nts_top_tb;
         old_tick_counter_nts <= 1;
         old_parser_state_nts <= 0;
       end else begin
-        if (old_parser_state_nts != dut.genblk1[0].engine.parser.nts_state_reg) begin
+        if (old_parser_state_nts != dut.genblk1[0].engine.parser.nts_enabled.nts_state_reg) begin
           old_tick_counter_nts <= tick_counter;
-          old_parser_state_nts <= dut.genblk1[0].engine.parser.nts_state_reg;
-          $display("%s:%0d BENCHMARK: dut.genblk1[0].engine.parser.nts_state_reg %h -> %h (hex): %0d ticks", `__FILE__, `__LINE__,
-            old_parser_state_nts, dut.genblk1[0].engine.parser.nts_state_reg, tick_counter - old_tick_counter_nts);
+          old_parser_state_nts <= dut.genblk1[0].engine.parser.nts_enabled.nts_state_reg;
+          $display("%s:%0d BENCHMARK: dut.genblk1[0].engine.parser.nts_enabled.nts_state_reg %h -> %h (hex): %0d ticks", `__FILE__, `__LINE__,
+            old_parser_state_nts, dut.genblk1[0].engine.parser.nts_enabled.nts_state_reg, tick_counter - old_tick_counter_nts);
         end
       end
     end

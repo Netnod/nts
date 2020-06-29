@@ -147,11 +147,6 @@ module nts_parser_ctrl #(
 
   output wire                         o_muxctrl_ntpauth,
 
-  output wire                         o_detect_unique_identifier,
-  output wire                         o_detect_nts_cookie,
-  output wire                         o_detect_nts_cookie_placeholder,
-  output wire                         o_detect_nts_authenticator,
-
   output wire                         o_statistics_nts_processed,
   output wire                         o_statistics_nts_bad_cookie,
   output wire                         o_statistics_nts_bad_auth,
@@ -589,21 +584,9 @@ module nts_parser_ctrl #(
   reg   [15:0] config_udp_port_ntp1_new;
   reg   [15:0] config_udp_port_ntp1_reg;
 
-  reg                         cookie_server_id_we;
-  reg                  [31:0] cookie_server_id_new;
-  reg                  [31:0] cookie_server_id_reg;
-
-  reg                         cookies_count_we;
-  reg                   [3:0] cookies_count_new;
-  reg                   [3:0] cookies_count_reg;
-
   reg                         error_state_we;
   reg        [BITS_STATE-1:0] error_state_new;
   reg        [BITS_STATE-1:0] error_state_reg;
-
-  reg                         error_cause_we;
-  reg                  [31:0] error_cause_new;
-  reg                  [31:0] error_cause_reg;
 
   reg                         error_count_we;
   reg                  [31:0] error_count_new;
@@ -625,10 +608,6 @@ module nts_parser_ctrl #(
   reg      [ADDR_WIDTH+3-1:0] copy_tx_addr_new;
   reg      [ADDR_WIDTH+3-1:0] copy_tx_addr_reg;
 
-  reg                         crypto_fsm_we;
-  reg                   [4:0] crypto_fsm_new;
-  reg                   [4:0] crypto_fsm_reg;
-
   reg detect_ipv4_we;
   reg detect_ipv4_new;
   reg detect_ipv4_reg;
@@ -643,10 +622,6 @@ module nts_parser_ctrl #(
   reg                            basic_ntp_state_we;
   reg [BITS_BASIC_NTP_STATE-1:0] basic_ntp_state_new;
   reg [BITS_BASIC_NTP_STATE-1:0] basic_ntp_state_reg;
-
-  reg                         nts_state_we;
-  reg    [BITS_NTS_STATE-1:0] nts_state_new;
-  reg    [BITS_NTS_STATE-1:0] nts_state_reg;
 
   reg                         state_we;
   reg        [BITS_STATE-1:0] state_new;
@@ -666,13 +641,6 @@ module nts_parser_ctrl #(
 
   reg       [ADDR_WIDTH+3-1:0] memory_bound_new;
   reg       [ADDR_WIDTH+3-1:0] memory_bound_reg;
-
-  reg                          memory_address_we;
-  reg       [ADDR_WIDTH+3-1:0] memory_address_new;
-  reg       [ADDR_WIDTH+3-1:0] memory_address_reg;
-  reg       [ADDR_WIDTH+3-1:0] memory_address_next_reg;
-  reg                          memory_address_failure_reg;
-  reg                          memory_address_lastbyte_read_reg;
 
   reg                          ipdecode_arp_hrd_we;
   reg                   [15:0] ipdecode_arp_hrd_new;
@@ -799,23 +767,6 @@ module nts_parser_ctrl #(
   reg                   [15:0] ipdecode_udp_port_src_new;
   reg                   [15:0] ipdecode_udp_port_src_reg;
 
-
-  reg                          keymem_get_current_key_new;
-  reg                          keymem_get_current_key_reg;
-  reg                          keymem_get_key_with_id_new;
-  reg                          keymem_get_key_with_id_reg;
-
-  reg                          keymem_key_id_we;
-  reg                   [31:0] keymem_key_id_new;
-  reg                   [31:0] keymem_key_id_reg;
-
-  reg                          keymem_key_word_we;
-  reg                    [2:0] keymem_key_word_new;
-  reg                    [2:0] keymem_key_word_reg;
-  reg                          keymem_server_id_we;
-  reg                   [31:0] keymem_server_id_new;
-  reg                   [31:0] keymem_server_id_reg;
-
   reg                          muxctrl_timestamp_ipv4_new;
   reg                          muxctrl_timestamp_ipv4_reg;
   reg                          muxctrl_timestamp_ipv6_new;
@@ -847,37 +798,6 @@ module nts_parser_ctrl #(
   reg                          timestamp_poll_we;
   reg                 [ 7 : 0] timestamp_poll_new;
   reg                 [ 7 : 0] timestamp_poll_reg;
-
-  reg                          ntp_extension_counter_we;
-  reg [NTP_EXTENSION_BITS-1:0] ntp_extension_counter_new;
-  reg [NTP_EXTENSION_BITS-1:0] ntp_extension_counter_reg;
-
-  reg                          ntp_extension_reset;
-  reg                          ntp_extension_we;
-  reg                          ntp_extension_copied_new;
-  reg                          ntp_extension_copied_reg  [0:NTP_EXTENSION_FIELDS-1];
-  reg       [ADDR_WIDTH+3-1:0] ntp_extension_addr_new;
-  reg       [ADDR_WIDTH+3-1:0] ntp_extension_addr_reg    [0:NTP_EXTENSION_FIELDS-1];
-  reg                   [15:0] ntp_extension_tag_new;
-  reg                   [15:0] ntp_extension_tag_reg     [0:NTP_EXTENSION_FIELDS-1];
-  reg                   [15:0] ntp_extension_length_new;
-  reg                   [15:0] ntp_extension_length_reg  [0:NTP_EXTENSION_FIELDS-1];
-
-  reg       [ADDR_WIDTH+3-1:0] nts_authenticator_start_addr_new;
-  reg       [ADDR_WIDTH+3-1:0] nts_authenticator_start_addr_reg;
-  reg                          nts_basic_sanity_check_packet_ok_new;
-  reg                          nts_basic_sanity_check_packet_ok_reg;
-  reg                          nts_kiss_of_death_we;
-  reg                          nts_kiss_of_death_new;
-  reg                          nts_kiss_of_death_reg;
-  reg       [ADDR_WIDTH+3-1:0] nts_unique_identifier_addr_new;
-  reg       [ADDR_WIDTH+3-1:0] nts_unique_identifier_addr_reg;
-  reg                   [15:0] nts_unique_identifier_length_new;
-  reg                   [15:0] nts_unique_identifier_length_reg;
-  reg                    [2:0] nts_valid_placeholders_new;
-  reg                    [2:0] nts_valid_placeholders_reg;
-  reg       [ADDR_WIDTH+3-1:0] nts_cookie_start_addr_new;
-  reg       [ADDR_WIDTH+3-1:0] nts_cookie_start_addr_reg;
 
   reg                          protocol_detect_icmpv6_new;
   reg                          protocol_detect_icmpv6_reg;
@@ -911,27 +831,6 @@ module nts_parser_ctrl #(
   reg                          protocol_detect_ntpauth_sha1_reg;
 
 
-  reg                          detect_unique_identifier_reg;
-  reg                          detect_nts_cookie_reg;
-  reg                          detect_nts_cookie_placeholder_reg;
-  reg                          detect_nts_authenticator_reg;
-
-  reg [NTP_EXTENSION_BITS-1:0] detect_nts_cookie_index_reg;
-
-  reg statistics_nts_processed_new;
-  reg statistics_nts_processed_reg;
-  reg statistics_nts_bad_cookie_new;
-  reg statistics_nts_bad_cookie_reg;
-  reg statistics_nts_bad_auth_new;
-  reg statistics_nts_bad_auth_reg;
-  reg statistics_nts_bad_keyid_new;
-  reg statistics_nts_bad_keyid_reg;
-
-  reg [15:0] tx_authenticator_length_new;
-  reg [15:0] tx_authenticator_length_reg;
-
-  reg [15:0] tx_ciphertext_length_new;
-  reg [15:0] tx_ciphertext_length_reg;
 
   reg        tx_header_arp_index_we;
   reg  [2:0] tx_header_arp_index_new;
@@ -993,31 +892,8 @@ module nts_parser_ctrl #(
 
   reg [31:0] api_read_data;
 
-  wire [3:0] cookies_to_emit;
-
   reg copy_done; //wire
 
-  reg                    crypto_sample_key;
-  reg             [63:0] crypto_cookieprefix;
-  reg                    crypto_op_cookie_loadkeys;
-  reg                    crypto_op_cookie_rencrypt;
-  reg                    crypto_op_cookie_verify;
-  reg                    crypto_op_cookiebuf_append;
-  reg                    crypto_op_cookiebuf_reset;
-  reg                    crypto_op_c2s_verify_auth;
-  reg                    crypto_op_s2c_generate_auth;
-  reg [ADDR_WIDTH+3-1:0] crypto_rx_addr;
-  reg [ADDR_WIDTH+3-1:0] crypto_rx_bytes;
-  reg                    crypto_rx_op_copy_ad;
-  reg                    crypto_rx_op_copy_nonce;
-  reg                    crypto_rx_op_copy_pc;
-  reg                    crypto_rx_op_copy_tag;
-  reg [ADDR_WIDTH+3-1:0] crypto_tx_addr;
-  reg [ADDR_WIDTH+3-1:0] crypto_tx_bytes;
-  reg                    crypto_tx_op_copy_ad;
-  reg                    crypto_tx_op_store_cookie;
-  reg                    crypto_tx_op_store_cookiebuf;
-  reg                    crypto_tx_op_store_nonce_tag;
 
   wire detect_arp;
   wire detect_arp_good;
@@ -1057,13 +933,46 @@ module nts_parser_ctrl #(
   wire                    icmp_drop;
   wire                    icmp_transmit;
 
-  reg muxctrl_crypto;
+  wire                    nts_idle;
+
+  wire                    nts_rx_addr_we;
+  wire [ADDR_WIDTH+3-1:0] nts_rx_addr_new;
+  wire                    nts_rx_bs_we;
+  wire             [15:0] nts_rx_bs_new;
+  wire                    nts_rx_rd_en_new;
+  wire                    nts_rx_ws_we;
+  wire              [2:0] nts_rx_ws_new;
+
+  wire                    nts_cp_start;
+  wire                    nts_cp_tx_addr_we;
+  wire [ADDR_WIDTH+3-1:0] nts_cp_tx_addr_new;
+  wire                    nts_cp_bytes_we;
+  wire             [15:0] nts_cp_bytes_new;
+
+  wire             [31:0] nts_error_cause;
+
+  wire                    nts_packet_drop;
+  wire                    nts_packet_transmit;
+
+  wire                    nts_respond_with_ip_udp_header;
+
+  wire                    nts_csum_reset_en;
+  wire             [15:0] nts_csum_reset_value;
+  wire                    nts_csum_en;
+  wire [ADDR_WIDTH+3-1:0] nts_csum_bytes;
+  wire [ADDR_WIDTH+3-1:0] nts_tx_addr;
+  wire                    nts_tx_wen;
+  wire             [63:0] nts_tx_wd;
+  wire                    nts_tx_update_length;
+
+  wire                    nts_tx_wait_for_checksum;
+
   reg ntpauth_md5;
   reg ntpauth_sha1;
   reg ntpauth_transmit;
 
   reg timestamp_ntp;
-  reg timestamp_nts;
+  wire timestamp_nts;
 
   wire     [15:0] tx_ethernet_type;
   wire [16*5-1:0] tx_header_ipv4_nocsum0;
@@ -1184,8 +1093,6 @@ module nts_parser_ctrl #(
   // Connectivity for ports etc.
   //----------------------------------------------------------------
 
-  assign cookies_to_emit = 1 + { 1'b0, nts_valid_placeholders_reg };
-
   assign config_ctrl_default[CONFIG_BIT_VERIFY_IP_CHECKSUMS] = DEFAULT_VERIFY_IP_CHECKSUM;
   assign config_ctrl_default[CONFIG_BIT_SUPPORT_NTS]         = DEFAULT_SUPPORT_NTS;
   assign config_ctrl_default[CONFIG_BIT_SUPPORT_NTP]         = DEFAULT_SUPPORT_NTP;
@@ -1215,10 +1122,6 @@ module nts_parser_ctrl #(
 
   assign o_api_read_data = api_read_data;
 
-  assign o_keymem_get_current_key = keymem_get_current_key_reg;
-  assign o_keymem_key_word        = keymem_key_word_reg;
-  assign o_keymem_get_key_with_id = keymem_get_key_with_id_reg;
-  assign o_keymem_server_id       = keymem_server_id_reg;
 
   assign o_tx_clear         = state_reg == STATE_DROP_PACKET;
   assign o_tx_transfer      = state_reg == STATE_TRANSFER_PACKET;
@@ -1233,40 +1136,11 @@ module nts_parser_ctrl #(
   assign o_tx_sum_en          = tx_sum_en;
   assign o_tx_sum_bytes       = tx_sum_bytes;
 
-  assign o_timestamp_kiss_of_death            = nts_kiss_of_death_reg;
   assign o_timestamp_record_receive_timestamp = timestamp_record_receive_timestamp_reg;
-  assign o_timestamp_transmit                 = (nts_state_reg == NTS_S_TIMESTAMP) || (basic_ntp_state_reg == BASIC_NTP_S_TIMESTAMP);
+  assign o_timestamp_transmit                 = timestamp_nts || timestamp_ntp;
   assign o_timestamp_origin_timestamp         = timestamp_origin_timestamp_reg;
   assign o_timestamp_version_number           = timestamp_version_number_reg;
   assign o_timestamp_poll                     = timestamp_poll_reg;
-
-  assign o_crypto_sample_key       = crypto_sample_key;
-
-  assign o_crypto_rx_addr          = crypto_rx_addr;
-  assign o_crypto_rx_bytes         = crypto_rx_bytes;
-
-  assign o_crypto_rx_op_copy_ad    = crypto_rx_op_copy_ad;
-  assign o_crypto_rx_op_copy_nonce = crypto_rx_op_copy_nonce;
-  assign o_crypto_rx_op_copy_pc    = crypto_rx_op_copy_pc;
-  assign o_crypto_rx_op_copy_tag   = crypto_rx_op_copy_tag;
-
-  assign o_crypto_tx_addr               = crypto_tx_addr;
-  assign o_crypto_tx_bytes              = crypto_tx_bytes;
-
-  assign o_crypto_tx_op_copy_ad         = crypto_tx_op_copy_ad;
-  assign o_crypto_tx_op_store_cookie    = crypto_tx_op_store_cookie;
-  assign o_crypto_tx_op_store_cookiebuf = crypto_tx_op_store_cookiebuf;
-  assign o_crypto_tx_op_store_nonce_tag = crypto_tx_op_store_nonce_tag;
-
-  assign o_crypto_cookieprefix = crypto_cookieprefix;
-
-  assign o_crypto_op_cookie_loadkeys   = crypto_op_cookie_loadkeys;
-  assign o_crypto_op_cookie_rencrypt   = crypto_op_cookie_rencrypt;
-  assign o_crypto_op_cookie_verify     = crypto_op_cookie_verify;
-  assign o_crypto_op_cookiebuf_append  = crypto_op_cookiebuf_append;
-  assign o_crypto_op_cookiebuf_reset   = crypto_op_cookiebuf_reset;
-  assign o_crypto_op_c2s_verify_auth   = crypto_op_c2s_verify_auth;
-  assign o_crypto_op_s2c_generate_auth = crypto_op_s2c_generate_auth;
 
   assign o_ntpauth_md5      = ntpauth_md5;
   assign o_ntpauth_sha1     = ntpauth_sha1;
@@ -1275,18 +1149,7 @@ module nts_parser_ctrl #(
   assign o_muxctrl_timestamp_ipv4 = muxctrl_timestamp_ipv4_reg;
   assign o_muxctrl_timestamp_ipv6 = muxctrl_timestamp_ipv6_reg;
 
-  assign o_muxctrl_crypto = muxctrl_crypto;
   assign o_muxctrl_ntpauth = muxctrl_ntpauth_reg;
-
-  assign o_detect_unique_identifier      = detect_unique_identifier_reg;
-  assign o_detect_nts_cookie             = detect_nts_cookie_reg;
-  assign o_detect_nts_cookie_placeholder = detect_nts_cookie_placeholder_reg;
-  assign o_detect_nts_authenticator      = detect_nts_authenticator_reg;
-
-  assign o_statistics_nts_processed  = statistics_nts_processed_reg;
-  assign o_statistics_nts_bad_cookie = statistics_nts_bad_cookie_reg;
-  assign o_statistics_nts_bad_auth   = statistics_nts_bad_auth_reg;
-  assign o_statistics_nts_bad_keyid  = statistics_nts_bad_keyid_reg;
 
   assign tx_ethernet_type = detect_ipv4_reg ? E_TYPE_IPV4 : (detect_ipv6_reg ? E_TYPE_IPV6 : 16'hFFFF);
   assign tx_header_ethernet = {
@@ -1850,11 +1713,11 @@ module nts_parser_ctrl #(
           ADDR_DUMMY: api_read_data = api_dummy_reg;
           ADDR_CTRL: api_read_data[CONFIG_BITS-1:0] = config_ctrl_reg;
           ADDR_STATE: api_read_data[BITS_STATE-1:0] = state_reg; //MSB=0 from init
-          ADDR_STATE_CRYPTO: api_read_data = { 27'h0, crypto_fsm_reg };
+          //ADDR_STATE_CRYPTO: api_read_data = { 27'h0, crypto_fsm_reg };
           //ADDR_STATE_ICMP: api_read_data[BITS_ICMP_STATE-1:0] = icmp_state_reg;
           ADDR_ERROR_STATE: api_read_data[BITS_STATE-1:0] = error_state_reg; //MSB=0 from init
           ADDR_ERROR_COUNT: api_read_data = error_count_reg;
-          ADDR_ERROR_CAUSE: api_read_data = error_cause_reg;
+          ADDR_ERROR_CAUSE: api_read_data = nts_error_cause;
           ADDR_ERROR_SIZE: api_read_data[ADDR_WIDTH+3-1:0] = error_size_reg; //MSB=0 from init
 
           ADDR_CSUM_IPV4_BAD0:
@@ -2059,13 +1922,8 @@ module nts_parser_ctrl #(
       config_udp_port_ntp0_reg    <= UDP_PORT_NTP;
       config_udp_port_ntp1_reg    <= UDP_PORT_NTS;
 
-      cookie_server_id_reg       <= 'b0;
-      cookies_count_reg          <= 0;
-
       copy_bytes_reg             <= 'b0;
       copy_tx_addr_reg           <= 0;
-
-      crypto_fsm_reg             <= CRYPTO_FSM_IDLE;
 
       detect_ipv4_reg <= 0;
       detect_ipv4_fragmented_reg <= 0;
@@ -2073,7 +1931,6 @@ module nts_parser_ctrl #(
 
       detect_ipv6_reg <= 0;
 
-      error_cause_reg            <= 'b0;
       error_count_reg            <= 'b0;
       error_size_reg             <= 'b0;
       error_state_reg            <= 'b0;
@@ -2121,30 +1978,13 @@ module nts_parser_ctrl #(
       ipdecode_udp_port_dst_reg  <= 'b0;
       ipdecode_udp_port_src_reg  <= 'b0;
 
-      keymem_get_current_key_reg <= 'b0;
-      keymem_get_key_with_id_reg <= 'b0;
-      keymem_key_id_reg          <= 'b0;
-      keymem_key_word_reg        <= 'b0;
-      keymem_server_id_reg       <= 'b0;
-
       last_bytes_reg             <= 'b0;
 
-      memory_address_reg         <= 'b0;
       memory_bound_reg           <= 'b0;
 
       muxctrl_ntpauth_reg        <= 'b0;
       muxctrl_timestamp_ipv4_reg <= 'b0;
       muxctrl_timestamp_ipv6_reg <= 'b0;
-
-      ntp_extension_counter_reg            <= 'b0;
-      nts_authenticator_start_addr_reg     <= 'b0;
-      nts_basic_sanity_check_packet_ok_reg <= 'b0;
-      nts_cookie_start_addr_reg            <= 'b0;
-      nts_kiss_of_death_reg                <= 'b0;
-      nts_state_reg                        <= 'b0;
-      nts_unique_identifier_addr_reg       <= 'b0;
-      nts_unique_identifier_length_reg     <= 'b0;
-      nts_valid_placeholders_reg           <= 'b0;
 
       protocol_detect_icmpv6_reg        <= 'b0;
 
@@ -2170,19 +2010,11 @@ module nts_parser_ctrl #(
       state_reg                     <= 'b0;
       state_previous_reg            <= 'b0;
 
-      statistics_nts_processed_reg  <= 0;
-      statistics_nts_bad_cookie_reg <= 0;
-      statistics_nts_bad_auth_reg   <= 0;
-      statistics_nts_bad_keyid_reg  <= 0;
-
       timestamp_record_receive_timestamp_reg <= 'b0;
       timestamp_origin_timestamp_reg         <= 'b0;
       timestamp_version_number_reg           <= 'b0;
 
       timestamp_poll_reg                     <= 'b0;
-
-      tx_authenticator_length_reg <= 0;
-      tx_ciphertext_length_reg <= 0;
 
       tx_header_arp_index_reg <= 0;
 
@@ -2201,15 +2033,6 @@ module nts_parser_ctrl #(
       word_counter_reg           <= 'b0;
       word_counter_overflow_reg  <= 'b0;
 
-      begin : ntp_extension_reset_async
-        integer i;
-        for (i=0; i <= NTP_EXTENSION_FIELDS-1; i=i+1) begin
-          ntp_extension_copied_reg [i] <= 'b0;
-          ntp_extension_addr_reg   [i] <= 'b0;
-          ntp_extension_tag_reg    [i] <= 'b0;
-          ntp_extension_length_reg [i] <= 'b0;
-        end
-      end
     end else begin
 
       if (access_port_addr_we)
@@ -2241,20 +2064,11 @@ module nts_parser_ctrl #(
       if (config_udp_port_ntp1_we)
         config_udp_port_ntp1_reg <= config_udp_port_ntp1_new;
 
-      if (cookie_server_id_we)
-        cookie_server_id_reg <= cookie_server_id_new;
-
-      if (cookies_count_we)
-        cookies_count_reg <= cookies_count_new;
-
       if (copy_bytes_we)
         copy_bytes_reg <= copy_bytes_new;
 
       if (copy_tx_addr_we)
         copy_tx_addr_reg <= copy_tx_addr_new;
-
-      if (crypto_fsm_we)
-        crypto_fsm_reg <= crypto_fsm_new;
 
       if (detect_ipv4_we)
         detect_ipv4_reg <= detect_ipv4_new;
@@ -2264,9 +2078,6 @@ module nts_parser_ctrl #(
 
       if (detect_ipv6_we)
         detect_ipv6_reg <= detect_ipv6_new;
-
-      if (error_cause_we)
-        error_cause_reg <= error_cause_new;
 
       if (error_count_we)
         error_count_reg <= error_count_new;
@@ -2381,24 +2192,9 @@ module nts_parser_ctrl #(
       if (ipdecode_udp_port_src_we)
         ipdecode_udp_port_src_reg <= ipdecode_udp_port_src_new;
 
-      keymem_get_current_key_reg <= keymem_get_current_key_new;
-
-      keymem_get_key_with_id_reg <= keymem_get_key_with_id_new;
-
-      if (keymem_key_id_we)
-         keymem_key_id_reg <= keymem_key_id_new;
-
-      if (keymem_key_word_we)
-        keymem_key_word_reg <= keymem_key_word_new;
-
-      if (keymem_server_id_we)
-        keymem_server_id_reg <= keymem_server_id_new;
-
       if (last_bytes_we)
         last_bytes_reg <= last_bytes_new;
 
-      if (memory_address_we)
-        memory_address_reg <= memory_address_new;
 
       memory_bound_reg <= memory_bound_new;
 
@@ -2407,37 +2203,6 @@ module nts_parser_ctrl #(
 
       muxctrl_timestamp_ipv4_reg <= muxctrl_timestamp_ipv4_new;
       muxctrl_timestamp_ipv6_reg <= muxctrl_timestamp_ipv6_new;
-
-      if (ntp_extension_reset) begin : ntp_extension_reset_sync
-        integer i;
-        for (i=0; i <= NTP_EXTENSION_FIELDS-1; i=i+1) begin
-          ntp_extension_copied_reg [i] <= 'b0;
-        end
-      end else if (ntp_extension_we)
-        ntp_extension_copied_reg [ntp_extension_counter_reg] <= ntp_extension_copied_new;
-
-      if (ntp_extension_we) begin
-        ntp_extension_addr_reg   [ntp_extension_counter_reg] <= ntp_extension_addr_new;
-        ntp_extension_tag_reg    [ntp_extension_counter_reg] <= ntp_extension_tag_new;
-        ntp_extension_length_reg [ntp_extension_counter_reg] <= ntp_extension_length_new;
-      end
-
-      if (ntp_extension_counter_we)
-        ntp_extension_counter_reg <= ntp_extension_counter_new;
-
-      nts_authenticator_start_addr_reg     <= nts_authenticator_start_addr_new;
-      nts_basic_sanity_check_packet_ok_reg <= nts_basic_sanity_check_packet_ok_new;
-      nts_cookie_start_addr_reg            <= nts_cookie_start_addr_new;
-
-      if (nts_kiss_of_death_we)
-        nts_kiss_of_death_reg <= nts_kiss_of_death_new;
-
-      if (nts_state_we)
-        nts_state_reg <= nts_state_new;
-
-      nts_unique_identifier_addr_reg       <= nts_unique_identifier_addr_new;
-      nts_unique_identifier_length_reg     <= nts_unique_identifier_length_new;
-      nts_valid_placeholders_reg           <= nts_valid_placeholders_new;
 
       protocol_detect_ip4echo_reg       <= protocol_detect_ip4echo_new;
       protocol_detect_ip4traceroute_reg <= protocol_detect_ip4traceroute_new;
@@ -2466,11 +2231,6 @@ module nts_parser_ctrl #(
         state_previous_reg <= state_reg;
       end
 
-      statistics_nts_processed_reg  <= statistics_nts_processed_new;
-      statistics_nts_bad_cookie_reg <= statistics_nts_bad_cookie_new;
-      statistics_nts_bad_auth_reg   <= statistics_nts_bad_auth_new;
-      statistics_nts_bad_keyid_reg  <= statistics_nts_bad_keyid_new;
-
       if (timestamp_record_receive_timestamp_we)
         timestamp_record_receive_timestamp_reg <= timestamp_record_receive_timestamp_new;
 
@@ -2482,9 +2242,6 @@ module nts_parser_ctrl #(
 
       if (timestamp_poll_we)
         timestamp_poll_reg <= timestamp_poll_new;
-
-      tx_authenticator_length_reg <= tx_authenticator_length_new;
-      tx_ciphertext_length_reg <= tx_ciphertext_length_new;
 
       if (tx_header_arp_index_we)
         tx_header_arp_index_reg <= tx_header_arp_index_new;
@@ -2613,220 +2370,1661 @@ module nts_parser_ctrl #(
    end
   end
 
-  //----------------------------------------------------------------
-  // NTS Kiss-o'-Death
-  // If the server is unable to validate the cookie or authenticate
-  // the request, it SHOULD respond with a Kiss-o'-Death (KoD)
-  // packet (see RFC 5905, Section 7.4 [RFC5905]) with kiss code
-  // "NTSN", meaning "NTS negative-acknowledgment (NAK)".  It MUST
-  // NOT include any NTS Cookie or NTS Authenticator and Encrypted
-  // Extension Fields extension fields.
-  // https://tools.ietf.org/html/draft-ietf-ntp-using-nts-for-ntp-21
-  //----------------------------------------------------------------
+  if (SUPPORT_NTS) begin : nts_enabled
+    reg       crypto_fsm_we;
+    reg [4:0] crypto_fsm_new;
+    reg [4:0] crypto_fsm_reg;
 
-  always @*
-  begin : nts_kiss_of_death
-    nts_kiss_of_death_we = 0;
-    nts_kiss_of_death_new = 0;
-    case (nts_state_reg)
-      NTS_S_IDLE:
-        begin
-          nts_kiss_of_death_we = 1;
-          nts_kiss_of_death_new = 0;
-        end
-      NTS_S_VERIFY_KEY_FROM_COOKIE2:
-        if (i_keymem_ready && keymem_get_key_with_id_reg == 'b0 ) begin
-          if (i_keymem_key_valid == 'b0) begin
+    reg        cookie_server_id_we;
+    reg [31:0] cookie_server_id_new;
+    reg [31:0] cookie_server_id_reg;
+
+    wire [3:0] cookies_to_emit;
+
+    reg        cookies_count_we;
+    reg  [3:0] cookies_count_new;
+    reg  [3:0] cookies_count_reg;
+
+    reg                    crypto_sample_key;
+    reg             [63:0] crypto_cookieprefix;
+    reg                    crypto_op_cookie_loadkeys;
+    reg                    crypto_op_cookie_rencrypt;
+    reg                    crypto_op_cookie_verify;
+    reg                    crypto_op_cookiebuf_append;
+    reg                    crypto_op_cookiebuf_reset;
+    reg                    crypto_op_c2s_verify_auth;
+    reg                    crypto_op_s2c_generate_auth;
+    reg [ADDR_WIDTH+3-1:0] crypto_rx_addr;
+    reg [ADDR_WIDTH+3-1:0] crypto_rx_bytes;
+    reg                    crypto_rx_op_copy_ad;
+    reg                    crypto_rx_op_copy_nonce;
+    reg                    crypto_rx_op_copy_pc;
+    reg                    crypto_rx_op_copy_tag;
+    reg [ADDR_WIDTH+3-1:0] crypto_tx_addr;
+    reg [ADDR_WIDTH+3-1:0] crypto_tx_bytes;
+    reg                    crypto_tx_op_copy_ad;
+    reg                    crypto_tx_op_store_cookie;
+    reg                    crypto_tx_op_store_cookiebuf;
+    reg                    crypto_tx_op_store_nonce_tag;
+
+    reg        keymem_get_current_key_new;
+    reg        keymem_get_current_key_reg;
+    reg        keymem_get_key_with_id_new;
+    reg        keymem_get_key_with_id_reg;
+    reg        keymem_key_id_we;
+    reg [31:0] keymem_key_id_new;
+    reg [31:0] keymem_key_id_reg;
+    reg        keymem_key_word_we;
+    reg  [2:0] keymem_key_word_new;
+    reg  [2:0] keymem_key_word_reg;
+    reg        keymem_server_id_we;
+    reg [31:0] keymem_server_id_new;
+    reg [31:0] keymem_server_id_reg;
+
+    reg [NTP_EXTENSION_BITS-1:0] detect_nts_cookie_index_new;
+    reg [NTP_EXTENSION_BITS-1:0] detect_nts_cookie_index_reg;
+
+    reg                    memory_address_we;
+    reg [ADDR_WIDTH+3-1:0] memory_address_new;
+    reg [ADDR_WIDTH+3-1:0] memory_address_reg;
+    reg [ADDR_WIDTH+3-1:0] memory_address_next_reg;
+    reg                    memory_address_failure_reg;
+    reg                    memory_address_lastbyte_read_reg;
+
+    reg muxctrl_crypto;
+
+    reg        error_cause_we;
+    reg [31:0] error_cause_new;
+    reg [31:0] error_cause_reg;
+
+    reg                      nts_state_we;
+    reg [BITS_NTS_STATE-1:0] nts_state_new;
+    reg [BITS_NTS_STATE-1:0] nts_state_reg;
+
+    reg                          ntp_extension_counter_we;
+    reg [NTP_EXTENSION_BITS-1:0] ntp_extension_counter_new;
+    reg [NTP_EXTENSION_BITS-1:0] ntp_extension_counter_reg;
+    reg                          ntp_extension_reset;
+    reg                          ntp_extension_we;
+    reg                          ntp_extension_copied_new;
+    reg                          ntp_extension_copied_reg  [0:NTP_EXTENSION_FIELDS-1];
+    reg       [ADDR_WIDTH+3-1:0] ntp_extension_addr_new;
+    reg       [ADDR_WIDTH+3-1:0] ntp_extension_addr_reg    [0:NTP_EXTENSION_FIELDS-1];
+    reg                   [15:0] ntp_extension_tag_new;
+    reg                   [15:0] ntp_extension_tag_reg     [0:NTP_EXTENSION_FIELDS-1];
+    reg                   [15:0] ntp_extension_length_new;
+    reg                   [15:0] ntp_extension_length_reg  [0:NTP_EXTENSION_FIELDS-1];
+
+    reg       [ADDR_WIDTH+3-1:0] nts_authenticator_start_addr_new;
+    reg       [ADDR_WIDTH+3-1:0] nts_authenticator_start_addr_reg;
+    reg                          nts_basic_sanity_check_packet_ok_new;
+    reg                          nts_basic_sanity_check_packet_ok_reg;
+    reg                          nts_kiss_of_death_we;
+    reg                          nts_kiss_of_death_new;
+    reg                          nts_kiss_of_death_reg;
+    reg       [ADDR_WIDTH+3-1:0] nts_unique_identifier_addr_new;
+    reg       [ADDR_WIDTH+3-1:0] nts_unique_identifier_addr_reg;
+    reg                   [15:0] nts_unique_identifier_length_new;
+    reg                   [15:0] nts_unique_identifier_length_reg;
+    reg                    [2:0] nts_valid_placeholders_new;
+    reg                    [2:0] nts_valid_placeholders_reg;
+    reg       [ADDR_WIDTH+3-1:0] nts_cookie_start_addr_new;
+    reg       [ADDR_WIDTH+3-1:0] nts_cookie_start_addr_reg;
+
+    reg respond_with_ip_udp_header;
+
+    reg                    rx_addr_we;
+    reg [ADDR_WIDTH+3-1:0] rx_addr_new;
+    reg                    rx_bs_we;
+    reg             [15:0] rx_bs_new;
+    reg                    rx_rd_en_new;
+    reg                    rx_ws_we;
+    reg              [2:0] rx_ws_new;
+
+    reg                    cp_start;
+    reg                    cp_tx_addr_we;
+    reg [ADDR_WIDTH+3-1:0] cp_tx_addr_new;
+    reg                    cp_bytes_we;
+    reg             [15:0] cp_bytes_new;
+
+
+    reg [ADDR_WIDTH+3-1:0] tx_a;
+    reg                    tx_cen;
+    reg [ADDR_WIDTH+3-1:0] tx_cb;
+    reg                    tx_cr;
+    reg             [15:0] tx_crv;
+    reg                    tx_wen;
+    reg             [63:0] tx_wd;
+    reg                    tx_up_len;
+
+    reg statistics_nts_processed;
+    reg statistics_nts_bad_cookie;
+    reg statistics_nts_bad_auth;
+    reg statistics_nts_bad_keyid;
+
+    reg [15:0] tx_authenticator_length_new;
+    reg [15:0] tx_authenticator_length_reg;
+    reg [15:0] tx_ciphertext_length_new;
+    reg [15:0] tx_ciphertext_length_reg;
+
+
+    reg timestamp;
+
+    //----------------------------------------------------------------
+    // NTS Kiss-o'-Death
+    // If the server is unable to validate the cookie or authenticate
+    // the request, it SHOULD respond with a Kiss-o'-Death (KoD)
+    // packet (see RFC 5905, Section 7.4 [RFC5905]) with kiss code
+    // "NTSN", meaning "NTS negative-acknowledgment (NAK)".  It MUST
+    // NOT include any NTS Cookie or NTS Authenticator and Encrypted
+    // Extension Fields extension fields.
+    // https://tools.ietf.org/html/draft-ietf-ntp-using-nts-for-ntp-21
+    //----------------------------------------------------------------
+
+    always @*
+    begin : nts_kiss_of_death
+      nts_kiss_of_death_we = 0;
+      nts_kiss_of_death_new = 0;
+      case (nts_state_reg)
+        NTS_S_IDLE:
+          begin
+            nts_kiss_of_death_we = 1;
+            nts_kiss_of_death_new = 0;
+          end
+        NTS_S_VERIFY_KEY_FROM_COOKIE2:
+          if (i_keymem_ready && keymem_get_key_with_id_reg == 'b0 ) begin
+            if (i_keymem_key_valid == 'b0) begin
+              nts_kiss_of_death_we = 1;
+              nts_kiss_of_death_new = 1;
+            end
+          end
+        NTS_S_RX_AUTH_COOKIE:
+          if (crypto_fsm_reg == CRYPTO_FSM_DONE_FAILURE) begin
             nts_kiss_of_death_we = 1;
             nts_kiss_of_death_new = 1;
           end
+        NTS_S_RX_AUTH_PACKET:
+          if (crypto_fsm_reg == CRYPTO_FSM_DONE_FAILURE) begin
+            nts_kiss_of_death_we = 1;
+            nts_kiss_of_death_new = 1;
+          end
+        default: ;
+      endcase
+    end
+
+    //----------------------------------------------------------------
+    // NTS Sanity Check Logic
+    //   Verifies that NTS extension exhibit basic sanity
+    // https://tools.ietf.org/html/draft-ietf-ntp-using-nts-for-ntp-20
+    //----------------------------------------------------------------
+
+    always @*
+    begin : nts_basic_sanity_check
+      nts_authenticator_start_addr_new = 0;
+      nts_basic_sanity_check_packet_ok_new = 0;
+      nts_cookie_start_addr_new = 0;
+      nts_unique_identifier_addr_new = 0;
+      nts_unique_identifier_length_new = 0;
+      nts_valid_placeholders_new = 0;
+
+      begin : nts_basic_sanity_check_locals
+        reg   [NTP_EXTENSION_BITS:0] i;
+        reg [NTP_EXTENSION_BITS-1:0] j;
+
+        reg [NTP_EXTENSION_BITS-1:0] authenticators;
+        reg [NTP_EXTENSION_BITS-1:0] cookies;
+        reg [NTP_EXTENSION_BITS-1:0] unique_idenfifiers;
+
+        reg [2:0] cookie_placeholders;
+
+        reg evil_packet;
+
+        evil_packet = 0;
+
+        unique_idenfifiers = 0;
+        cookies = 0;
+        cookie_placeholders = 0;
+        authenticators = 0;
+
+        for (i = 0; i < NTP_EXTENSION_FIELDS; i = i + 1) begin
+          j = i[NTP_EXTENSION_BITS-1:0];
+          if (ntp_extension_copied_reg[j]) begin
+
+            if (ntp_extension_tag_reg[j] == TAG_NTS_UNIQUE_IDENTIFIER) begin
+              unique_idenfifiers = unique_idenfifiers + 1;
+              nts_unique_identifier_addr_new = ntp_extension_addr_reg[j];
+              nts_unique_identifier_length_new = ntp_extension_length_reg[j];
+              //5.3. The string MUST be at least 32 octets long.
+              if (ntp_extension_length_reg[j] < LEN_NTS_MIN_UNIQUE_IDENT) begin
+                evil_packet = 1;
+              end
+            end
+
+            if (ntp_extension_tag_reg[j] == TAG_NTS_COOKIE) begin
+              cookies = cookies + 1;
+              nts_cookie_start_addr_new = ntp_extension_addr_reg[j];
+              if (ntp_extension_length_reg[j] != LEN_NTS_COOKIE ) begin
+                evil_packet = 1;
+              end
+            end
+
+            if (ntp_extension_tag_reg[j] == TAG_NTS_COOKIE_PLACEHOLDER) begin
+              if (cookie_placeholders < 7) begin
+                cookie_placeholders = cookie_placeholders + 1;
+              end else begin
+                evil_packet = 1; //5.7 The client SHOULD NOT include more than seven
+                                 //    NTS Cookie Placeholder extension fields in a request.
+              end
+              //5.5. The body length of the NTS Cookie Placeholder extension field MUST be
+              //     the same as the body length of the NTS Cookie extension field.
+              // => Approximation: same length rules
+              if (ntp_extension_length_reg[j] != LEN_NTS_COOKIE ) begin
+                evil_packet = 1;
+              end
+              // NOTE:
+              // "The client MAY include one or more NTS Cookie Placeholder extension
+              // fields which MUST be authenticated and MAY be encrypted."
+            end
+
+            if (ntp_extension_tag_reg[j] == TAG_NTS_AUTHENTICATOR) begin
+              authenticators = authenticators  + 1;
+              nts_authenticator_start_addr_new = ntp_extension_addr_reg[j];
+              if (ntp_extension_length_reg[j] != LEN_NTS_AUTHENTICATOR ) begin
+                evil_packet = 1;
+              end
+            end
+
+          end
         end
-      NTS_S_RX_AUTH_COOKIE:
-        if (crypto_fsm_reg == CRYPTO_FSM_DONE_FAILURE) begin
-          nts_kiss_of_death_we = 1;
-          nts_kiss_of_death_new = 1;
-        end
-      NTS_S_RX_AUTH_PACKET:
-        if (crypto_fsm_reg == CRYPTO_FSM_DONE_FAILURE) begin
-          nts_kiss_of_death_we = 1;
-          nts_kiss_of_death_new = 1;
-        end
-      default: ;
-    endcase
-  end
 
-  //----------------------------------------------------------------
-  // NTS Sanity Check Logic
-  // Verifies that NTS extension exhibit basic sanity
-  // https://tools.ietf.org/html/draft-ietf-ntp-using-nts-for-ntp-20
-  //----------------------------------------------------------------
+        // 5.7 Protocol Details, Client
 
-  always @*
-  begin : nts_basic_sanity_check
-    nts_authenticator_start_addr_new = 0;
-    nts_basic_sanity_check_packet_ok_new = 0;
-    nts_cookie_start_addr_new = 0;
-    nts_unique_identifier_addr_new = 0;
-    nts_unique_identifier_length_new = 0;
-    nts_valid_placeholders_new = 0;
+        // Exactly one Unique Identifier extension field which MUST be
+        // authenticated, MUST NOT be encrypted, and whose contents MUST NOT
+        // duplicate those of any previous request.
 
-    begin : nts_basic_sanity_check_locals
-      reg   [NTP_EXTENSION_BITS:0] i;
-      reg [NTP_EXTENSION_BITS-1:0] j;
+        if ( unique_idenfifiers != 1 )
+          evil_packet = 1;
 
-      reg [NTP_EXTENSION_BITS-1:0] authenticators;
-      reg [NTP_EXTENSION_BITS-1:0] cookies;
-      reg [NTP_EXTENSION_BITS-1:0] unique_idenfifiers;
+        // 5.7 Protocol Details, Client
 
-      reg [2:0] cookie_placeholders;
+        // Exactly one NTS Cookie extension field which MUST be authenticated
+        // and MUST NOT be encrypted.  The cookie MUST be one which has been
+        // previously provided to the client; either from the key exchange
+        // server during the NTS-KE handshake or from the NTP server in
+        // response to a previous NTS-protected NTP request.
 
-      reg evil_packet;
+        if ( authenticators != 1 )
+          evil_packet = 1;
 
-      evil_packet = 0;
+        // 5.7 Protocol Details, Client
 
-      unique_idenfifiers = 0;
-      cookies = 0;
-      cookie_placeholders = 0;
-      authenticators = 0;
+        // Exactly one NTS Authenticator and Encrypted Extension Fields
+        // extension field, generated using an AEAD Algorithm and C2S key
+        // established through NTS-KE.
 
-      for (i = 0; i < NTP_EXTENSION_FIELDS; i = i + 1) begin
-        j = i[NTP_EXTENSION_BITS-1:0];
-        if (ntp_extension_copied_reg[j]) begin
+        if ( cookies != 1 )
+          evil_packet = 1;
 
-          if (ntp_extension_tag_reg[j] == TAG_NTS_UNIQUE_IDENTIFIER) begin
-            unique_idenfifiers = unique_idenfifiers + 1;
-            nts_unique_identifier_addr_new = ntp_extension_addr_reg[j];
-            nts_unique_identifier_length_new = ntp_extension_length_reg[j];
-            //5.3. The string MUST be at least 32 octets long.
-            if (ntp_extension_length_reg[j] < LEN_NTS_MIN_UNIQUE_IDENT) begin
-              evil_packet = 1;
+        // 5.7 Protocol Details, Client
+
+        // The client MAY include one or more NTS Cookie Placeholder extension
+        // fields which MUST be authenticated and MAY be encrypted.  The number
+        // of NTS Cookie Placeholder extension fields that the client includes
+        // SHOULD be such that if the client includes N placeholders and the
+        // server sends back N+1 cookies, the number of unused cookies stored by
+        // the client will come to eight.  The client SHOULD NOT include more
+        // than seven NTS Cookie Placeholder extension fields in a request.
+        // When both the client and server adhere to all cookie-management
+        // guidance provided in this memo, the number of placeholder extension
+        // fields will equal the number of dropped packets since the last
+        // successful volley.
+
+        if (cookie_placeholders > NTS_MAX_ALLOWED_PLACEHOLDERS)
+          evil_packet = 1;
+
+        //$display("%s:%0d Evil %b", `__FILE__, `__LINE__, evil_packet);
+
+        //TODO: WARNING, encrypted cookie placeholders not supported (only encrypted cookies supported)
+
+
+        // TODO!!! ADD RULE that authenticator must be last
+
+        nts_basic_sanity_check_packet_ok_new = ( ~evil_packet );
+        nts_valid_placeholders_new = cookie_placeholders;
+      end
+    end
+
+    //----------------------------------------------------------------
+    // Finite State Machine - Set Error Task
+    // Goes to NTS_S_ERROR while setting an error cause
+    //----------------------------------------------------------------
+
+    task nts_set_error_state( input [31:0] cause );
+    begin
+      nts_state_we = 1;
+      nts_state_new = NTS_S_ERROR;
+      error_cause_we = 1;
+      error_cause_new = cause;
+    end
+    endtask
+
+    //----------------------------------------------------------------
+    // NTS Finite State Machine
+    //----------------------------------------------------------------
+
+    always @*
+    begin : NTS_FSM
+      error_cause_we = 0;
+      error_cause_new = 0;
+
+      nts_state_we = 0;
+      nts_state_new = 0;
+
+      timestamp = 0;
+      respond_with_ip_udp_header = 0;
+
+      case (nts_state_reg)
+        NTS_S_IDLE:
+          if (state_reg == STATE_PROCESS_NTS) begin
+            nts_state_we = 1;
+            nts_state_new = NTS_S_LENGTH_CHECKS;
+          end
+        NTS_S_LENGTH_CHECKS:
+          begin
+            if (ipdecode_udp_length_reg < ( 8 /* UDP Header */ + 6*8 /* Minimum NTP Payload */ + 8 /* Smallest NTP extension */ ))
+              nts_set_error_state( ERROR_CAUSE_PKT_SHORT );
+            else if (ipdecode_udp_length_reg > 65507 /* IPv4 maximum UDP packet size */)
+              nts_set_error_state( ERROR_CAUSE_PKT_LONG );
+            else if (ipdecode_udp_length_reg[1:0] != 0) /* NTP packets are 7*8 + M(4+4n), always 4 byte aligned */
+              nts_set_error_state( ERROR_CAUSE_PKT_UDP_ALIGN );
+            else if (func_address_within_memory_bounds (ipdecode_offset_ntp_ext_reg, 4) == 'b0)
+              nts_set_error_state( ERROR_CAUSE_NTP_OUT_OF_MEM );
+            else begin
+              nts_state_we = 'b1;
+              nts_state_new = NTS_S_EXTRACT_EXT_FROM_RAM;
             end
           end
-
-          if (ntp_extension_tag_reg[j] == TAG_NTS_COOKIE) begin
-            cookies = cookies + 1;
-            nts_cookie_start_addr_new = ntp_extension_addr_reg[j];
-            if (ntp_extension_length_reg[j] != LEN_NTS_COOKIE ) begin
-              evil_packet = 1;
+        NTS_S_EXTRACT_EXT_FROM_RAM:
+          if (ntp_extension_copied_reg[ntp_extension_counter_reg] == 'b1) begin
+            if (ntp_extension_length_reg[ntp_extension_counter_reg] < (4 + NTP_EXTENSION_MINIMUM_LENGTH)) begin
+              //rfc7822 "While the minimum field length containing required fields is four words (16 octets)"
+              // - interpret this as value+padding (field length) must be larger than 16
+              // - actual Length must be largerthan 20, 16 + 2 (Field Type) + 2 (Length).
+              nts_set_error_state( ERROR_CAUSE_NTP_EXT_SHORT );
+            end else if ((ntp_extension_length_reg[ntp_extension_counter_reg] & 16'h3) != 16'h0) begin
+              //rfc7822 All extension fields are zero-padded to a word (four octets) boundary
+              nts_set_error_state( ERROR_CAUSE_NTP_EXT_ODD );
+            end else if (memory_address_failure_reg == 'b1) begin
+              nts_set_error_state( ERROR_CAUSE_NTP_MEM_FAILURE );
+            end else if (memory_address_lastbyte_read_reg == 1'b1) begin
+              nts_state_we  = 'b1;
+              nts_state_new = NTS_S_EXTENSIONS_EXTRACTED;
+            end else if (ntp_extension_counter_reg==NTP_EXTENSION_FIELDS-1) begin
+              nts_set_error_state( ERROR_CAUSE_NTP_EXT_MANY );
             end
           end
-
-          if (ntp_extension_tag_reg[j] == TAG_NTS_COOKIE_PLACEHOLDER) begin
-            if (cookie_placeholders < 7) begin
-              cookie_placeholders = cookie_placeholders + 1;
+        NTS_S_EXTENSIONS_EXTRACTED:
+          if (nts_basic_sanity_check_packet_ok_reg) begin
+            nts_state_we  = 'b1;
+            nts_state_new = NTS_S_EXTRACT_COOKIE_FROM_RAM;
+          end else begin
+            nts_set_error_state( ERROR_CAUSE_NTP_EXT_INSANE );
+          end
+        NTS_S_EXTRACT_COOKIE_FROM_RAM:
+          if (i_access_port_rd_dv) begin
+            nts_state_we  = 'b1;
+            nts_state_new = NTS_S_VERIFY_KEY_FROM_COOKIE1;
+          end
+        NTS_S_VERIFY_KEY_FROM_COOKIE1:
+          begin
+            if (i_keymem_ready) begin
+              nts_state_we  = 'b1;
+              nts_state_new = NTS_S_VERIFY_KEY_FROM_COOKIE2;
             end else begin
-              evil_packet = 1; //5.7 The client SHOULD NOT include more than seven
-                               //    NTS Cookie Placeholder extension fields in a request.
-            end
-            //5.5. The body length of the NTS Cookie Placeholder extension field MUST be
-            //     the same as the body length of the NTS Cookie extension field.
-            // => Approximation: same length rules
-            if (ntp_extension_length_reg[j] != LEN_NTS_COOKIE ) begin
-              evil_packet = 1;
-            end
-            // NOTE:
-            // "The client MAY include one or more NTS Cookie Placeholder extension
-            // fields which MUST be authenticated and MAY be encrypted."
-          end
-
-          if (ntp_extension_tag_reg[j] == TAG_NTS_AUTHENTICATOR) begin
-            authenticators = authenticators  + 1;
-            nts_authenticator_start_addr_new = ntp_extension_addr_reg[j];
-            if (ntp_extension_length_reg[j] != LEN_NTS_AUTHENTICATOR ) begin
-              evil_packet = 1;
+              nts_set_error_state( ERROR_CAUSE_KEYMEM_BUSY );
             end
           end
+        NTS_S_VERIFY_KEY_FROM_COOKIE2:
+          if (i_keymem_ready && keymem_get_key_with_id_reg == 'b0 ) begin
+            if (i_keymem_key_valid == 'b0) begin
+            //set_error_state( ERROR_CAUSE_KEY_COOKIE_FAIL );
+              nts_state_we  = 'b1;
+              nts_state_new = NTS_S_WRITE_HEADER_IPV4_IPV6; //Kiss-o'-Death
+            end else if (keymem_key_word_reg == 'b111) begin
+              nts_state_we  = 'b1;
+              nts_state_new = NTS_S_RX_AUTH_COOKIE;
+            end
+          end
+        NTS_S_RX_AUTH_COOKIE:
+          case (crypto_fsm_reg)
+            CRYPTO_FSM_DONE_SUCCESS:
+              begin
+                nts_state_we  = 'b1;
+                nts_state_new = NTS_S_RX_AUTH_PACKET;
+              end
+            CRYPTO_FSM_DONE_FAILURE:
+              begin
+                nts_state_we  = 'b1;
+                nts_state_new = NTS_S_WRITE_HEADER_IPV4_IPV6; //Kiss-o'-Death
+              end
+            default: ;
+          endcase
+        NTS_S_RX_AUTH_PACKET:
+          case (crypto_fsm_reg)
+            CRYPTO_FSM_DONE_SUCCESS:
+              begin
+                nts_state_we  = 'b1;
+                nts_state_new = NTS_S_WRITE_HEADER_IPV4_IPV6;
+              end
+            CRYPTO_FSM_DONE_FAILURE:
+              begin
+                nts_state_we  = 'b1;
+                nts_state_new = NTS_S_WRITE_HEADER_IPV4_IPV6; //Kiss-o'-Death
+              end
+            default: ;
+          endcase
+        NTS_S_WRITE_HEADER_IPV4_IPV6:
+          begin
+            respond_with_ip_udp_header = 1;
+            if (detect_ipv4_reg) begin
+              if (tx_header_ipv4_index_reg == 0) begin
+                nts_state_we  = 'b1;
+                nts_state_new = NTS_S_TIMESTAMP;
+              end
+            end else if (detect_ipv6_reg) begin
+              if (tx_header_ipv6_index_reg == 0) begin
+                nts_state_we  = 'b1;
+                nts_state_new = NTS_S_TIMESTAMP;
+              end
+            end else begin
+              nts_set_error_state( ERROR_CAUSE_IPV_CONFUSED );
+            end
+          end
+        NTS_S_TIMESTAMP:
+          begin
+            nts_state_we  = 'b1;
+            nts_state_new = NTS_S_TIMESTAMP_WAIT;
+            timestamp = 1;
+          end
+        NTS_S_TIMESTAMP_WAIT:
+          if (i_timestamp_busy) begin
+            timestamp = 1;
+          end else begin
+            if (nts_kiss_of_death_reg) begin
+              nts_state_we  = 'b1;
+              nts_state_new = NTS_S_TX_UPDATE_LENGTH; //Kiss-o'-Death
+            end else begin
+              nts_state_we  = 'b1;
+              nts_state_new = NTS_S_UNIQUE_IDENTIFIER_COPY_0;
+            end
+          end
+        NTS_S_UNIQUE_IDENTIFIER_COPY_0:
+          begin
+            nts_state_we  = 'b1;
+            nts_state_new = NTS_S_UNIQUE_IDENTIFIER_COPY_1;
+          end
+        NTS_S_UNIQUE_IDENTIFIER_COPY_1:
+          if (copy_done) begin
+            nts_state_we  = 'b1;
+            nts_state_new = NTS_S_RETRIVE_CURRENT_KEY_0;
+          end
+        NTS_S_RETRIVE_CURRENT_KEY_0:
+          begin
+            nts_state_we  = 'b1;
+            nts_state_new = NTS_S_RETRIVE_CURRENT_KEY_1;
+          end
+        NTS_S_RETRIVE_CURRENT_KEY_1:
+          if (i_keymem_ready && keymem_get_current_key_reg == 'b0 ) begin
+            if (i_keymem_key_valid == 'b0) begin
+              nts_set_error_state ( ERROR_CAUSE_KEY_CURRENT_FAIL );
+            end else if (keymem_key_word_reg == 'b111) begin
+              nts_state_we  = 'b1;
+              nts_state_new = NTS_S_RESET_EXTRA_COOKIES;
+            end
+          end
+        NTS_S_RESET_EXTRA_COOKIES:
+          if (crypto_fsm_reg == CRYPTO_FSM_DONE_SUCCESS) begin
+            nts_state_we  = 'b1;
+            nts_state_new = NTS_S_ADDITIONAL_COOKIES_CTRL;
+          end
+        NTS_S_ADDITIONAL_COOKIES_CTRL:
+          if (cookies_count_reg < cookies_to_emit) begin // for(i=0; i < nts_valid_placeholders+1; i++) {
+                                                         //   generateCookie();
+                                                         //   storeCookie();
+                                                         // }
+            nts_state_we  = 'b1;
+            nts_state_new = NTS_S_GENERATE_EXTRA_COOKIE;
+          end else begin
+            nts_state_we  = 'b1;
+            nts_state_new = NTS_S_COPY_PACKET_TO_CRYPTO_AD;
+          end
+        NTS_S_GENERATE_EXTRA_COOKIE:
+          if (crypto_fsm_reg == CRYPTO_FSM_DONE_SUCCESS) begin
+            nts_state_we  = 'b1;
+            nts_state_new = NTS_S_RECORD_EXTRA_COOKIE;
+          end
+        NTS_S_RECORD_EXTRA_COOKIE:
+          if (crypto_fsm_reg == CRYPTO_FSM_DONE_SUCCESS) begin
+            nts_state_we  = 'b1;
+            nts_state_new = NTS_S_ADDITIONAL_COOKIES_CTRL; //jump back, while(
+          end
+        NTS_S_COPY_PACKET_TO_CRYPTO_AD:
+          if (crypto_fsm_reg == CRYPTO_FSM_DONE_SUCCESS) begin
+            nts_state_we  = 'b1;
+            nts_state_new = NTS_S_TX_AUTH_PACKET;
+          end
+        NTS_S_TX_AUTH_PACKET:
+          if (crypto_fsm_reg == CRYPTO_FSM_DONE_SUCCESS) begin
+            nts_state_we  = 'b1;
+            nts_state_new = NTS_S_TX_EMIT_TL_NL_CL;
+          end
+        NTS_S_TX_EMIT_TL_NL_CL:
+          begin
+            nts_state_we  = 'b1;
+            nts_state_new = NTS_S_TX_EMIT_NONCE_CIPHERTEXT;
+          end
+        NTS_S_TX_EMIT_NONCE_CIPHERTEXT:
+          if (crypto_fsm_reg == CRYPTO_FSM_DONE_SUCCESS) begin
+            nts_state_we  = 'b1;
+            nts_state_new = NTS_S_TX_UPDATE_LENGTH;
+          end
+        NTS_S_TX_UPDATE_LENGTH:
+          begin
+            nts_state_we  = 'b1;
+            nts_state_new = NTS_S_TX_WRITE_UDP_LENGTH;
+          end
+        NTS_S_TX_WRITE_UDP_LENGTH:
+          begin
+            nts_state_we  = 'b1;
+            nts_state_new = NTS_S_TX_WRITE_UDP_LENGTH_D;
+          end
+        NTS_S_TX_WRITE_UDP_LENGTH_D:
+          if (i_tx_busy == 0) begin
+            nts_state_we  = 'b1;
+            nts_state_new = NTS_S_UDP_CHECKSUM_RESET;
+          end
+        NTS_S_UDP_CHECKSUM_RESET:
+          begin
+            nts_state_we  = 'b1;
+            nts_state_new = NTS_S_UDP_CHECKSUM_PS_SRCADDR;
+          end
+        NTS_S_UDP_CHECKSUM_PS_SRCADDR:
+          begin
+            nts_state_we  = 'b1;
+            nts_state_new = NTS_S_UDP_CHECKSUM_PS_UDPLLEN;
+          end
+        NTS_S_UDP_CHECKSUM_PS_UDPLLEN:
+          if (i_tx_sum_done) begin
+            nts_state_we  = 'b1;
+            nts_state_new = NTS_S_UDP_CHECKSUM_DATAGRAM;
+          end
+        NTS_S_UDP_CHECKSUM_DATAGRAM:
+          if (i_tx_sum_done) begin
+            nts_state_we  = 'b1;
+            nts_state_new = NTS_S_UDP_CHECKSUM_WAIT;
+          end
+        NTS_S_UDP_CHECKSUM_WAIT:
+          if (i_tx_sum_done) begin
+            nts_state_we  = 'b1;
+            nts_state_new = NTS_S_WRITE_NEW_UDP_CSUM;
+          end
+        NTS_S_WRITE_NEW_UDP_CSUM:
+          begin
+            nts_state_we  = 'b1;
+            nts_state_new = NTS_S_WRITE_NEW_UDP_CSUM_DELAY;
+          end
+        NTS_S_WRITE_NEW_UDP_CSUM_DELAY:
+          //TXBUF memory controller require wait cycles delay
+          // between different unaligned burst writes.
+          if (i_tx_busy == 'b0) begin
+            nts_state_we  = 'b1;
+            nts_state_new = NTS_S_WRITE_NEW_IP_HEADER_0;
+          end
+        NTS_S_WRITE_NEW_IP_HEADER_0:
+          begin
+            nts_state_we  = 'b1;
+            nts_state_new = NTS_S_WRITE_NEW_IP_HEADER_1;
+          end
+        NTS_S_WRITE_NEW_IP_HEADER_1:
+          begin
+            nts_state_we  = 'b1;
+            nts_state_new = NTS_S_WRITE_NEW_IP_HEADR_DELAY;
+          end
+        NTS_S_WRITE_NEW_IP_HEADR_DELAY:
+          //TXBUF memory controller require wait cycles delay
+          //between different unaligned burst writes.
+          if (i_tx_busy == 'b0) begin
+            nts_state_we  = 'b1;
+            nts_state_new = NTS_S_TRANSMIT_PACKET;
+          end
+        NTS_S_ERROR:
+          begin
+            nts_state_we = 1;
+            nts_state_new = NTS_S_IDLE;
+          end
+        NTS_S_TRANSMIT_PACKET:
+          begin
+            nts_state_we = 1;
+            nts_state_new = NTS_S_IDLE;
+          end
+        default:
+          begin
+            nts_set_error_state( ERROR_CAUSE_UNKNOWN_STATE );
+          end
+      endcase
+    end
 
-        end
+    //----------------------------------------------------------------
+    // Finite State Machine (Crypto)
+    // Controlls communication with crypto engine
+    //----------------------------------------------------------------
+
+    always @*
+    begin : CRYPTO_FSM
+      crypto_fsm_we = 0;
+      crypto_fsm_new = CRYPTO_FSM_IDLE;
+
+      crypto_cookieprefix = 0;
+
+      crypto_op_cookie_loadkeys = 0;
+      crypto_op_cookie_rencrypt = 0;
+      crypto_op_cookie_verify = 0;
+      crypto_op_cookiebuf_append = 0;
+      crypto_op_cookiebuf_reset = 0;
+      crypto_op_c2s_verify_auth = 0;
+      crypto_op_s2c_generate_auth = 0;
+
+      crypto_rx_addr = 0;
+      crypto_rx_bytes = 0;
+      crypto_rx_op_copy_ad = 0;
+      crypto_rx_op_copy_nonce = 0;
+      crypto_rx_op_copy_pc = 0;
+      crypto_rx_op_copy_tag = 0;
+
+      crypto_tx_addr = 0;
+      crypto_tx_bytes = 0;
+      crypto_tx_op_copy_ad = 0;
+      crypto_tx_op_store_cookie = 0;
+      crypto_tx_op_store_cookiebuf = 0;
+      crypto_tx_op_store_nonce_tag = 0;
+
+      if (crypto_fsm_reg == CRYPTO_FSM_IDLE)
+        muxctrl_crypto = 0;
+      else
+        muxctrl_crypto = 1;
+
+      case (crypto_fsm_reg)
+        CRYPTO_FSM_IDLE:
+          case (nts_state_reg)
+            NTS_S_RX_AUTH_COOKIE:
+              begin
+                crypto_fsm_we  = 1;
+                crypto_fsm_new = CRYPTO_FSM_RX_AUTH_COOKIE;
+              end
+            NTS_S_RX_AUTH_PACKET:
+              begin
+                crypto_fsm_we  = 1;
+                crypto_fsm_new = CRYPTO_FSM_RX_AUTH_PACKET;
+              end
+            NTS_S_RESET_EXTRA_COOKIES:
+              begin
+                crypto_fsm_we  = 1;
+                crypto_fsm_new = CRYPTO_FSM_COOKIEBUF_RESET;
+              end
+            NTS_S_GENERATE_EXTRA_COOKIE:
+              begin
+                crypto_fsm_we  = 1;
+                crypto_fsm_new = CRYPTO_FSM_GEN_COOKIE;
+              end
+            NTS_S_RECORD_EXTRA_COOKIE:
+              begin
+                crypto_fsm_we  = 1;
+                crypto_fsm_new = CRYPTO_FSM_COOKIEBUF_APPEND;
+              end
+            NTS_S_COPY_PACKET_TO_CRYPTO_AD:
+              begin
+                crypto_fsm_we  = 1;
+                crypto_fsm_new = CRYPTO_FSM_COPY_TX_TO_AD;
+              end
+            NTS_S_TX_AUTH_PACKET:
+              begin
+                crypto_fsm_we  = 1;
+                crypto_fsm_new = CRYPTO_FSM_TX_AUTH_PACKET;
+              end
+            NTS_S_TX_EMIT_TL_NL_CL: ; // No-operation. Performed by other parser logic.
+            NTS_S_TX_EMIT_NONCE_CIPHERTEXT:
+              begin
+                crypto_fsm_we  = 1;
+                crypto_fsm_new = CRYPTO_FSM_STORE_TAG_NONCE;
+              end
+            default: ;
+          endcase
+        CRYPTO_FSM_WAIT_THEN_SUCCESS:
+          if (i_crypto_busy == 1'b0) begin
+            crypto_fsm_we  = 1;
+            crypto_fsm_new = CRYPTO_FSM_DONE_SUCCESS;
+          end
+        CRYPTO_FSM_RX_AUTH_COOKIE:
+          if (i_crypto_busy == 1'b0) begin
+            crypto_fsm_we  = 1;
+            crypto_fsm_new = CRYPTO_FSM_RX_AUTH_COOKIE_W1;
+            crypto_rx_op_copy_nonce = 1;
+            crypto_rx_addr = nts_cookie_start_addr_reg + OFFSET_COOKIE_NONCE;
+            crypto_rx_bytes = BYTES_COOKIE_NONCE;
+          end
+        CRYPTO_FSM_RX_AUTH_COOKIE_W1:
+          if (i_crypto_busy == 1'b0) begin
+            crypto_fsm_we  = 1;
+            crypto_fsm_new = CRYPTO_FSM_RX_AUTH_COOKIE_W2;
+            crypto_rx_op_copy_tag = 1;
+            crypto_rx_addr = nts_cookie_start_addr_reg + OFFSET_COOKIE_TAG;
+            crypto_rx_bytes = BYTES_COOKIE_TAG;
+          end
+        CRYPTO_FSM_RX_AUTH_COOKIE_W2:
+          if (i_crypto_busy == 1'b0) begin
+            crypto_fsm_we  = 1;
+            crypto_fsm_new = CRYPTO_FSM_RX_AUTH_COOKIE_W3;
+            crypto_rx_op_copy_pc = 1;
+            crypto_rx_addr = nts_cookie_start_addr_reg + OFFSET_COOKIE_CIPHERTEXT;
+            crypto_rx_bytes = BYTES_COOKIE_CIPHERTEXT;
+          end
+        CRYPTO_FSM_RX_AUTH_COOKIE_W3:
+          if (i_crypto_busy == 1'b0) begin
+            crypto_fsm_we  = 1;
+            crypto_fsm_new = CRYPTO_FSM_RX_AUTH_COOKIE_W4;
+            crypto_op_cookie_verify = 1;
+          end
+        CRYPTO_FSM_RX_AUTH_COOKIE_W4:
+          if (i_crypto_busy == 1'b0) begin
+            if (i_crypto_verify_tag_ok) begin
+              crypto_fsm_we = 1;
+              crypto_fsm_new = CRYPTO_FSM_DONE_SUCCESS;
+            end else begin
+              crypto_fsm_we = 1;
+              crypto_fsm_new = CRYPTO_FSM_DONE_FAILURE;
+            end
+          end
+        CRYPTO_FSM_RX_AUTH_PACKET:
+          if (i_crypto_busy == 1'b0) begin
+            crypto_fsm_we = 1;
+            crypto_fsm_new = CRYPTO_FSM_RX_AUTH_PACKET_W1;
+            crypto_op_cookie_loadkeys = 1; //Copy C2S, S2C
+          end
+        CRYPTO_FSM_RX_AUTH_PACKET_W1:
+          if (i_crypto_busy == 1'b0) begin
+            crypto_fsm_we = 1;
+            crypto_fsm_new = CRYPTO_FSM_RX_AUTH_PACKET_W2;
+            crypto_rx_op_copy_ad = 1;
+            if (detect_ipv4_reg) begin
+              crypto_rx_addr = ADDR_IPV4_START_NTP; //6*8 + 2 ?
+              crypto_rx_bytes = nts_authenticator_start_addr_reg - ADDR_IPV4_START_NTP;
+            end
+            else if (detect_ipv6_reg) begin
+              crypto_rx_addr = ADDR_IPV6_START_NTP; //8*8 + 6 ?
+              crypto_rx_bytes = nts_authenticator_start_addr_reg - ADDR_IPV6_START_NTP;
+            end
+          end
+        CRYPTO_FSM_RX_AUTH_PACKET_W2:
+          if (i_crypto_busy == 1'b0) begin
+            crypto_fsm_we = 1;
+            crypto_fsm_new = CRYPTO_FSM_RX_AUTH_PACKET_W3;
+            crypto_rx_op_copy_nonce = 1;
+            crypto_rx_addr = nts_authenticator_start_addr_reg + OFFSET_AUTH_NONCE;
+            crypto_rx_bytes = BYTES_AUTH_NONCE;
+          end
+        CRYPTO_FSM_RX_AUTH_PACKET_W3:
+          if (i_crypto_busy == 1'b0) begin
+            crypto_fsm_we = 1;
+            crypto_fsm_new = CRYPTO_FSM_RX_AUTH_PACKET_W4;
+            crypto_rx_op_copy_tag = 1;
+            crypto_rx_addr = nts_authenticator_start_addr_reg + OFFSET_AUTH_TAG;
+            crypto_rx_bytes = BYTES_AUTH_TAG;
+          end
+        CRYPTO_FSM_RX_AUTH_PACKET_W4:
+          //TODO add support for ciphertext in NTS Authenticator and Encrypted Extension
+          if (i_crypto_busy == 1'b0) begin
+            crypto_fsm_we = 1;
+            crypto_fsm_new = CRYPTO_FSM_RX_AUTH_PACKET_W5;
+            //crypto_rx_op_copy_pc = 1;
+            //crypto_rx_addr = nts_authenticator_start_addr_reg + OFFSET_AUTH_PC;
+            //crypto_rx_bytes = ...;
+          end
+        CRYPTO_FSM_RX_AUTH_PACKET_W5:
+          //if (i_crypto_busy == 1'b0) begin //TODO wait for crypto to complete ciphertext loading
+          begin
+            crypto_fsm_we = 1;
+            crypto_fsm_new = CRYPTO_FSM_RX_AUTH_PACKET_W6;
+            crypto_op_c2s_verify_auth = 1;
+          end
+        CRYPTO_FSM_RX_AUTH_PACKET_W6:
+          if (i_crypto_busy == 1'b0) begin
+            if (i_crypto_verify_tag_ok) begin
+              crypto_fsm_we = 1;
+              crypto_fsm_new = CRYPTO_FSM_DONE_SUCCESS;
+            end else begin
+              crypto_fsm_we = 1;
+              crypto_fsm_new = CRYPTO_FSM_DONE_FAILURE;
+            end
+          end
+        CRYPTO_FSM_GEN_COOKIE:
+          if (i_crypto_busy == 1'b0) begin
+            crypto_op_cookie_rencrypt = 1;
+            crypto_fsm_we = 1;
+            crypto_fsm_new = CRYPTO_FSM_WAIT_THEN_SUCCESS;
+          end
+        CRYPTO_FSM_EMIT_FIRST_COOKIE:
+          if (i_crypto_busy == 1'b0) begin
+            crypto_tx_addr = copy_tx_addr_reg;
+            crypto_tx_bytes = 'h68; //TODO declare constant?
+            crypto_tx_op_store_cookie = 1;
+            crypto_fsm_we  = 1;
+            crypto_fsm_new = CRYPTO_FSM_WAIT_THEN_SUCCESS;
+          end
+        CRYPTO_FSM_COOKIEBUF_RESET:
+          if (i_crypto_busy == 1'b0) begin
+            crypto_fsm_we  = 1;
+            crypto_fsm_new = CRYPTO_FSM_WAIT_THEN_SUCCESS;
+            crypto_op_cookiebuf_reset = 1;
+          end
+        CRYPTO_FSM_COOKIEBUF_APPEND:
+          if (i_crypto_busy == 1'b0) begin
+            crypto_fsm_we  = 1;
+            crypto_fsm_new = CRYPTO_FSM_WAIT_THEN_SUCCESS;
+            crypto_cookieprefix = { TAG_NTS_COOKIE, LEN_NTS_COOKIE, keymem_key_id_reg };
+            crypto_op_cookiebuf_append = 1;
+          end
+        CRYPTO_FSM_COPY_TX_TO_AD:
+          if (i_crypto_busy == 1'b0) begin : crypto_fsm_copy_tx_to_ad
+            reg [ADDR_WIDTH+3-1:0] ntp_start;
+            ntp_start = (detect_ipv4_reg) ? ADDR_IPV4_START_NTP : ADDR_IPV6_START_NTP;
+
+            crypto_fsm_we  = 1;
+            crypto_fsm_new = CRYPTO_FSM_WAIT_THEN_SUCCESS;
+            crypto_tx_op_copy_ad = 1;
+            crypto_tx_addr = ntp_start;
+            //crypto_tx_addr = 0;
+            crypto_tx_bytes = copy_tx_addr_reg - ntp_start;
+          end
+        CRYPTO_FSM_TX_AUTH_PACKET:
+          begin
+            crypto_fsm_we  = 1;
+            crypto_fsm_new = CRYPTO_FSM_WAIT_THEN_SUCCESS;
+            crypto_op_s2c_generate_auth = 1;
+          end
+        CRYPTO_FSM_STORE_TAG_NONCE:
+          begin
+            crypto_fsm_we  = 1;
+            crypto_fsm_new = CRYPTO_FSM_STORE_COOKIEBUF;
+            crypto_tx_op_store_nonce_tag = 1;
+            crypto_tx_addr = copy_tx_addr_reg;
+            crypto_tx_bytes = BYTES_AUTH_NONCE + tx_ciphertext_length_reg[ADDR_WIDTH+3-1:0];
+            //$display("%s:%0d **** TX addr: %h tx_bytes: %h", `__FILE__, `__LINE__, crypto_tx_addr, crypto_tx_bytes);
+          end
+        CRYPTO_FSM_STORE_COOKIEBUF:
+          if (i_crypto_busy == 1'b0) begin
+            crypto_fsm_we  = 1;
+            crypto_fsm_new = CRYPTO_FSM_WAIT_THEN_SUCCESS;
+            crypto_tx_op_store_cookiebuf = 1;
+            crypto_tx_addr = copy_tx_addr_reg + BYTES_AUTH_NONCE + BYTES_AUTH_TAG;;
+            crypto_tx_bytes = tx_ciphertext_length_reg[ADDR_WIDTH+3-1:0]; //unsused by crypto for now, but clearer if stated
+          end
+        CRYPTO_FSM_DONE_SUCCESS:
+          begin
+            crypto_fsm_we  = 1;
+            crypto_fsm_new = CRYPTO_FSM_IDLE;
+          end
+        CRYPTO_FSM_DONE_FAILURE:
+          begin
+            crypto_fsm_we  = 1;
+            crypto_fsm_new = CRYPTO_FSM_IDLE;
+          end
+        default:
+          begin
+            crypto_fsm_we = 1;
+            crypto_fsm_new = CRYPTO_FSM_DONE_FAILURE;
+          end
+      endcase
+    end
+
+    //----------------------------------------------------------------
+    // Memory Address calculator
+    // Updates memory address reg.
+    //   Initilize to NTP Extension start calulcated by IP decode.
+    //   Increments by NTP Extension length
+    //   Until all bytes consumed.
+    //----------------------------------------------------------------
+
+    always @*
+    begin : memory_address_calculator
+      memory_address_we    = 'b0;
+      memory_address_new   = 'b0;
+
+      if (nts_state_reg == NTS_S_LENGTH_CHECKS) begin
+        memory_address_we  = 'b1;
+        memory_address_new = ipdecode_offset_ntp_ext_reg;
       end
 
-      // 5.7 Protocol Details, Client
+      if (nts_state_reg == NTS_S_EXTRACT_EXT_FROM_RAM) begin
+        task_incremment_address_for_nts_extension(
+             memory_address_reg, ntp_extension_length_reg[ntp_extension_counter_reg], /* IN */
+             memory_address_next_reg, memory_address_failure_reg, memory_address_lastbyte_read_reg /*OUT*/);
 
-      // Exactly one Unique Identifier extension field which MUST be
-      // authenticated, MUST NOT be encrypted, and whose contents MUST NOT
-      // duplicate those of any previous request.
+        if (ntp_extension_copied_reg[ntp_extension_counter_reg] && memory_address_failure_reg == 'b0 && memory_address_lastbyte_read_reg == 'b0 && ntp_extension_counter_reg!=NTP_EXTENSION_FIELDS-1) begin
+          memory_address_we  = 'b1;
+          memory_address_new = memory_address_next_reg;
+        end
 
-      if ( unique_idenfifiers != 1 )
-        evil_packet = 1;
-
-      // 5.7 Protocol Details, Client
-
-      // Exactly one NTS Cookie extension field which MUST be authenticated
-      // and MUST NOT be encrypted.  The cookie MUST be one which has been
-      // previously provided to the client; either from the key exchange
-      // server during the NTS-KE handshake or from the NTP server in
-      // response to a previous NTS-protected NTP request.
-
-      if ( authenticators != 1 )
-        evil_packet = 1;
-
-      // 5.7 Protocol Details, Client
-
-      // Exactly one NTS Authenticator and Encrypted Extension Fields
-      // extension field, generated using an AEAD Algorithm and C2S key
-      // established through NTS-KE.
-
-      if ( cookies != 1 )
-        evil_packet = 1;
-
-      // 5.7 Protocol Details, Client
-
-      // The client MAY include one or more NTS Cookie Placeholder extension
-      // fields which MUST be authenticated and MAY be encrypted.  The number
-      // of NTS Cookie Placeholder extension fields that the client includes
-      // SHOULD be such that if the client includes N placeholders and the
-      // server sends back N+1 cookies, the number of unused cookies stored by
-      // the client will come to eight.  The client SHOULD NOT include more
-      // than seven NTS Cookie Placeholder extension fields in a request.
-      // When both the client and server adhere to all cookie-management
-      // guidance provided in this memo, the number of placeholder extension
-      // fields will equal the number of dropped packets since the last
-      // successful volley.
-
-      if (cookie_placeholders > NTS_MAX_ALLOWED_PLACEHOLDERS)
-        evil_packet = 1;
-
-      //$display("%s:%0d Evil %b", `__FILE__, `__LINE__, evil_packet);
-
-      //TODO: WARNING, encrypted cookie placeholders not supported (only encrypted cookies supported)
-
-
-      // TODO!!! ADD RULE that authenticator must be last
-
-      nts_basic_sanity_check_packet_ok_new = ( ~evil_packet );
-      nts_valid_placeholders_new = cookie_placeholders;
+      end else begin
+        memory_address_we  = 'b1;
+        memory_address_next_reg = 0;
+        memory_address_failure_reg = 1;
+        memory_address_lastbyte_read_reg = 1;
+      end
     end
-  end
 
+    //----------------------------------------------------------------
+    // NTP Extension field control
+    //   Writes to NTP Extension fields upon i_access_port receving
+    //   values from Rx Buffer.
+    //----------------------------------------------------------------
 
-  //----------------------------------------------------------------
-  // NTP Extension field control
-  // Writes to NTP Extension fields upon i_access_port receving
-  // values from Rx Buffer.
-  //----------------------------------------------------------------
+    always @*
+    begin : ntp_extension_field_control
 
-  always @*
-  begin : ntp_extension_field_control
+      ntp_extension_we           = 'b0;
+      ntp_extension_reset        = 'b0;
+      ntp_extension_addr_new     = 'b0;
+      ntp_extension_copied_new   = 'b0;
+      ntp_extension_length_new   = 'b0;
+      ntp_extension_tag_new      = 'b0;
 
-    ntp_extension_we           = 'b0;
-    ntp_extension_reset        = 'b0;
-    ntp_extension_addr_new     = 'b0;
-    ntp_extension_copied_new   = 'b0;
-    ntp_extension_length_new   = 'b0;
-    ntp_extension_tag_new      = 'b0;
+      if (i_clear || nts_state_reg == NTS_S_IDLE)
+        ntp_extension_reset      = 'b1;
 
-    if (i_clear || nts_state_reg == NTS_S_IDLE)
-      ntp_extension_reset      = 'b1;
-
-    if (nts_state_reg == NTS_S_EXTRACT_EXT_FROM_RAM && ntp_extension_copied_reg[ntp_extension_counter_reg] == 'b0 && i_access_port_rd_dv) begin
-      ntp_extension_we         = 'b1;
-      ntp_extension_addr_new   = memory_address_reg;
-      ntp_extension_copied_new = 'b1;
-      ntp_extension_length_new = i_access_port_rd_data[15:0];
-      ntp_extension_tag_new    = i_access_port_rd_data[31:16];
+      if (nts_state_reg == NTS_S_EXTRACT_EXT_FROM_RAM && ntp_extension_copied_reg[ntp_extension_counter_reg] == 'b0 && i_access_port_rd_dv) begin
+        ntp_extension_we         = 'b1;
+        ntp_extension_addr_new   = memory_address_reg;
+        ntp_extension_copied_new = 'b1;
+        ntp_extension_length_new = i_access_port_rd_data[15:0];
+        ntp_extension_tag_new    = i_access_port_rd_data[31:16];
+      end
     end
-  end
 
+    //----------------------------------------------------------------
+    // NTP Extension counter control
+    // Increments 0, 1, ..., NTP_EXTENSION_FIELDS-1
+    //   for each NTP Extension read
+    //----------------------------------------------------------------
+
+    always @*
+    begin : ntp_extension_counter_control
+      ntp_extension_counter_we  = 'b0;
+      ntp_extension_counter_new = 'b0;
+      case (nts_state_reg)
+        NTS_S_IDLE:
+          if (i_process_initial) begin
+            ntp_extension_counter_we  = 'b1;
+            ntp_extension_counter_new = 'b0;
+          end
+        NTS_S_EXTRACT_EXT_FROM_RAM:
+          if (ntp_extension_copied_reg[ntp_extension_counter_reg] && memory_address_failure_reg == 'b0 && memory_address_lastbyte_read_reg == 'b0 && ntp_extension_counter_reg!=NTP_EXTENSION_FIELDS-1) begin
+            ntp_extension_counter_we  = 'b1;
+            ntp_extension_counter_new = ntp_extension_counter_reg + 1;
+          end
+        default: ;
+      endcase
+    end
+
+    always @ (posedge i_clk, posedge i_areset)
+    begin : nts_ru
+      if (i_areset == 1'b1) begin
+        crypto_fsm_reg <= CRYPTO_FSM_IDLE;
+
+        cookie_server_id_reg <= 'b0;
+        cookies_count_reg    <= 0;
+
+        detect_nts_cookie_index_reg <= 0;
+
+        error_cause_reg <= 'b0;
+
+        keymem_get_current_key_reg <= 'b0;
+        keymem_get_key_with_id_reg <= 'b0;
+        keymem_key_id_reg          <= 'b0;
+        keymem_key_word_reg        <= 'b0;
+        keymem_server_id_reg       <= 'b0;
+
+        memory_address_reg  <= 'b0;
+
+        ntp_extension_counter_reg            <= 'b0;
+        nts_authenticator_start_addr_reg     <= 'b0;
+        nts_basic_sanity_check_packet_ok_reg <= 'b0;
+        nts_cookie_start_addr_reg            <= 'b0;
+        nts_kiss_of_death_reg                <= 'b0;
+        nts_unique_identifier_addr_reg       <= 'b0;
+        nts_unique_identifier_length_reg     <= 'b0;
+        nts_valid_placeholders_reg           <= 'b0;
+
+        begin : ntp_extension_reset_async
+          integer i;
+          for (i=0; i <= NTP_EXTENSION_FIELDS-1; i=i+1) begin
+            ntp_extension_copied_reg [i] <= 'b0;
+            ntp_extension_addr_reg   [i] <= 'b0;
+            ntp_extension_tag_reg    [i] <= 'b0;
+            ntp_extension_length_reg [i] <= 'b0;
+          end
+        end
+
+        nts_state_reg <= 'b0;
+
+        tx_authenticator_length_reg <= 0;
+        tx_ciphertext_length_reg <= 0;
+
+
+      end else begin
+        if (crypto_fsm_we)
+          crypto_fsm_reg <= crypto_fsm_new;
+
+        if (cookie_server_id_we)
+          cookie_server_id_reg <= cookie_server_id_new;
+
+        if (cookies_count_we)
+          cookies_count_reg <= cookies_count_new;
+
+        detect_nts_cookie_index_reg <= detect_nts_cookie_index_new;
+
+        if (error_cause_we)
+          error_cause_reg <= error_cause_new;
+
+        keymem_get_current_key_reg <= keymem_get_current_key_new;
+
+        keymem_get_key_with_id_reg <= keymem_get_key_with_id_new;
+
+        if (keymem_key_id_we)
+          keymem_key_id_reg <= keymem_key_id_new;
+
+        if (keymem_key_word_we)
+          keymem_key_word_reg <= keymem_key_word_new;
+
+        if (keymem_server_id_we)
+          keymem_server_id_reg <= keymem_server_id_new;
+
+        if (memory_address_we)
+          memory_address_reg <= memory_address_new;
+
+        if (ntp_extension_reset) begin : ntp_extension_reset_sync
+          integer i;
+          for (i=0; i <= NTP_EXTENSION_FIELDS-1; i=i+1) begin
+            ntp_extension_copied_reg [i] <= 'b0;
+          end
+        end else if (ntp_extension_we)
+          ntp_extension_copied_reg [ntp_extension_counter_reg] <= ntp_extension_copied_new;
+
+        if (ntp_extension_we) begin
+          ntp_extension_addr_reg   [ntp_extension_counter_reg] <= ntp_extension_addr_new;
+          ntp_extension_tag_reg    [ntp_extension_counter_reg] <= ntp_extension_tag_new;
+          ntp_extension_length_reg [ntp_extension_counter_reg] <= ntp_extension_length_new;
+        end
+
+        if (ntp_extension_counter_we)
+          ntp_extension_counter_reg <= ntp_extension_counter_new;
+
+        if (nts_state_we)
+          nts_state_reg <= nts_state_new;
+
+        nts_authenticator_start_addr_reg     <= nts_authenticator_start_addr_new;
+        nts_basic_sanity_check_packet_ok_reg <= nts_basic_sanity_check_packet_ok_new;
+        nts_cookie_start_addr_reg            <= nts_cookie_start_addr_new;
+
+        if (nts_kiss_of_death_we)
+          nts_kiss_of_death_reg <= nts_kiss_of_death_new;
+
+        nts_unique_identifier_addr_reg   <= nts_unique_identifier_addr_new;
+        nts_unique_identifier_length_reg <= nts_unique_identifier_length_new;
+        nts_valid_placeholders_reg       <= nts_valid_placeholders_new;
+
+        tx_authenticator_length_reg <= tx_authenticator_length_new;
+        tx_ciphertext_length_reg <= tx_ciphertext_length_new;
+      end
+    end
+
+    always @*
+    begin : nts_rx_access_port_comms
+      rx_addr_we = 0;
+      rx_addr_new = 0;
+      rx_bs_we = 0;
+      rx_bs_new = 0;
+      rx_rd_en_new = 0;
+      rx_ws_we = 0;
+      rx_ws_new = 0;
+      case (nts_state_reg)
+        NTS_S_EXTRACT_EXT_FROM_RAM:
+          if (ntp_extension_copied_reg[ntp_extension_counter_reg] == 'b0) begin
+            //$display("%s:%0d i_access_port_rd_dv=%0d i_access_port_wait=%0d", `__FILE__, `__LINE__, i_access_port_rd_dv, i_access_port_wait);
+            if (i_access_port_rd_dv)
+              ;
+            else if (i_access_port_wait)
+              ;
+            else begin
+              rx_addr_we   = 'b1;
+              rx_addr_new  = memory_address_reg;
+              rx_rd_en_new = 'b1;
+              rx_ws_we     = 'b1;
+              rx_ws_new    = 2; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit
+            end
+          end
+        NTS_S_EXTRACT_COOKIE_FROM_RAM:
+          if (i_access_port_rd_dv)
+            //$display("%s:%0d i_access_port_rd_data=%h",`__FILE__, `__LINE__, i_access_port_rd_data);
+            ;
+          else if (i_access_port_wait)
+            ;
+          else begin
+            rx_addr_we   = 'b1;
+            rx_addr_new  = ntp_extension_addr_reg[detect_nts_cookie_index_reg] + 4;
+            rx_rd_en_new = 'b1;
+            rx_ws_we     = 'b1;
+            rx_ws_new    = 2; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit
+          end
+        NTS_S_UNIQUE_IDENTIFIER_COPY_0:
+          begin
+            rx_addr_we   = 'b1;
+            rx_addr_new  = nts_unique_identifier_addr_reg;
+            rx_bs_we     = 'b1;
+            rx_bs_new    = nts_unique_identifier_length_reg;
+            rx_rd_en_new = 'b1;
+            rx_ws_we     = 'b1;
+            rx_ws_new    = 4; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit, 4: burst
+          end
+        default: ;
+      endcase
+    end
+
+    always @*
+    begin : nts_copy_proc_helper
+      cp_start       = 0;
+      cp_bytes_we    = 0;
+      cp_bytes_new   = 0;
+      cp_tx_addr_we  = 0;
+      cp_tx_addr_new = 0;
+      case (nts_state_reg)
+        NTS_S_TIMESTAMP_WAIT:
+          begin
+            //Kiss-o'-Death requires copy_tx_addr_reg set earlier, ahead of jump
+            //from STATE_TIMESTAMP_WAIT to TX_UPDATE_LENGTH
+            cp_tx_addr_we   = 1;
+            cp_tx_addr_new  = ipdecode_offset_ntp_ext_reg;
+          end
+        NTS_S_UNIQUE_IDENTIFIER_COPY_0:
+          begin
+            cp_start       = 1;
+            cp_bytes_we    = 1;
+            cp_bytes_new   = nts_unique_identifier_length_reg;
+            cp_tx_addr_we  = 1;
+            cp_tx_addr_new = ipdecode_offset_ntp_ext_reg;
+          end
+        NTS_S_TX_EMIT_TL_NL_CL:
+          begin
+            cp_tx_addr_we  = 1;
+            cp_tx_addr_new = copy_tx_addr_reg + BYTES_AUTH_OVERHEAD;
+          end
+        NTS_S_TX_EMIT_NONCE_CIPHERTEXT:
+          if (crypto_fsm_reg == CRYPTO_FSM_DONE_SUCCESS) begin : emit_nonce_ct_tmp
+            reg [ADDR_WIDTH+3-1:0] ciphertext_length;
+            ciphertext_length = tx_ciphertext_length_reg[ADDR_WIDTH+3-1:0];
+
+            cp_tx_addr_we  = 1;
+            cp_tx_addr_new = copy_tx_addr_reg + BYTES_AUTH_NONCE + ciphertext_length;
+          end
+        default: ;
+      endcase
+    end
+
+    //----------------------------------------------------------------
+    // TX write control helper
+    //----------------------------------------------------------------
+
+    task nts_tx_control_update_udp_header;
+    begin
+      if (detect_ipv4_reg) begin
+        tx_a   = OFFSET_ETH_IPV4_UDP;
+        tx_wen = 1;
+        tx_wd  = tx_header_udp;
+      end else if (detect_ipv6_reg) begin
+        tx_a   = OFFSET_ETH_IPV6_UDP;
+        tx_wen = 1;
+        tx_wd  = tx_header_udp;
+      end
+    end
+    endtask
+
+    always @*
+    begin : nts_tx_ctrl
+      reg [15:0] nonce_length;
+
+      nonce_length = BYTES_AUTH_NONCE; //typecast from length undefined to 16bit
+
+      tx_a = 0;
+      tx_wen = 0;
+      tx_wd = 0;
+      tx_cen = 0;
+      tx_cb = 0;
+      tx_cr = 0;
+      tx_crv = 0;
+      tx_up_len = 0;
+      case (nts_state_reg)
+        NTS_S_TX_EMIT_TL_NL_CL:
+          begin
+            tx_a   = copy_tx_addr_reg;
+            tx_wen = 1;
+            tx_wd  = { TAG_NTS_AUTHENTICATOR, tx_authenticator_length_reg, nonce_length, tx_ciphertext_length_reg };
+          end
+        NTS_S_TX_UPDATE_LENGTH:
+          begin
+            tx_a      = copy_tx_addr_reg;
+            tx_up_len = 1;
+          end
+        NTS_S_TX_WRITE_UDP_LENGTH: nts_tx_control_update_udp_header();
+        NTS_S_UDP_CHECKSUM_RESET: 
+          begin
+            tx_cr = 1;
+            tx_crv = 16'h0011; //Static pseudo header. 00: Zero pre-padding. 0x11/17: UDP protocol.
+          end
+        NTS_S_UDP_CHECKSUM_PS_SRCADDR:
+          if (detect_ipv4_reg) begin
+            tx_a = OFFSET_ETH_IPV4_SRCADDR;
+            tx_cen = 1;
+            tx_cb = 8; //4 byte src + 4 bytes dst
+          end else if (detect_ipv6_reg) begin
+            tx_a = OFFSET_ETH_IPV6_SRCADDR;
+            tx_cen = 1;
+            tx_cb = 32; //16 byte src + 16 bytes dst
+          end
+        NTS_S_UDP_CHECKSUM_PS_UDPLLEN:
+          //TODO: simplify by merging into NTS_S_UDP_CHECKSUM_RESET
+          if (i_tx_sum_done) begin
+            tx_cen = 1;
+            if (detect_ipv4_reg) begin
+              tx_a = OFFSET_ETH_IPV4_UDP_LENGTH;
+              tx_cb = 2;
+            end else if (detect_ipv6_reg) begin
+              tx_a = OFFSET_ETH_IPV6_UDP_LENGTH;
+              tx_cb = 2;
+            end
+          end
+        NTS_S_UDP_CHECKSUM_DATAGRAM:
+          if (i_tx_sum_done) begin //TODO remove if() when removing NTS_S_UDP_CHECKSUM_PS_UDPLLEN
+            tx_cen = 1;
+            tx_cb  = tx_udp_length_reg[ADDR_WIDTH+3-1:0]; //TODO: breaks if address space > 16 bits
+            if (detect_ipv4_reg) begin
+              tx_a = OFFSET_ETH_IPV4_UDP;
+            end else if (detect_ipv6_reg) begin
+              tx_a = OFFSET_ETH_IPV6_UDP;
+            end
+          end
+        NTS_S_WRITE_NEW_UDP_CSUM: nts_tx_control_update_udp_header();
+        NTS_S_WRITE_NEW_IP_HEADER_0:  
+          if (detect_ipv4_reg) begin
+            tx_a   = HEADER_LENGTH_ETHERNET;
+            tx_wen = 1;
+            tx_wd  = tx_header_ipv4[159-:64];
+          end else if (detect_ipv6_reg) begin
+            tx_a   = HEADER_LENGTH_ETHERNET;
+            tx_wen = 1;
+            tx_wd  = tx_header_ipv6[40*8-1-:64];
+            // |Version| Traffic Class |           Flow Label                  |
+            // |         Payload Length        |  Next Header  |   Hop Limit   |
+          end
+        NTS_S_WRITE_NEW_IP_HEADER_1:
+          if (detect_ipv4_reg) begin
+            tx_a   = HEADER_LENGTH_ETHERNET + 8;
+            tx_wen = 1;
+            tx_wd  = tx_header_ipv4[95-:64];
+          end
+        default: ;
+      endcase
+    end
+
+
+    //----------------------------------------------------------------
+    // Statistics signals
+    //----------------------------------------------------------------
+
+    always @*
+    begin : statistics
+      statistics_nts_bad_auth   = 0;
+      statistics_nts_bad_cookie = 0;
+      statistics_nts_bad_keyid  = 0;
+      statistics_nts_processed  = 0;
+
+      case (nts_state_reg)
+        NTS_S_VERIFY_KEY_FROM_COOKIE2:
+          if (i_keymem_ready && keymem_get_key_with_id_reg == 'b0 ) begin
+            if (i_keymem_key_valid == 'b0) begin
+              statistics_nts_bad_keyid = 1;
+            end
+          end
+        NTS_S_RX_AUTH_COOKIE:
+          if (crypto_fsm_reg == CRYPTO_FSM_DONE_FAILURE)
+            statistics_nts_bad_cookie = 1;
+        NTS_S_RX_AUTH_PACKET:
+          begin
+             if (crypto_fsm_reg == CRYPTO_FSM_DONE_SUCCESS)
+               statistics_nts_processed = 1;
+             if (crypto_fsm_reg == CRYPTO_FSM_DONE_FAILURE)
+               statistics_nts_bad_auth = 1;
+          end
+        default: ;
+      endcase
+    end
+
+    //----------------------------------------------------------------
+    // Keymem control
+    //   1. Sets outputs controlling nts_keymem operation.
+    //   2. Records keymem_id to be used in new cookie generation.
+    //----------------------------------------------------------------
+
+    always @*
+    begin : keymem_control
+      crypto_sample_key          = 'b0;
+      keymem_get_current_key_new = 'b0;
+      keymem_get_key_with_id_new = 'b0;
+
+      keymem_key_id_we           = 'b0;
+      keymem_key_id_new          = 'b0;
+
+      keymem_key_word_we         = 'b0;
+      keymem_key_word_new        = 'b0;
+
+      keymem_server_id_we        = 'b0;
+      keymem_server_id_new       = 'b0;
+
+      case (nts_state_reg)
+        NTS_S_EXTRACT_COOKIE_FROM_RAM:
+          begin
+            keymem_key_word_we         = 'b1;
+            keymem_server_id_we        = 'b1;
+          end
+        NTS_S_VERIFY_KEY_FROM_COOKIE1:
+          if (i_keymem_ready == 'b1) begin
+            keymem_get_key_with_id_new = 'b1;
+            keymem_key_word_we         = 'b1;
+            keymem_key_word_new        = 'b0;
+            keymem_server_id_we        = 'b1;
+            keymem_server_id_new       = cookie_server_id_reg;
+          end
+        NTS_S_VERIFY_KEY_FROM_COOKIE2:
+          if (i_keymem_ready && keymem_get_key_with_id_reg == 'b0) begin
+            if (i_keymem_key_valid == 'b0) begin
+              ; // reset, zero all output
+            end else if (keymem_key_word_reg == 'b111) begin
+              crypto_sample_key = 1;
+              ; // reset, zero all output
+            end else begin
+              // Yay! We read a key word
+              crypto_sample_key = 1;
+              keymem_get_key_with_id_new = 'b1;
+              keymem_key_word_we         = 'b1;
+              keymem_key_word_new        = keymem_key_word_reg + 1;
+            end
+          end
+        NTS_S_RETRIVE_CURRENT_KEY_0:
+          begin
+            keymem_get_current_key_new = 'b1;
+            keymem_key_word_we         = 'b1;
+            keymem_key_word_new        = 'b0;
+          end
+        NTS_S_RETRIVE_CURRENT_KEY_1:
+          if (i_keymem_ready && keymem_get_current_key_reg == 'b0) begin
+            if (i_keymem_key_valid == 'b0) begin
+               ; // reset, zero all output
+            end else if (keymem_key_word_reg == 'b111) begin
+              crypto_sample_key = 1;
+              ; // reset, zero all output
+            end else begin
+              // Yay! We read a key word
+              //TODO error if key_id changes during read
+              crypto_sample_key = 1;
+              keymem_get_current_key_new = 'b1;
+              keymem_key_id_we           = 'b1;
+              keymem_key_id_new          = i_keymem_key_id;
+              keymem_key_word_we         = 'b1;
+              keymem_key_word_new        = keymem_key_word_reg + 1;
+            end
+          end
+        default: ;
+      endcase
+    end
+
+    always @*
+    begin
+      cookie_server_id_we  = 'b0;
+      cookie_server_id_new = 'b0;
+      if (nts_state_reg == NTS_S_EXTRACT_COOKIE_FROM_RAM) begin
+        if (i_access_port_rd_dv) begin
+          cookie_server_id_we  = 'b1;
+          cookie_server_id_new = i_access_port_rd_data[31:0];
+        end
+      end
+    end
+
+    //----------------------------------------------------------------
+    // Additional Cookie Generation
+    //----------------------------------------------------------------
+
+    always @*
+    begin
+      cookies_count_we = 0;
+      cookies_count_new = 0;
+
+      case (nts_state_reg)
+        NTS_S_RESET_EXTRA_COOKIES:
+          begin
+            cookies_count_we = 1;
+            cookies_count_new = 0;
+          end
+        NTS_S_ADDITIONAL_COOKIES_CTRL:
+          if (cookies_count_reg < cookies_to_emit) begin
+            cookies_count_we = 1;
+            cookies_count_new = cookies_count_reg + 1;
+          end
+        default: ;
+      endcase
+    end
+
+    //----------------------------------------------------------------
+    // Cookie Position search
+    //----------------------------------------------------------------
+
+    always @*
+    begin : cookie_position
+      integer i;
+
+      detect_nts_cookie_index_new  = 0;
+
+      for (i = NTP_EXTENSION_FIELDS-1; i >= 0; i = i - 1) begin
+        if (ntp_extension_copied_reg[i]) begin
+
+          if (ntp_extension_tag_reg[i]==TAG_NTS_COOKIE) begin
+             detect_nts_cookie_index_new  = i [NTP_EXTENSION_BITS-1:0];
+          end
+        end
+      end
+    end
+
+    //----------------------------------------------------------------
+    // NTS Encrypted & Authenticated EF length registers
+    //----------------------------------------------------------------
+
+    always @*
+    begin
+      tx_authenticator_length_new = BYTES_AUTH_OVERHEAD /*TL, NL, CL */ + BYTES_AUTH_NONCE + tx_ciphertext_length_reg;
+      tx_ciphertext_length_new = BYTES_AUTH_TAG + LEN_NTS_COOKIE * cookies_to_emit;
+    end
+
+
+    assign o_crypto_sample_key            = crypto_sample_key;
+    assign o_crypto_rx_addr               = crypto_rx_addr;
+    assign o_crypto_rx_bytes              = crypto_rx_bytes;
+    assign o_crypto_rx_op_copy_ad         = crypto_rx_op_copy_ad;
+    assign o_crypto_rx_op_copy_nonce      = crypto_rx_op_copy_nonce;
+    assign o_crypto_rx_op_copy_pc         = crypto_rx_op_copy_pc;
+    assign o_crypto_rx_op_copy_tag        = crypto_rx_op_copy_tag;
+    assign o_crypto_tx_addr               = crypto_tx_addr;
+    assign o_crypto_tx_bytes              = crypto_tx_bytes;
+    assign o_crypto_tx_op_copy_ad         = crypto_tx_op_copy_ad;
+    assign o_crypto_tx_op_store_cookie    = crypto_tx_op_store_cookie;
+    assign o_crypto_tx_op_store_cookiebuf = crypto_tx_op_store_cookiebuf;
+    assign o_crypto_tx_op_store_nonce_tag = crypto_tx_op_store_nonce_tag;
+    assign o_crypto_cookieprefix          = crypto_cookieprefix;
+    assign o_crypto_op_cookie_loadkeys    = crypto_op_cookie_loadkeys;
+    assign o_crypto_op_cookie_rencrypt    = crypto_op_cookie_rencrypt;
+    assign o_crypto_op_cookie_verify      = crypto_op_cookie_verify;
+    assign o_crypto_op_cookiebuf_append   = crypto_op_cookiebuf_append;
+    assign o_crypto_op_cookiebuf_reset    = crypto_op_cookiebuf_reset;
+    assign o_crypto_op_c2s_verify_auth    = crypto_op_c2s_verify_auth;
+    assign o_crypto_op_s2c_generate_auth  = crypto_op_s2c_generate_auth;
+
+    assign o_keymem_get_current_key = keymem_get_current_key_reg;
+    assign o_keymem_key_word        = keymem_key_word_reg;
+    assign o_keymem_get_key_with_id = keymem_get_key_with_id_reg;
+    assign o_keymem_server_id       = keymem_server_id_reg;
+
+    assign o_muxctrl_crypto = muxctrl_crypto;
+
+    assign o_statistics_nts_processed  = statistics_nts_processed;
+    assign o_statistics_nts_bad_cookie = statistics_nts_bad_cookie;
+    assign o_statistics_nts_bad_auth   = statistics_nts_bad_auth;
+    assign o_statistics_nts_bad_keyid  = statistics_nts_bad_keyid;
+
+    assign o_timestamp_kiss_of_death = nts_kiss_of_death_reg;
+
+    assign cookies_to_emit = 1 + { 1'b0, nts_valid_placeholders_reg };
+
+    assign nts_csum_reset_en = tx_cr;
+    assign nts_csum_reset_value = tx_crv;
+    assign nts_csum_en = tx_cen;
+    assign nts_csum_bytes = tx_cb;
+
+    assign nts_error_cause = error_cause_reg;
+
+    assign nts_idle = nts_state_reg == NTS_S_IDLE;
+
+    assign nts_packet_drop = nts_state_reg == NTS_S_ERROR;
+    assign nts_packet_transmit = nts_state_reg == NTS_S_TRANSMIT_PACKET;
+
+    assign nts_rx_addr_we = rx_addr_we;
+    assign nts_rx_addr_new = rx_addr_new;
+    assign nts_rx_bs_we = rx_bs_we;
+    assign nts_rx_bs_new = rx_bs_new;
+    assign nts_rx_rd_en_new = rx_rd_en_new;
+    assign nts_rx_ws_we = rx_ws_we;
+    assign nts_rx_ws_new = rx_ws_new;
+
+    assign nts_cp_start = cp_start;
+    assign nts_cp_tx_addr_we = cp_tx_addr_we;
+    assign nts_cp_tx_addr_new = cp_tx_addr_new;
+    assign nts_cp_bytes_we = cp_bytes_we;
+    assign nts_cp_bytes_new = cp_bytes_new;
+
+    assign nts_respond_with_ip_udp_header = respond_with_ip_udp_header;
+
+    assign nts_tx_addr = tx_a;
+    assign nts_tx_wen = tx_wen;
+    assign nts_tx_wd = tx_wd;
+    assign nts_tx_update_length = tx_up_len;
+
+    assign nts_tx_wait_for_checksum = nts_state_reg == NTS_S_UDP_CHECKSUM_WAIT;
+
+    assign timestamp_nts = timestamp;
+
+
+  end else begin : nts_disabled
+    /* verilator lint_off UNUSED */
+    wire dontcare1;
+    wire [ADDR_WIDTH+3-1:0] dontcare2;
+    wire [31:0] dontcare3;
+    /* verilator lint_on UNUSED */
+
+    assign dontcare1 = i_crypto_busy ||
+                       i_crypto_verify_tag_ok ||
+                       i_keymem_key_valid ||
+                       i_keymem_ready;
+    assign dontcare2 = ipdecode_offset_ntp_ext_reg;
+    assign dontcare3 = i_keymem_key_id;
+
+    assign o_crypto_sample_key            = 0;
+    assign o_crypto_rx_addr               = 0;
+    assign o_crypto_rx_bytes              = 0;
+    assign o_crypto_rx_op_copy_ad         = 0;
+    assign o_crypto_rx_op_copy_nonce      = 0;
+    assign o_crypto_rx_op_copy_pc         = 0;
+    assign o_crypto_rx_op_copy_tag        = 0;
+    assign o_crypto_tx_addr               = 0;
+    assign o_crypto_tx_bytes              = 0;
+    assign o_crypto_tx_op_copy_ad         = 0;
+    assign o_crypto_tx_op_store_cookie    = 0;
+    assign o_crypto_tx_op_store_cookiebuf = 0;
+    assign o_crypto_tx_op_store_nonce_tag = 0;
+    assign o_crypto_cookieprefix          = 0;
+    assign o_crypto_op_cookie_loadkeys    = 0;
+    assign o_crypto_op_cookie_rencrypt    = 0;
+    assign o_crypto_op_cookie_verify      = 0;
+    assign o_crypto_op_cookiebuf_append   = 0;
+    assign o_crypto_op_cookiebuf_reset    = 0;
+    assign o_crypto_op_c2s_verify_auth    = 0;
+    assign o_crypto_op_s2c_generate_auth  = 0;
+
+    assign o_keymem_get_current_key = 0;
+    assign o_keymem_key_word        = 0;
+    assign o_keymem_get_key_with_id = 0;
+    assign o_keymem_server_id       = 0;
+
+    assign o_muxctrl_crypto = 0;
+
+    assign o_statistics_nts_processed  = 0;
+    assign o_statistics_nts_bad_cookie = 0;
+    assign o_statistics_nts_bad_auth   = 0;
+    assign o_statistics_nts_bad_keyid  = 0;
+
+    assign o_timestamp_kiss_of_death = 0;
+
+    assign nts_idle = 0;
+
+    assign nts_csum_reset_en = 0;
+    assign nts_csum_reset_value = 0;
+    assign nts_csum_en = 0;
+    assign nts_csum_bytes = 0; 
+
+    assign nts_error_cause = 0;
+
+    assign nts_packet_drop = 1;
+    assign nts_packet_transmit = 0;
+
+    assign nts_rx_addr_we = 0;
+    assign nts_rx_addr_new = 0;
+    assign nts_rx_bs_we = 0;
+    assign nts_rx_bs_new = 0;
+    assign nts_rx_rd_en_new = 0;
+    assign nts_rx_ws_we = 0;
+    assign nts_rx_ws_new = 0;
+
+    assign nts_cp_start = 0;
+    assign nts_cp_tx_addr_we = 0;
+    assign nts_cp_tx_addr_new = 0;
+    assign nts_cp_bytes_we = 0;
+    assign nts_cp_bytes_new = 0;
+
+    assign nts_respond_with_ip_udp_header = 0;
+
+    assign nts_tx_addr = 0;
+    assign nts_tx_wen = 0;
+    assign nts_tx_wd = 0;
+    assign nts_tx_update_length = 0;
+    assign nts_tx_wait_for_checksum = 0;
+
+    assign timestamp_nts = 0;
+  end
 
   //----------------------------------------------------------------
   // Timestamp mux ctrl
@@ -2975,47 +4173,15 @@ module nts_parser_ctrl #(
             access_port_wordsize_new = 4; //burst
           end
         STATE_PROCESS_NTS:
-          case (nts_state_reg)
-            NTS_S_EXTRACT_EXT_FROM_RAM:
-              if (ntp_extension_copied_reg[ntp_extension_counter_reg] == 'b0) begin
-                //$display("%s:%0d i_access_port_rd_dv=%0d i_access_port_wait=%0d", `__FILE__, `__LINE__, i_access_port_rd_dv, i_access_port_wait);
-                if (i_access_port_rd_dv)
-                  ;
-                else if (i_access_port_wait)
-                  ;
-                else begin
-                  access_port_addr_we      = 'b1;
-                  access_port_addr_new     = memory_address_reg;
-                  access_port_rd_en_new    = 'b1;
-                  access_port_wordsize_we  = 'b1;
-                  access_port_wordsize_new = 2; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit
-                end
-              end
-            NTS_S_EXTRACT_COOKIE_FROM_RAM:
-              if (i_access_port_rd_dv)
-                //$display("%s:%0d i_access_port_rd_data=%h",`__FILE__, `__LINE__, i_access_port_rd_data);
-                ;
-              else if (i_access_port_wait)
-                ;
-              else begin
-                access_port_addr_we      = 'b1;
-                access_port_addr_new     = ntp_extension_addr_reg[detect_nts_cookie_index_reg] + 4;
-                access_port_rd_en_new    = 'b1;
-                access_port_wordsize_we  = 'b1;
-                access_port_wordsize_new = 2; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit
-              end
-            NTS_S_UNIQUE_IDENTIFIER_COPY_0:
-              begin
-                access_port_addr_we       = 'b1;
-                access_port_addr_new      = nts_unique_identifier_addr_reg;
-                access_port_burstsize_we  = 'b1;
-                access_port_burstsize_new = nts_unique_identifier_length_reg;
-                access_port_rd_en_new     = 'b1;
-                access_port_wordsize_we   = 'b1;
-                access_port_wordsize_new  = 4; //0: 8bit, 1: 16bit, 2: 32bit, 3: 64bit, 4: burst
-              end
-            default: ;
-          endcase
+          begin
+            access_port_addr_we       = nts_rx_addr_we;
+            access_port_addr_new      = nts_rx_addr_new;
+            access_port_burstsize_we  = nts_rx_bs_we;
+            access_port_burstsize_new = nts_rx_bs_new;
+            access_port_rd_en_new     = nts_rx_rd_en_new;
+            access_port_wordsize_we   = nts_rx_ws_we;
+            access_port_wordsize_new  = nts_rx_ws_new;
+          end
         default: ;
       endcase
     end
@@ -3058,36 +4224,12 @@ module nts_parser_ctrl #(
           copy_tx_addr_new  = gre_tx_addr;
         end
       STATE_PROCESS_NTS:
-        case (nts_state_reg)
-          NTS_S_TIMESTAMP_WAIT:
-            begin
-              //Kiss-o'-Death requires copy_tx_addr_reg set earlier, ahead of jump
-              //from STATE_TIMESTAMP_WAIT to TX_UPDATE_LENGTH
-              copy_tx_addr_we   = 1;
-              copy_tx_addr_new  = ipdecode_offset_ntp_ext_reg;
-            end
-          NTS_S_UNIQUE_IDENTIFIER_COPY_0:
-            begin
-              copy_bytes_we     = 1;
-              copy_bytes_new    = nts_unique_identifier_length_reg;
-              copy_tx_addr_we   = 1;
-              copy_tx_addr_new  = ipdecode_offset_ntp_ext_reg;
-            end
-          NTS_S_TX_EMIT_TL_NL_CL:
-            begin
-              copy_tx_addr_we  = 1;
-              copy_tx_addr_new = copy_tx_addr_reg + BYTES_AUTH_OVERHEAD;
-            end
-          NTS_S_TX_EMIT_NONCE_CIPHERTEXT:
-            if (crypto_fsm_reg == CRYPTO_FSM_DONE_SUCCESS) begin : emit_nonce_ct_tmp
-              reg [ADDR_WIDTH+3-1:0] ciphertext_length;
-              ciphertext_length = tx_ciphertext_length_reg[ADDR_WIDTH+3-1:0];
-
-              copy_tx_addr_we  = 1;
-              copy_tx_addr_new = copy_tx_addr_reg + BYTES_AUTH_NONCE + ciphertext_length;
-            end
-          default: ;
-        endcase
+        begin
+          copy_bytes_we     = nts_cp_bytes_we;
+          copy_bytes_new    = nts_cp_bytes_new;
+          copy_tx_addr_we   = nts_cp_tx_addr_we;
+          copy_tx_addr_new  = nts_cp_tx_addr_new;
+        end
       default: ;
     endcase
 
@@ -3111,132 +4253,6 @@ module nts_parser_ctrl #(
           copy_tx_addr_new = copy_tx_addr_reg + 8;
         end
       end
-    end
-  end
-
-  //----------------------------------------------------------------
-  // Keymem control
-  //   1. Sets outputs controlling nts_keymem operation.
-  //   2. Records keymem_id to be used in new cookie generation.
-  //----------------------------------------------------------------
-
-  always @*
-  begin : keymem_control
-    crypto_sample_key          = 'b0;
-    keymem_get_current_key_new = 'b0;
-    keymem_get_key_with_id_new = 'b0;
-
-    keymem_key_id_we           = 'b0;
-    keymem_key_id_new          = 'b0;
-
-    keymem_key_word_we         = 'b0;
-    keymem_key_word_new        = 'b0;
-
-    keymem_server_id_we        = 'b0;
-    keymem_server_id_new       = 'b0;
-
-    case (nts_state_reg)
-      NTS_S_EXTRACT_COOKIE_FROM_RAM:
-        begin
-          keymem_key_word_we         = 'b1;
-          keymem_server_id_we        = 'b1;
-        end
-      NTS_S_VERIFY_KEY_FROM_COOKIE1:
-        if (i_keymem_ready == 'b1) begin
-          keymem_get_key_with_id_new = 'b1;
-          keymem_key_word_we         = 'b1;
-          keymem_key_word_new        = 'b0;
-          keymem_server_id_we        = 'b1;
-          keymem_server_id_new       = cookie_server_id_reg;
-        end
-      NTS_S_VERIFY_KEY_FROM_COOKIE2:
-        if (i_keymem_ready && keymem_get_key_with_id_reg == 'b0) begin
-          if (i_keymem_key_valid == 'b0) begin
-            ; // reset, zero all output
-          end else if (keymem_key_word_reg == 'b111) begin
-            crypto_sample_key = 1;
-            ; // reset, zero all output
-          end else begin
-            // Yay! We read a key word
-            crypto_sample_key = 1;
-            keymem_get_key_with_id_new = 'b1;
-            keymem_key_word_we         = 'b1;
-            keymem_key_word_new        = keymem_key_word_reg + 1;
-          end
-        end
-      NTS_S_RETRIVE_CURRENT_KEY_0:
-        begin
-          keymem_get_current_key_new = 'b1;
-          keymem_key_word_we         = 'b1;
-          keymem_key_word_new        = 'b0;
-        end
-      NTS_S_RETRIVE_CURRENT_KEY_1:
-        if (i_keymem_ready && keymem_get_current_key_reg == 'b0) begin
-          if (i_keymem_key_valid == 'b0) begin
-             ; // reset, zero all output
-          end else if (keymem_key_word_reg == 'b111) begin
-            crypto_sample_key = 1;
-            ; // reset, zero all output
-          end else begin
-            // Yay! We read a key word
-            //TODO error if key_id changes during read
-            crypto_sample_key = 1;
-            keymem_get_current_key_new = 'b1;
-            keymem_key_id_we           = 'b1;
-            keymem_key_id_new          = i_keymem_key_id;
-            keymem_key_word_we         = 'b1;
-            keymem_key_word_new        = keymem_key_word_reg + 1;
-          end
-        end
-      default: ;
-    endcase
-  end
-
-  always @*
-  begin
-    cookie_server_id_we  = 'b0;
-    cookie_server_id_new = 'b0;
-    if (nts_state_reg == NTS_S_EXTRACT_COOKIE_FROM_RAM) begin
-      if (i_access_port_rd_dv) begin
-        cookie_server_id_we  = 'b1;
-        cookie_server_id_new = i_access_port_rd_data[31:0];
-      end
-    end
-  end
-
-  //----------------------------------------------------------------
-  // Memory Address calculator
-  // Updates memory address reg.
-  //   Initilize to NTP Extension start calulcated by IP decode.
-  //   Increments by NTP Extension length
-  //   Until all bytes consumed.
-  //----------------------------------------------------------------
-
-  always @*
-  begin : memory_address_calculator
-    memory_address_we    = 'b0;
-    memory_address_new   = 'b0;
-
-    if (nts_state_reg == NTS_S_LENGTH_CHECKS) begin
-      memory_address_we  = 'b1;
-      memory_address_new = ipdecode_offset_ntp_ext_reg;
-    end
-
-    if (nts_state_reg == NTS_S_EXTRACT_EXT_FROM_RAM) begin
-      task_incremment_address_for_nts_extension(
-           memory_address_reg, ntp_extension_length_reg[ntp_extension_counter_reg], /* IN */
-           memory_address_next_reg, memory_address_failure_reg, memory_address_lastbyte_read_reg /*OUT*/);
-
-      if (ntp_extension_copied_reg[ntp_extension_counter_reg] && memory_address_failure_reg == 'b0 && memory_address_lastbyte_read_reg == 'b0 && ntp_extension_counter_reg!=NTP_EXTENSION_FIELDS-1) begin
-        memory_address_we  = 'b1;
-        memory_address_new = memory_address_next_reg;
-      end
-
-    end else begin
-      memory_address_we  = 'b1;
-      memory_address_next_reg = 0;
-      memory_address_failure_reg = 1;
-      memory_address_lastbyte_read_reg = 1;
     end
   end
 
@@ -3391,16 +4407,6 @@ module nts_parser_ctrl #(
   end
 
   //----------------------------------------------------------------
-  // NTS Encrypted & Authenticated EF length registers
-  //----------------------------------------------------------------
-
-  always @*
-  begin
-    tx_authenticator_length_new = BYTES_AUTH_OVERHEAD /*TL, NL, CL */ + BYTES_AUTH_NONCE + tx_ciphertext_length_reg;
-    tx_ciphertext_length_new = BYTES_AUTH_TAG + LEN_NTS_COOKIE * cookies_to_emit;
-  end
-
-  //----------------------------------------------------------------
   // TX Response logic
   //----------------------------------------------------------------
 
@@ -3468,13 +4474,7 @@ module nts_parser_ctrl #(
             tx_response_helper( 1, header [ tx_header_arp_index_reg*64+:64 ], tx_header_arp_index_reg == 0 );
           end
         end
-      STATE_PROCESS_NTS:
-        if (SUPPORT_NTS) begin
-          case (nts_state_reg)
-            NTS_S_WRITE_HEADER_IPV4_IPV6: respond_ip_udp = 1;
-            default: ;
-          endcase
-        end
+      STATE_PROCESS_NTS: respond_ip_udp = nts_respond_with_ip_udp_header;
       STATE_PROCESS_NTP:
         if (SUPPORT_NTP | SUPPORT_NTP_AUTH) begin
           case (basic_ntp_state_reg)
@@ -3579,7 +4579,6 @@ module nts_parser_ctrl #(
     reg udp_checksum_addr;
     reg udp_checksum_datagram;
     reg udp_checksum_reset;
-    reg [15:0] nonce_length;
 
     ip_update_header0 = 0;
     ip_update_header1 = 0;
@@ -3587,8 +4586,6 @@ module nts_parser_ctrl #(
     udp_checksum_addr = 0;
     udp_checksum_datagram = 0;
     udp_checksum_reset = 0;
-
-    nonce_length = BYTES_AUTH_NONCE; //typecast from length undefined to 16bit
 
     tx_address_internal = 0;
     tx_address = 0;
@@ -3630,53 +4627,22 @@ module nts_parser_ctrl #(
           responder_update_length = gre_responder_update_length;
         end
       STATE_PROCESS_NTS:
-        case (nts_state_reg)
-          NTS_S_UNIQUE_IDENTIFIER_COPY_0:
-            begin
-              txctrl_tx_from_rx_we = 1;
-              txctrl_tx_from_rx_new = 1;
-            end
-          NTS_S_TX_EMIT_TL_NL_CL:
-            begin
-              tx_address    = copy_tx_addr_reg;
-              tx_write_en   = 1;
-              tx_write_data = { TAG_NTS_AUTHENTICATOR, tx_authenticator_length_reg, nonce_length, tx_ciphertext_length_reg };
-            end
-          NTS_S_TX_UPDATE_LENGTH:
-            begin
-              tx_address       = copy_tx_addr_reg;
-              tx_update_length = 1;
-            end
-          NTS_S_TX_WRITE_UDP_LENGTH: tx_control_update_udp_header();
-          NTS_S_UDP_CHECKSUM_RESET:
-            begin
-              tx_sum_reset = 1;
-              tx_sum_reset_value = 16'h0011; //Static pseudo header. 00: Zero pre-padding. 0x11/17: UDP protocol.
-            end
-          NTS_S_UDP_CHECKSUM_PS_SRCADDR: udp_checksum_addr = 1;
-          NTS_S_UDP_CHECKSUM_PS_UDPLLEN:
-            //TODO: simplify by merging into NTS_S_UDP_CHECKSUM_RESET
-            if (i_tx_sum_done) begin
-              tx_sum_en = 1;
-              if (detect_ipv4_reg) begin
-                tx_address = OFFSET_ETH_IPV4_UDP_LENGTH;
-                tx_sum_bytes = 2;
-              end else if (detect_ipv6_reg) begin
-                tx_address = OFFSET_ETH_IPV6_UDP_LENGTH;
-                tx_sum_bytes = 2;
-              end
-            end
-          NTS_S_UDP_CHECKSUM_DATAGRAM:
-             begin
-               if (i_tx_sum_done) begin //TODO remove if() when removing NTS_S_UDP_CHECKSUM_PS_UDPLLEN
-                 udp_checksum_datagram = 1;
-               end
-             end
-          NTS_S_WRITE_NEW_UDP_CSUM: tx_control_update_udp_header();
-          NTS_S_WRITE_NEW_IP_HEADER_0: ip_update_header0 = 1;
-          NTS_S_WRITE_NEW_IP_HEADER_1: ip_update_header1 = 1;
-          default: ;
-        endcase
+        begin
+          if (nts_cp_start) begin
+            txctrl_tx_from_rx_we = 1;
+            txctrl_tx_from_rx_new = 1;
+          end
+          tx_address         = nts_tx_addr;
+          tx_write_en        = nts_tx_wen;
+          tx_write_data      = nts_tx_wd;
+
+          tx_update_length = nts_tx_update_length;
+
+          tx_sum_reset       = nts_csum_reset_en;
+          tx_sum_reset_value = nts_csum_reset_value;
+          tx_sum_en          = nts_csum_en;
+          tx_sum_bytes       = nts_csum_bytes;
+        end
       STATE_PROCESS_NTP:
         case (basic_ntp_state_reg)
           BASIC_NTP_S_TX_UPDATE_LENGTH: responder_update_length = 1;
@@ -3767,620 +4733,6 @@ module nts_parser_ctrl #(
       tx_write_data = response_data_reg;
     end
 
-  end
-
-  //----------------------------------------------------------------
-  // NTP Extension counter control
-  // Increments 0, 1, ..., NTP_EXTENSION_FIELDS-1
-  //   for each NTP Extension read
-  //----------------------------------------------------------------
-
-  always @*
-  begin : ntp_extension_counter_control
-    ntp_extension_counter_we  = 'b0;
-    ntp_extension_counter_new = 'b0;
-    case (nts_state_reg)
-      NTS_S_IDLE:
-        if (i_process_initial) begin
-          ntp_extension_counter_we  = 'b1;
-          ntp_extension_counter_new = 'b0;
-        end
-      NTS_S_EXTRACT_EXT_FROM_RAM:
-        if (ntp_extension_copied_reg[ntp_extension_counter_reg] && memory_address_failure_reg == 'b0 && memory_address_lastbyte_read_reg == 'b0 && ntp_extension_counter_reg!=NTP_EXTENSION_FIELDS-1) begin
-          ntp_extension_counter_we  = 'b1;
-          ntp_extension_counter_new = ntp_extension_counter_reg + 1;
-        end
-      default: ;
-    endcase
-  end
-
-  //----------------------------------------------------------------
-  // Finite State Machine (Crypto)
-  // Controlls communication with crypto engine
-  //----------------------------------------------------------------
-
-  always @*
-  begin : CRYPTO_FSM
-    crypto_fsm_we = 0;
-    crypto_fsm_new = CRYPTO_FSM_IDLE;
-
-    crypto_cookieprefix = 0;
-
-    crypto_op_cookie_loadkeys = 0;
-    crypto_op_cookie_rencrypt = 0;
-    crypto_op_cookie_verify = 0;
-    crypto_op_cookiebuf_append = 0;
-    crypto_op_cookiebuf_reset = 0;
-    crypto_op_c2s_verify_auth = 0;
-    crypto_op_s2c_generate_auth = 0;
-
-    crypto_rx_addr = 0;
-    crypto_rx_bytes = 0;
-    crypto_rx_op_copy_ad = 0;
-    crypto_rx_op_copy_nonce = 0;
-    crypto_rx_op_copy_pc = 0;
-    crypto_rx_op_copy_tag = 0;
-
-    crypto_tx_addr = 0;
-    crypto_tx_bytes = 0;
-    crypto_tx_op_copy_ad = 0;
-    crypto_tx_op_store_cookie = 0;
-    crypto_tx_op_store_cookiebuf = 0;
-    crypto_tx_op_store_nonce_tag = 0;
-
-    if (crypto_fsm_reg == CRYPTO_FSM_IDLE)
-      muxctrl_crypto = 0;
-    else
-      muxctrl_crypto = 1;
-
-    case (crypto_fsm_reg)
-      CRYPTO_FSM_IDLE:
-        case (nts_state_reg)
-          NTS_S_RX_AUTH_COOKIE:
-            begin
-              crypto_fsm_we  = 1;
-              crypto_fsm_new = CRYPTO_FSM_RX_AUTH_COOKIE;
-            end
-          NTS_S_RX_AUTH_PACKET:
-            begin
-              crypto_fsm_we  = 1;
-              crypto_fsm_new = CRYPTO_FSM_RX_AUTH_PACKET;
-            end
-          NTS_S_RESET_EXTRA_COOKIES:
-            begin
-              crypto_fsm_we  = 1;
-              crypto_fsm_new = CRYPTO_FSM_COOKIEBUF_RESET;
-            end
-          NTS_S_GENERATE_EXTRA_COOKIE:
-            begin
-              crypto_fsm_we  = 1;
-              crypto_fsm_new = CRYPTO_FSM_GEN_COOKIE;
-            end
-          NTS_S_RECORD_EXTRA_COOKIE:
-            begin
-              crypto_fsm_we  = 1;
-              crypto_fsm_new = CRYPTO_FSM_COOKIEBUF_APPEND;
-            end
-          NTS_S_COPY_PACKET_TO_CRYPTO_AD:
-            begin
-              crypto_fsm_we  = 1;
-              crypto_fsm_new = CRYPTO_FSM_COPY_TX_TO_AD;
-            end
-          NTS_S_TX_AUTH_PACKET:
-            begin
-              crypto_fsm_we  = 1;
-              crypto_fsm_new = CRYPTO_FSM_TX_AUTH_PACKET;
-            end
-          NTS_S_TX_EMIT_TL_NL_CL: ; // No-operation. Performed by other parser logic.
-          NTS_S_TX_EMIT_NONCE_CIPHERTEXT:
-            begin
-              crypto_fsm_we  = 1;
-              crypto_fsm_new = CRYPTO_FSM_STORE_TAG_NONCE;
-            end
-          default: ;
-        endcase
-      CRYPTO_FSM_WAIT_THEN_SUCCESS:
-        if (i_crypto_busy == 1'b0) begin
-          crypto_fsm_we  = 1;
-          crypto_fsm_new = CRYPTO_FSM_DONE_SUCCESS;
-        end
-      CRYPTO_FSM_RX_AUTH_COOKIE:
-        if (i_crypto_busy == 1'b0) begin
-          crypto_fsm_we  = 1;
-          crypto_fsm_new = CRYPTO_FSM_RX_AUTH_COOKIE_W1;
-          crypto_rx_op_copy_nonce = 1;
-          crypto_rx_addr = nts_cookie_start_addr_reg + OFFSET_COOKIE_NONCE;
-          crypto_rx_bytes = BYTES_COOKIE_NONCE;
-        end
-      CRYPTO_FSM_RX_AUTH_COOKIE_W1:
-        if (i_crypto_busy == 1'b0) begin
-          crypto_fsm_we  = 1;
-          crypto_fsm_new = CRYPTO_FSM_RX_AUTH_COOKIE_W2;
-          crypto_rx_op_copy_tag = 1;
-          crypto_rx_addr = nts_cookie_start_addr_reg + OFFSET_COOKIE_TAG;
-          crypto_rx_bytes = BYTES_COOKIE_TAG;
-        end
-      CRYPTO_FSM_RX_AUTH_COOKIE_W2:
-        if (i_crypto_busy == 1'b0) begin
-          crypto_fsm_we  = 1;
-          crypto_fsm_new = CRYPTO_FSM_RX_AUTH_COOKIE_W3;
-          crypto_rx_op_copy_pc = 1;
-          crypto_rx_addr = nts_cookie_start_addr_reg + OFFSET_COOKIE_CIPHERTEXT;
-          crypto_rx_bytes = BYTES_COOKIE_CIPHERTEXT;
-        end
-      CRYPTO_FSM_RX_AUTH_COOKIE_W3:
-        if (i_crypto_busy == 1'b0) begin
-          crypto_fsm_we  = 1;
-          crypto_fsm_new = CRYPTO_FSM_RX_AUTH_COOKIE_W4;
-          crypto_op_cookie_verify = 1;
-        end
-      CRYPTO_FSM_RX_AUTH_COOKIE_W4:
-        if (i_crypto_busy == 1'b0) begin
-          if (i_crypto_verify_tag_ok) begin
-            crypto_fsm_we = 1;
-            crypto_fsm_new = CRYPTO_FSM_DONE_SUCCESS;
-          end else begin
-            crypto_fsm_we = 1;
-            crypto_fsm_new = CRYPTO_FSM_DONE_FAILURE;
-          end
-        end
-      CRYPTO_FSM_RX_AUTH_PACKET:
-        if (i_crypto_busy == 1'b0) begin
-          crypto_fsm_we = 1;
-          crypto_fsm_new = CRYPTO_FSM_RX_AUTH_PACKET_W1;
-          crypto_op_cookie_loadkeys = 1; //Copy C2S, S2C
-        end
-      CRYPTO_FSM_RX_AUTH_PACKET_W1:
-        if (i_crypto_busy == 1'b0) begin
-          crypto_fsm_we = 1;
-          crypto_fsm_new = CRYPTO_FSM_RX_AUTH_PACKET_W2;
-          crypto_rx_op_copy_ad = 1;
-          if (detect_ipv4_reg) begin
-            crypto_rx_addr = ADDR_IPV4_START_NTP; //6*8 + 2 ?
-            crypto_rx_bytes = nts_authenticator_start_addr_reg - ADDR_IPV4_START_NTP;
-          end
-          else if (detect_ipv6_reg) begin
-            crypto_rx_addr = ADDR_IPV6_START_NTP; //8*8 + 6 ?
-            crypto_rx_bytes = nts_authenticator_start_addr_reg - ADDR_IPV6_START_NTP;
-          end
-        end
-      CRYPTO_FSM_RX_AUTH_PACKET_W2:
-        if (i_crypto_busy == 1'b0) begin
-          crypto_fsm_we = 1;
-          crypto_fsm_new = CRYPTO_FSM_RX_AUTH_PACKET_W3;
-          crypto_rx_op_copy_nonce = 1;
-          crypto_rx_addr = nts_authenticator_start_addr_reg + OFFSET_AUTH_NONCE;
-          crypto_rx_bytes = BYTES_AUTH_NONCE;
-        end
-      CRYPTO_FSM_RX_AUTH_PACKET_W3:
-        if (i_crypto_busy == 1'b0) begin
-          crypto_fsm_we = 1;
-          crypto_fsm_new = CRYPTO_FSM_RX_AUTH_PACKET_W4;
-          crypto_rx_op_copy_tag = 1;
-          crypto_rx_addr = nts_authenticator_start_addr_reg + OFFSET_AUTH_TAG;
-          crypto_rx_bytes = BYTES_AUTH_TAG;
-        end
-      CRYPTO_FSM_RX_AUTH_PACKET_W4:
-        //TODO add support for ciphertext in NTS Authenticator and Encrypted Extension
-        if (i_crypto_busy == 1'b0) begin
-          crypto_fsm_we = 1;
-          crypto_fsm_new = CRYPTO_FSM_RX_AUTH_PACKET_W5;
-          //crypto_rx_op_copy_pc = 1;
-          //crypto_rx_addr = nts_authenticator_start_addr_reg + OFFSET_AUTH_PC;
-          //crypto_rx_bytes = ...;
-        end
-      CRYPTO_FSM_RX_AUTH_PACKET_W5:
-        //if (i_crypto_busy == 1'b0) begin //TODO wait for crypto to complete ciphertext loading
-        begin
-          crypto_fsm_we = 1;
-          crypto_fsm_new = CRYPTO_FSM_RX_AUTH_PACKET_W6;
-          crypto_op_c2s_verify_auth = 1;
-        end
-      CRYPTO_FSM_RX_AUTH_PACKET_W6:
-        if (i_crypto_busy == 1'b0) begin
-          if (i_crypto_verify_tag_ok) begin
-            crypto_fsm_we = 1;
-            crypto_fsm_new = CRYPTO_FSM_DONE_SUCCESS;
-          end else begin
-            crypto_fsm_we = 1;
-            crypto_fsm_new = CRYPTO_FSM_DONE_FAILURE;
-          end
-        end
-      CRYPTO_FSM_GEN_COOKIE:
-        if (i_crypto_busy == 1'b0) begin
-          crypto_op_cookie_rencrypt = 1;
-          crypto_fsm_we = 1;
-          crypto_fsm_new = CRYPTO_FSM_WAIT_THEN_SUCCESS;
-        end
-      CRYPTO_FSM_EMIT_FIRST_COOKIE:
-        if (i_crypto_busy == 1'b0) begin
-          crypto_tx_addr = copy_tx_addr_reg;
-          crypto_tx_bytes = 'h68; //TODO declare constant?
-          crypto_tx_op_store_cookie = 1;
-          crypto_fsm_we  = 1;
-          crypto_fsm_new = CRYPTO_FSM_WAIT_THEN_SUCCESS;
-        end
-      CRYPTO_FSM_COOKIEBUF_RESET:
-        if (i_crypto_busy == 1'b0) begin
-          crypto_fsm_we  = 1;
-          crypto_fsm_new = CRYPTO_FSM_WAIT_THEN_SUCCESS;
-          crypto_op_cookiebuf_reset = 1;
-        end
-      CRYPTO_FSM_COOKIEBUF_APPEND:
-        if (i_crypto_busy == 1'b0) begin
-          crypto_fsm_we  = 1;
-          crypto_fsm_new = CRYPTO_FSM_WAIT_THEN_SUCCESS;
-          crypto_cookieprefix = { TAG_NTS_COOKIE, LEN_NTS_COOKIE, keymem_key_id_reg };
-          crypto_op_cookiebuf_append = 1;
-        end
-      CRYPTO_FSM_COPY_TX_TO_AD:
-        if (i_crypto_busy == 1'b0) begin : crypto_fsm_copy_tx_to_ad
-          reg [ADDR_WIDTH+3-1:0] ntp_start;
-          ntp_start = (detect_ipv4_reg) ? ADDR_IPV4_START_NTP : ADDR_IPV6_START_NTP;
-
-          crypto_fsm_we  = 1;
-          crypto_fsm_new = CRYPTO_FSM_WAIT_THEN_SUCCESS;
-          crypto_tx_op_copy_ad = 1;
-          crypto_tx_addr = ntp_start;
-          //crypto_tx_addr = 0;
-          crypto_tx_bytes = copy_tx_addr_reg - ntp_start;
-        end
-      CRYPTO_FSM_TX_AUTH_PACKET:
-        begin
-          crypto_fsm_we  = 1;
-          crypto_fsm_new = CRYPTO_FSM_WAIT_THEN_SUCCESS;
-          crypto_op_s2c_generate_auth = 1;
-        end
-      CRYPTO_FSM_STORE_TAG_NONCE:
-        begin
-          crypto_fsm_we  = 1;
-          crypto_fsm_new = CRYPTO_FSM_STORE_COOKIEBUF;
-          crypto_tx_op_store_nonce_tag = 1;
-          crypto_tx_addr = copy_tx_addr_reg;
-          crypto_tx_bytes = BYTES_AUTH_NONCE + tx_ciphertext_length_reg[ADDR_WIDTH+3-1:0];
-          //$display("%s:%0d **** TX addr: %h tx_bytes: %h", `__FILE__, `__LINE__, crypto_tx_addr, crypto_tx_bytes);
-        end
-      CRYPTO_FSM_STORE_COOKIEBUF:
-        if (i_crypto_busy == 1'b0) begin
-          crypto_fsm_we  = 1;
-          crypto_fsm_new = CRYPTO_FSM_WAIT_THEN_SUCCESS;
-          crypto_tx_op_store_cookiebuf = 1;
-          crypto_tx_addr = copy_tx_addr_reg + BYTES_AUTH_NONCE + BYTES_AUTH_TAG;;
-          crypto_tx_bytes = tx_ciphertext_length_reg[ADDR_WIDTH+3-1:0]; //unsused by crypto for now, but clearer if stated
-        end
-      CRYPTO_FSM_DONE_SUCCESS:
-        begin
-          crypto_fsm_we  = 1;
-          crypto_fsm_new = CRYPTO_FSM_IDLE;
-        end
-      CRYPTO_FSM_DONE_FAILURE:
-        begin
-          crypto_fsm_we  = 1;
-          crypto_fsm_new = CRYPTO_FSM_IDLE;
-        end
-       default:
-         begin
-           crypto_fsm_we = 1;
-           crypto_fsm_new = CRYPTO_FSM_DONE_FAILURE;
-         end
-    endcase
-  end
-
-
-  //----------------------------------------------------------------
-  // Finite State Machine - Set Error Task
-  // Goes to NTS_S_ERROR while setting an error cause
-  //----------------------------------------------------------------
-
-  task nts_set_error_state( input [31:0] cause );
-  begin
-    nts_state_we = 1;
-    nts_state_new = NTS_S_ERROR;
-    error_cause_we = 1;
-    error_cause_new = cause;
-  end
-  endtask
-
-  //----------------------------------------------------------------
-  // NTS Finite State Machine
-  //----------------------------------------------------------------
-
-  always @*
-  begin : NTS_FSM
-    error_cause_we = 0;
-    error_cause_new = 0;
-
-    nts_state_we = 0;
-    nts_state_new = 0;
-
-    timestamp_nts = 0;
-
-    case (nts_state_reg)
-      NTS_S_IDLE:
-        if (state_reg == STATE_PROCESS_NTS) begin
-          nts_state_we = 1;
-          nts_state_new = NTS_S_LENGTH_CHECKS;
-        end
-      NTS_S_LENGTH_CHECKS:
-        begin
-          if (ipdecode_udp_length_reg < ( 8 /* UDP Header */ + 6*8 /* Minimum NTP Payload */ + 8 /* Smallest NTP extension */ ))
-            nts_set_error_state( ERROR_CAUSE_PKT_SHORT );
-          else if (ipdecode_udp_length_reg > 65507 /* IPv4 maximum UDP packet size */)
-            nts_set_error_state( ERROR_CAUSE_PKT_LONG );
-          else if (ipdecode_udp_length_reg[1:0] != 0) /* NTP packets are 7*8 + M(4+4n), always 4 byte aligned */
-            nts_set_error_state( ERROR_CAUSE_PKT_UDP_ALIGN );
-          else if (func_address_within_memory_bounds (ipdecode_offset_ntp_ext_reg, 4) == 'b0)
-            nts_set_error_state( ERROR_CAUSE_NTP_OUT_OF_MEM );
-          else begin
-            nts_state_we = 'b1;
-            nts_state_new = NTS_S_EXTRACT_EXT_FROM_RAM;
-          end
-        end
-      NTS_S_EXTRACT_EXT_FROM_RAM:
-        if (ntp_extension_copied_reg[ntp_extension_counter_reg] == 'b1) begin
-          if (ntp_extension_length_reg[ntp_extension_counter_reg] < (4 + NTP_EXTENSION_MINIMUM_LENGTH)) begin
-            //rfc7822 "While the minimum field length containing required fields is four words (16 octets)"
-            // - interpret this as value+padding (field length) must be larger than 16
-            // - actual Length must be largerthan 20, 16 + 2 (Field Type) + 2 (Length).
-            nts_set_error_state( ERROR_CAUSE_NTP_EXT_SHORT );
-          end else if ((ntp_extension_length_reg[ntp_extension_counter_reg] & 16'h3) != 16'h0) begin
-            //rfc7822 All extension fields are zero-padded to a word (four octets) boundary
-            nts_set_error_state( ERROR_CAUSE_NTP_EXT_ODD );
-          end else if (memory_address_failure_reg == 'b1) begin
-            nts_set_error_state( ERROR_CAUSE_NTP_MEM_FAILURE );
-          end else if (memory_address_lastbyte_read_reg == 1'b1) begin
-            nts_state_we  = 'b1;
-            nts_state_new = NTS_S_EXTENSIONS_EXTRACTED;
-          end else if (ntp_extension_counter_reg==NTP_EXTENSION_FIELDS-1) begin
-            nts_set_error_state( ERROR_CAUSE_NTP_EXT_MANY );
-          end
-        end
-      NTS_S_EXTENSIONS_EXTRACTED:
-        if (nts_basic_sanity_check_packet_ok_reg) begin
-          nts_state_we  = 'b1;
-          nts_state_new = NTS_S_EXTRACT_COOKIE_FROM_RAM;
-        end else begin
-          nts_set_error_state( ERROR_CAUSE_NTP_EXT_INSANE );
-        end
-      NTS_S_EXTRACT_COOKIE_FROM_RAM:
-        if (i_access_port_rd_dv) begin
-          nts_state_we  = 'b1;
-          nts_state_new = NTS_S_VERIFY_KEY_FROM_COOKIE1;
-        end
-      NTS_S_VERIFY_KEY_FROM_COOKIE1:
-        begin
-          if (i_keymem_ready) begin
-            nts_state_we  = 'b1;
-            nts_state_new = NTS_S_VERIFY_KEY_FROM_COOKIE2;
-          end else begin
-            nts_set_error_state( ERROR_CAUSE_KEYMEM_BUSY );
-          end
-        end
-      NTS_S_VERIFY_KEY_FROM_COOKIE2:
-        if (i_keymem_ready && keymem_get_key_with_id_reg == 'b0 ) begin
-          if (i_keymem_key_valid == 'b0) begin
-          //set_error_state( ERROR_CAUSE_KEY_COOKIE_FAIL );
-            nts_state_we  = 'b1;
-            nts_state_new = NTS_S_WRITE_HEADER_IPV4_IPV6; //Kiss-o'-Death
-          end else if (keymem_key_word_reg == 'b111) begin
-            nts_state_we  = 'b1;
-            nts_state_new = NTS_S_RX_AUTH_COOKIE;
-          end
-        end
-      NTS_S_RX_AUTH_COOKIE:
-        case (crypto_fsm_reg)
-          CRYPTO_FSM_DONE_SUCCESS:
-            begin
-              nts_state_we  = 'b1;
-              nts_state_new = NTS_S_RX_AUTH_PACKET;
-            end
-          CRYPTO_FSM_DONE_FAILURE:
-            begin
-              nts_state_we  = 'b1;
-              nts_state_new = NTS_S_WRITE_HEADER_IPV4_IPV6; //Kiss-o'-Death
-            end
-          default: ;
-        endcase
-      NTS_S_RX_AUTH_PACKET:
-        case (crypto_fsm_reg)
-          CRYPTO_FSM_DONE_SUCCESS:
-            begin
-              nts_state_we  = 'b1;
-              nts_state_new = NTS_S_WRITE_HEADER_IPV4_IPV6;
-            end
-          CRYPTO_FSM_DONE_FAILURE:
-            begin
-              nts_state_we  = 'b1;
-              nts_state_new = NTS_S_WRITE_HEADER_IPV4_IPV6; //Kiss-o'-Death
-            end
-          default: ;
-        endcase
-      NTS_S_WRITE_HEADER_IPV4_IPV6:
-        if (detect_ipv4_reg) begin
-          if (tx_header_ipv4_index_reg == 0) begin
-            nts_state_we  = 'b1;
-            nts_state_new = NTS_S_TIMESTAMP;
-          end
-        end else if (detect_ipv6_reg) begin
-          if (tx_header_ipv6_index_reg == 0) begin
-            nts_state_we  = 'b1;
-            nts_state_new = NTS_S_TIMESTAMP;
-          end
-        end else begin
-          nts_set_error_state( ERROR_CAUSE_IPV_CONFUSED );
-        end
-      NTS_S_TIMESTAMP:
-        begin
-          nts_state_we  = 'b1;
-          nts_state_new = NTS_S_TIMESTAMP_WAIT;
-          timestamp_nts = 1;
-        end
-      NTS_S_TIMESTAMP_WAIT:
-        if (i_timestamp_busy) begin
-          timestamp_nts = 1;
-        end else begin
-          if (nts_kiss_of_death_reg) begin
-            nts_state_we  = 'b1;
-            nts_state_new = NTS_S_TX_UPDATE_LENGTH; //Kiss-o'-Death
-          end else begin
-            nts_state_we  = 'b1;
-            nts_state_new = NTS_S_UNIQUE_IDENTIFIER_COPY_0;
-          end
-        end
-      NTS_S_UNIQUE_IDENTIFIER_COPY_0:
-        begin
-          nts_state_we  = 'b1;
-          nts_state_new = NTS_S_UNIQUE_IDENTIFIER_COPY_1;
-        end
-      NTS_S_UNIQUE_IDENTIFIER_COPY_1:
-        if (copy_done) begin
-          nts_state_we  = 'b1;
-          nts_state_new = NTS_S_RETRIVE_CURRENT_KEY_0;
-        end
-      NTS_S_RETRIVE_CURRENT_KEY_0:
-        begin
-          nts_state_we  = 'b1;
-          nts_state_new = NTS_S_RETRIVE_CURRENT_KEY_1;
-        end
-      NTS_S_RETRIVE_CURRENT_KEY_1:
-        if (i_keymem_ready && keymem_get_current_key_reg == 'b0 ) begin
-          if (i_keymem_key_valid == 'b0) begin
-            nts_set_error_state ( ERROR_CAUSE_KEY_CURRENT_FAIL );
-          end else if (keymem_key_word_reg == 'b111) begin
-            nts_state_we  = 'b1;
-            nts_state_new = NTS_S_RESET_EXTRA_COOKIES;
-          end
-        end
-      NTS_S_RESET_EXTRA_COOKIES:
-        if (crypto_fsm_reg == CRYPTO_FSM_DONE_SUCCESS) begin
-          nts_state_we  = 'b1;
-          nts_state_new = NTS_S_ADDITIONAL_COOKIES_CTRL;
-        end
-      NTS_S_ADDITIONAL_COOKIES_CTRL:
-        if (cookies_count_reg < cookies_to_emit) begin // for(i=0; i < nts_valid_placeholders+1; i++) {
-                                                       //   generateCookie();
-                                                       //   storeCookie();
-                                                       // }
-          nts_state_we  = 'b1;
-          nts_state_new = NTS_S_GENERATE_EXTRA_COOKIE;
-        end else begin
-          nts_state_we  = 'b1;
-          nts_state_new = NTS_S_COPY_PACKET_TO_CRYPTO_AD;
-        end
-      NTS_S_GENERATE_EXTRA_COOKIE:
-        if (crypto_fsm_reg == CRYPTO_FSM_DONE_SUCCESS) begin
-          nts_state_we  = 'b1;
-          nts_state_new = NTS_S_RECORD_EXTRA_COOKIE;
-        end
-      NTS_S_RECORD_EXTRA_COOKIE:
-        if (crypto_fsm_reg == CRYPTO_FSM_DONE_SUCCESS) begin
-          nts_state_we  = 'b1;
-          nts_state_new = NTS_S_ADDITIONAL_COOKIES_CTRL; //jump back, while(
-        end
-      NTS_S_COPY_PACKET_TO_CRYPTO_AD:
-        if (crypto_fsm_reg == CRYPTO_FSM_DONE_SUCCESS) begin
-          nts_state_we  = 'b1;
-          nts_state_new = NTS_S_TX_AUTH_PACKET;
-        end
-      NTS_S_TX_AUTH_PACKET:
-        if (crypto_fsm_reg == CRYPTO_FSM_DONE_SUCCESS) begin
-          nts_state_we  = 'b1;
-          nts_state_new = NTS_S_TX_EMIT_TL_NL_CL;
-        end
-      NTS_S_TX_EMIT_TL_NL_CL:
-        begin
-          nts_state_we  = 'b1;
-          nts_state_new = NTS_S_TX_EMIT_NONCE_CIPHERTEXT;
-        end
-      NTS_S_TX_EMIT_NONCE_CIPHERTEXT:
-        if (crypto_fsm_reg == CRYPTO_FSM_DONE_SUCCESS) begin
-          nts_state_we  = 'b1;
-          nts_state_new = NTS_S_TX_UPDATE_LENGTH;
-        end
-      NTS_S_TX_UPDATE_LENGTH:
-        begin
-          nts_state_we  = 'b1;
-          nts_state_new = NTS_S_TX_WRITE_UDP_LENGTH;
-        end
-      NTS_S_TX_WRITE_UDP_LENGTH:
-        begin
-          nts_state_we  = 'b1;
-          nts_state_new = NTS_S_TX_WRITE_UDP_LENGTH_D;
-        end
-      NTS_S_TX_WRITE_UDP_LENGTH_D:
-        if (i_tx_busy == 0) begin
-          nts_state_we  = 'b1;
-          nts_state_new = NTS_S_UDP_CHECKSUM_RESET;
-        end
-      NTS_S_UDP_CHECKSUM_RESET:
-        begin
-          nts_state_we  = 'b1;
-          nts_state_new = NTS_S_UDP_CHECKSUM_PS_SRCADDR;
-        end
-      NTS_S_UDP_CHECKSUM_PS_SRCADDR:
-        begin
-          nts_state_we  = 'b1;
-          nts_state_new = NTS_S_UDP_CHECKSUM_PS_UDPLLEN;
-        end
-      NTS_S_UDP_CHECKSUM_PS_UDPLLEN:
-        if (i_tx_sum_done) begin
-          nts_state_we  = 'b1;
-          nts_state_new = NTS_S_UDP_CHECKSUM_DATAGRAM;
-        end
-      NTS_S_UDP_CHECKSUM_DATAGRAM:
-        if (i_tx_sum_done) begin
-          nts_state_we  = 'b1;
-          nts_state_new = NTS_S_UDP_CHECKSUM_WAIT;
-        end
-      NTS_S_UDP_CHECKSUM_WAIT:
-        if (i_tx_sum_done) begin
-          nts_state_we  = 'b1;
-          nts_state_new = NTS_S_WRITE_NEW_UDP_CSUM;
-        end
-      NTS_S_WRITE_NEW_UDP_CSUM:
-        begin
-          nts_state_we  = 'b1;
-          nts_state_new = NTS_S_WRITE_NEW_UDP_CSUM_DELAY;
-        end
-      NTS_S_WRITE_NEW_UDP_CSUM_DELAY:
-        //TXBUF memory controller require wait cycles delay
-        // between different unaligned burst writes.
-        if (i_tx_busy == 'b0) begin
-          nts_state_we  = 'b1;
-          nts_state_new = NTS_S_WRITE_NEW_IP_HEADER_0;
-        end
-      NTS_S_WRITE_NEW_IP_HEADER_0:
-        begin
-          nts_state_we  = 'b1;
-          nts_state_new = NTS_S_WRITE_NEW_IP_HEADER_1;
-        end
-      NTS_S_WRITE_NEW_IP_HEADER_1:
-        begin
-          nts_state_we  = 'b1;
-          nts_state_new = NTS_S_WRITE_NEW_IP_HEADR_DELAY;
-        end
-      NTS_S_WRITE_NEW_IP_HEADR_DELAY:
-        //TXBUF memory controller require wait cycles delay
-        //between different unaligned burst writes.
-        if (i_tx_busy == 'b0) begin
-          nts_state_we  = 'b1;
-          nts_state_new = NTS_S_TRANSMIT_PACKET;
-        end
-      NTS_S_ERROR:
-        begin
-          nts_state_we = 1;
-          nts_state_new = NTS_S_IDLE;
-        end
-      NTS_S_TRANSMIT_PACKET:
-        begin
-          nts_state_we = 1;
-          nts_state_new = NTS_S_IDLE;
-        end
-      default:
-        begin
-          nts_set_error_state( ERROR_CAUSE_UNKNOWN_STATE );
-        end
-    endcase
   end
 
   //----------------------------------------------------------------
@@ -5062,19 +5414,13 @@ module nts_parser_ctrl #(
           state_new = STATE_TRANSFER_PACKET;
         end
       STATE_PROCESS_NTS:
-        case (nts_state_reg)
-          NTS_S_ERROR:
-            begin
-              state_we  = 'b1;
-              state_new = STATE_DROP_PACKET; //Clear buffers on error
-            end
-          NTS_S_TRANSMIT_PACKET:
-            begin
-              state_we  = 'b1;
-              state_new = STATE_TRANSFER_PACKET;
-            end
-          default: ;
-        endcase
+        if (nts_packet_drop) begin
+          state_we  = 'b1;
+          state_new = STATE_DROP_PACKET; //Clear buffers on error
+        end else if (nts_packet_transmit) begin
+          state_we  = 'b1;
+          state_new = STATE_TRANSFER_PACKET;
+        end
       STATE_PROCESS_NTP:
         case (basic_ntp_state_reg)
           BASIC_NTP_S_ERROR:
@@ -5112,29 +5458,6 @@ module nts_parser_ctrl #(
     endcase
   end
 
-  //----------------------------------------------------------------
-  // Additional Cookie Generation
-  //----------------------------------------------------------------
-
-  always @*
-  begin
-    cookies_count_we = 0;
-    cookies_count_new = 0;
-
-    case (nts_state_reg)
-      NTS_S_RESET_EXTRA_COOKIES:
-        begin
-          cookies_count_we = 1;
-          cookies_count_new = 0;
-        end
-      NTS_S_ADDITIONAL_COOKIES_CTRL:
-        if (cookies_count_reg < cookies_to_emit) begin
-          cookies_count_we = 1;
-          cookies_count_new = cookies_count_reg + 1;
-        end
-      default: ;
-    endcase
-  end
 
   //----------------------------------------------------------------
   // IP Decode
@@ -5723,26 +6046,24 @@ module nts_parser_ctrl #(
 
     case (state_reg)
       STATE_PROCESS_NTS:
-        case (nts_state_reg)
-          NTS_S_IDLE: reset = 1;
-          NTS_S_TX_UPDATE_LENGTH:
-            begin
-              tx_udp_length_we = 1;
-              tx_udp_length_new [15:ADDR_WIDTH+3] = 0;
-              tx_udp_length_new[ADDR_WIDTH+3-1:0] = copy_tx_addr_reg;
-              if (detect_ipv4_reg) begin
-                tx_ipv4_totlen_we = 1;
-                tx_ipv4_totlen_new [15:ADDR_WIDTH+3] = 0;
-                tx_ipv4_totlen_new[ADDR_WIDTH+3-1:0] = copy_tx_addr_reg;
-                tx_ipv4_totlen_new = tx_ipv4_totlen_new - HEADER_LENGTH_ETHERNET;
-                tx_udp_length_new  = tx_udp_length_new - HEADER_LENGTH_ETHERNET - HEADER_LENGTH_IPV4;
-              end else if (detect_ipv6_reg) begin
-                tx_udp_length_new = tx_udp_length_new - HEADER_LENGTH_ETHERNET - HEADER_LENGTH_IPV6;
-              end
-            end
-          NTS_S_UDP_CHECKSUM_WAIT: update_udp_checksum = 1;
-          default: ;
-        endcase
+        if (nts_idle) begin
+          reset = 1;
+        end else if (nts_tx_update_length) begin
+          tx_udp_length_we = 1;
+          tx_udp_length_new [15:ADDR_WIDTH+3] = 0;
+          tx_udp_length_new[ADDR_WIDTH+3-1:0] = copy_tx_addr_reg;
+          if (detect_ipv4_reg) begin
+            tx_ipv4_totlen_we = 1;
+            tx_ipv4_totlen_new [15:ADDR_WIDTH+3] = 0;
+            tx_ipv4_totlen_new[ADDR_WIDTH+3-1:0] = copy_tx_addr_reg;
+            tx_ipv4_totlen_new = tx_ipv4_totlen_new - HEADER_LENGTH_ETHERNET;
+            tx_udp_length_new  = tx_udp_length_new - HEADER_LENGTH_ETHERNET - HEADER_LENGTH_IPV4;
+          end else if (detect_ipv6_reg) begin
+            tx_udp_length_new = tx_udp_length_new - HEADER_LENGTH_ETHERNET - HEADER_LENGTH_IPV6;
+          end
+        end else if (nts_tx_wait_for_checksum) begin
+          update_udp_checksum = 1;
+        end
 
       STATE_PROCESS_NTP:
         case (basic_ntp_state_reg)
@@ -5810,42 +6131,6 @@ module nts_parser_ctrl #(
        timestamp_record_receive_timestamp_we  = 1;
        timestamp_record_receive_timestamp_new = 0;
      end
-  end
-
-  //----------------------------------------------------------------
-  // Output detection signals
-  // Supports debugging/simulations and prevents reg optimizations
-  //----------------------------------------------------------------
-
-  always @*
-  begin : output_detection_signals
-    integer i;
-
-    detect_nts_cookie_index_reg       = 'b0;
-
-    detect_unique_identifier_reg      = 'b0;
-    detect_nts_cookie_reg             = 'b0;
-    detect_nts_cookie_placeholder_reg = 'b0;
-    detect_nts_authenticator_reg      = 'b0;
-
-    for (i = 0; i < NTP_EXTENSION_FIELDS; i = i + 1) begin
-      if (ntp_extension_copied_reg[i]) begin
-
-        if (ntp_extension_tag_reg[i]==TAG_NTS_UNIQUE_IDENTIFIER)
-          detect_unique_identifier_reg      = 'b1;
-
-        if (ntp_extension_tag_reg[i]==TAG_NTS_COOKIE) begin
-          detect_nts_cookie_reg             = 'b1;
-          detect_nts_cookie_index_reg       = i [NTP_EXTENSION_BITS-1:0];
-        end
-
-        if (ntp_extension_tag_reg[i]==TAG_NTS_COOKIE_PLACEHOLDER)
-          detect_nts_cookie_placeholder_reg = 'b1;
-
-        if (ntp_extension_tag_reg[i]==TAG_NTS_AUTHENTICATOR)
-          detect_nts_authenticator_reg      = 'b1;
-      end
-    end
   end
 
   if (SUPPORT_NET) begin : addr_matcher_enabled
@@ -6362,38 +6647,6 @@ module nts_parser_ctrl #(
 
     assign addr_match_ipv4 = 0;
     assign addr_match_ipv6 = 0;
-  end
-
-  //----------------------------------------------------------------
-  // Statistics signals
-  //----------------------------------------------------------------
-
-  always @*
-  begin : statistics
-    statistics_nts_bad_auth_new   = 0;
-    statistics_nts_bad_cookie_new = 0;
-    statistics_nts_bad_keyid_new  = 0;
-    statistics_nts_processed_new  = 0;
-
-    case (nts_state_reg)
-      NTS_S_VERIFY_KEY_FROM_COOKIE2:
-        if (i_keymem_ready && keymem_get_key_with_id_reg == 'b0 ) begin
-          if (i_keymem_key_valid == 'b0) begin
-            statistics_nts_bad_keyid_new = 1;
-          end
-        end
-      NTS_S_RX_AUTH_COOKIE:
-        if (crypto_fsm_reg == CRYPTO_FSM_DONE_FAILURE)
-          statistics_nts_bad_cookie_new = 1;
-      NTS_S_RX_AUTH_PACKET:
-        begin
-           if (crypto_fsm_reg == CRYPTO_FSM_DONE_SUCCESS)
-             statistics_nts_processed_new = 1;
-           if (crypto_fsm_reg == CRYPTO_FSM_DONE_FAILURE)
-             statistics_nts_bad_auth_new = 1;
-        end
-      default: ;
-    endcase
   end
 
 endmodule

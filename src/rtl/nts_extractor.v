@@ -78,7 +78,6 @@ module nts_extractor #(
   localparam TX_IDLE         = 3'd0;
   localparam TX_AWAIT_ACK    = 3'd1;
   localparam TX_WRITE        = 3'd2;
-  localparam TX_SILENT_CYCLE = 3'd3;
 
   localparam ADDR_NAME0             = API_ADDR_BASE + 0;
   localparam ADDR_NAME1             = API_ADDR_BASE + 1;
@@ -730,16 +729,12 @@ module nts_extractor #(
               mac_data <= mac_byte_txreverse( txmem[addr], tx_lwdv );
               mac_data_valid <= tx_lwdv;
 
-              tx_state <= TX_SILENT_CYCLE;
+              tx_state <= TX_IDLE;
               tx_stop <= 1;
             end else begin
               mac_data <= mac_byte_txreverse( txmem[addr], 8'hff );
               mac_data_valid <= 8'hff;
             end
-          end
-        TX_SILENT_CYCLE: //just ensure we do feed D: 64'h0, DV: 8'h0 one cycle so MAC gets packet end.
-          begin
-            tx_state <= TX_IDLE;
           end
         default:
           begin

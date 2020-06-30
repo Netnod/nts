@@ -49,7 +49,7 @@ module nts_top_tb;
   localparam TEST_UI36 = 0;
   localparam TEST_NORMAL = 1;
 
-  localparam TEST_NTP_PERFORMANCE = 0;
+  localparam TEST_NTP_PERFORMANCE = 1;
   localparam TEST_NTP_PERFORMANCE_DELAY_CYCLES = 10;
 
   localparam TEST_NTS_PERFORMANCE = 0;

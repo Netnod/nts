@@ -33,11 +33,11 @@ module nts_top_tb;
 
   localparam DEBUG_CRYPTO_RX = 0;
   localparam DEBUG_MODEL_RX  = 0;
-  localparam DEBUG_GRE       = 1;
+  localparam DEBUG_GRE       = 0;
   localparam DEBUG_ICMP      = 0;
   localparam DEBUG           = 0;
   localparam BENCHMARK       = 1;
-  localparam ENGINES_NTS     = 1;
+  localparam ENGINES_NTS     = 16;
   localparam ENGINES_MINI    = 1;
   localparam ENGINES         = ENGINES_NTS + ENGINES_MINI;
 

@@ -232,10 +232,16 @@ module nts_extractor #(
   reg               engine_mux_start_ready_search;
   reg [ENGINES-1:0] engine_mux_ready_engines_new;
   reg [ENGINES-1:0] engine_mux_ready_engines_reg;
+
   reg engine_mux_ready_found_new;
   reg engine_mux_ready_found_reg;
   integer engine_mux_ready_index_new;
   integer engine_mux_ready_index_reg;
+
+  reg engine_mux_ready_fast_found_new;
+  reg engine_mux_ready_fast_found_reg;
+  integer engine_mux_ready_fast_index_new;
+  integer engine_mux_ready_fast_index_reg;
 
   //----------------------------------------------------------------
   // Extractor MUX - Registers
@@ -317,13 +323,27 @@ module nts_extractor #(
 
     if (engine_mux_start_ready_search) begin
       engine_mux_ready_found_new = 0;
-      if (mux_in_index_reg == 0) begin
-        engine_mux_ready_index_new = ENGINES - 1;
-      end else begin
-        engine_mux_ready_index_new = mux_in_index_reg - 1;
+    end
+  end
+
+  always @*
+  begin : extractor_mux_ready_search3
+    integer i;
+    engine_mux_ready_fast_found_new = 0;
+    engine_mux_ready_fast_index_new = 0;
+    for (i = 0; i < ENGINES; i = i + 1) begin
+      if (engine_mux_ready_engines_reg[i]) begin
+        if (mux_in_ctrl_reg == MUX_SEARCH) begin
+          engine_mux_ready_fast_found_new = 1;
+          engine_mux_ready_fast_index_new = i;
+        end else begin
+          if (i != mux_in_index_reg) begin
+            engine_mux_ready_fast_found_new = 1;
+            engine_mux_ready_fast_index_new = i;
+          end
+        end
       end
     end
-
   end
 
   //----------------------------------------------------------------
@@ -405,6 +425,9 @@ module nts_extractor #(
       if (engine_mux_ready_found_reg) begin
         mux_in_index_we  = 1;
         mux_in_index_new = engine_mux_ready_index_reg;
+      end else if (engine_mux_ready_fast_found_reg) begin
+        mux_in_index_we  = 1;
+        mux_in_index_new = engine_mux_ready_fast_index_reg;
       end
     end
   end
@@ -883,6 +906,8 @@ module nts_extractor #(
       engine_mux_ready_engines_reg <= 0;
       engine_mux_ready_found_reg <= 0;
       engine_mux_ready_index_reg <= 0;
+      engine_mux_ready_fast_found_reg <= 0;
+      engine_mux_ready_fast_index_reg <= 0;
       engine_packet_read_reg <= 0;
       engine_reader_fsm_reg <= 0;
       engine_reader_data_reg <= 0;
@@ -927,6 +952,8 @@ module nts_extractor #(
       engine_mux_ready_engines_reg <= engine_mux_ready_engines_new;
       engine_mux_ready_found_reg <= engine_mux_ready_found_new;
       engine_mux_ready_index_reg <= engine_mux_ready_index_new;
+      engine_mux_ready_fast_found_reg <= engine_mux_ready_fast_found_new;
+      engine_mux_ready_fast_index_reg <= engine_mux_ready_fast_index_new;
 
       engine_packet_read_reg <= engine_packet_read_new;
 

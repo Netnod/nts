@@ -36,6 +36,7 @@ module nts_top_tb;
   localparam DEBUG_GRE       = 0;
   localparam DEBUG_ICMP      = 0;
   localparam DEBUG           = 0;
+  localparam DEBUG_TX        = 1;
   localparam BENCHMARK       = 1;
   localparam ENGINES_NTS     = 16;
   localparam ENGINES_MINI    = 1;
@@ -2155,6 +2156,32 @@ module nts_top_tb;
 
   `define inspect( x ) $display("%s:%0d: INSPECT: %s = %h", `__FILE__, `__LINE__, `"x`", x)
   `define always_inspect( x ) always @* `inspect( x )
+
+  if (DEBUG_TX) begin : debug_tx
+    reg debug_tx_idle;
+    reg [63:0] debug_tx_clock;
+    always @(posedge i_clk or posedge i_areset)
+    if (i_areset) begin
+      debug_tx_idle <= 1;
+      debug_tx_clock <= 0;
+    end else begin
+      if (o_mac_tx_start) begin
+        debug_tx_idle <= 0;
+        if (debug_tx_idle) begin
+          $display("%s:%0d: DEBUG_TX %0d (dec) cycles between packets", `__FILE__, `__LINE__, clock - debug_tx_clock);
+        end else begin
+          $display("%s:%0d: DEBUG_TX WARNING Weird, packet started directly without any cycles between packets", `__FILE__, `__LINE__);
+       end
+      end else if (debug_tx_idle) begin
+        if (o_mac_tx_data_valid != 8'h00) begin
+          $display("%s:%0d: DEBUG_TX WARNING Weird, noise on TX without tx_start", `__FILE__, `__LINE__);
+        end
+      end else if (o_mac_tx_data_valid != 8'hff) begin
+        debug_tx_idle <= 1;
+        debug_tx_clock <= clock;
+      end
+    end
+  end
 
   if (DEBUG_CRYPTO_RX) begin
     `always_inspect( dut.genblk1[0].engine.nts_enabled.crypto.i_rx_wait );

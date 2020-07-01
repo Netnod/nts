@@ -37,6 +37,7 @@ module nts_top_tb;
   localparam DEBUG_ICMP      = 0;
   localparam DEBUG           = 0;
   localparam DEBUG_TX        = 1;
+  localparam DEBUG_EXTRACTOR = 1;
   localparam BENCHMARK       = 1;
   localparam ENGINES_NTS     = 16;
   localparam ENGINES_MINI    = 1;
@@ -2179,6 +2180,32 @@ module nts_top_tb;
       end else if (o_mac_tx_data_valid != 8'hff) begin
         debug_tx_idle <= 1;
         debug_tx_clock <= clock;
+      end
+    end
+  end
+
+  if (DEBUG_EXTRACTOR) begin : debug_extractor
+    reg [63:0] debug_extractor_clock;
+    integer debug_extractor_counter;
+    always @(posedge i_clk or posedge i_areset)
+    if (i_areset) begin
+      debug_extractor_clock <= 0;
+      debug_extractor_counter <= 0;
+    end else begin : tmp
+      integer counter;
+      integer i;
+      counter = 0;
+      for ( i = 0; i < 4; i = i + 1 ) begin
+        if (dut.extractor.buffer_initilized_reg[i]) begin
+          if (dut.extractor.buffer_state_reg[i] == 2'b10) begin
+            counter = counter + 1;
+          end
+        end
+      end
+      if (counter != debug_extractor_counter) begin
+        debug_extractor_clock <= clock;
+        debug_extractor_counter <= counter;
+        $display("%s:%0d: DEBUG_EXTRACTOR Ready buffers change: %0d -> %0d (dec). %0d cycles since last change", `__FILE__, `__LINE__, debug_extractor_counter, counter, clock - debug_extractor_clock);
       end
     end
   end

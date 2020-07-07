@@ -49,7 +49,7 @@ module nts_top_tb;
   localparam TEST_FUZZ_UI_INC   = 4;
 
   localparam TEST_UI36 = 0;
-  localparam TEST_NORMAL = 0;
+  localparam TEST_NORMAL = 1;
 
   localparam TEST_NTP_PERFORMANCE = 1;
   localparam TEST_NTP_PERFORMANCE_DELAY_CYCLES = 10;
@@ -2157,6 +2157,8 @@ module nts_top_tb;
 
   `define inspect( x ) $display("%s:%0d: INSPECT: %s = %h", `__FILE__, `__LINE__, `"x`", x)
   `define always_inspect( x ) always @* `inspect( x )
+  `define inspect_bin( x ) $display("%s:%0d: INSPECT: %s = %b", `__FILE__, `__LINE__, `"x`", x)
+  `define always_inspect_bin( x ) always @* `inspect_bin( x )
 
   if (DEBUG_TX) begin : debug_tx
     reg debug_tx_idle;
@@ -2193,14 +2195,18 @@ module nts_top_tb;
       debug_extractor_counter <= 0;
     end else begin : tmp
       integer counter;
-      integer i;
       counter = 0;
-      for ( i = 0; i < 4; i = i + 1 ) begin
-        if (dut.extractor.buffer_initilized_reg[i]) begin
-          if (dut.extractor.buffer_state_reg[i] == 2'b10) begin
-            counter = counter + 1;
-          end
-        end
+      if (dut.extractor.mux0.o_buffer_ready) begin
+        counter = counter + 1;
+      end
+      if (dut.extractor.mux1.o_buffer_ready) begin
+        counter = counter + 1;
+      end
+      if (dut.extractor.mux2.o_buffer_ready) begin
+        counter = counter + 1;
+      end
+      if (dut.extractor.mux3.o_buffer_ready) begin
+        counter = counter + 1;
       end
       if (counter != debug_extractor_counter) begin
         debug_extractor_clock <= clock;
@@ -2264,6 +2270,23 @@ module nts_top_tb;
 
   if (DEBUG>0) begin
     `always_inspect( dut.dispatcher.mini_state_reg );
+    `always_inspect_bin( dut.extractor.tx.b_ready );
+    `always_inspect_bin( dut.extractor.tx.b_start );
+    `always_inspect_bin( dut.extractor.tx.b_stop );
+    `always_inspect( dut.extractor.tx.buffer0_wr_addr );
+    `always_inspect( dut.extractor.tx.buffer0_wr_en );
+    `always_inspect( dut.extractor.tx.buffer0_wr_data );
+    `always_inspect( dut.extractor.tx.buffer0_length );
+    //`always_inspect( dut.extractor.tx.tx_count );
+    //`always_inspect( dut.extractor.tx.tx_last );
+    //`always_inspect( dut.extractor.tx.tx_lwdv );
+    //`always_inspect( dut.extractor.tx.tx_state );
+    `always_inspect( dut.extractor.tx.tx_start );
+    `always_inspect_bin( dut.extractor.tx.tx_stop );
+    `always_inspect( dut.extractor.tx.tx_start_buffer );
+    `always_inspect( dut.extractor.tx.tx_start_last );
+    `always_inspect( dut.extractor.tx.tx_start_lwdv );
+    `always_inspect( dut.extractor.tx.tx_buffer );
     `always_inspect( dut.engine_extractor_packet_available );
     `always_inspect( dut.engine_extractor_fifo_empty );
     `always_inspect( dut.genblk1[ENGINES_NTS].engine.tx_buffer.i_parser_transfer);
@@ -2315,18 +2338,18 @@ module nts_top_tb;
       $display("%s:%0d dut.engine_extractor_packet_available: %h", `__FILE__, `__LINE__, dut.engine_extractor_packet_available);
     always @*
       $display("%s:%0d dut.engine_extractor_fifo_empty: %h", `__FILE__, `__LINE__, dut.engine_extractor_fifo_empty);
-    always @(posedge i_clk)
-      begin
-        if (dut.extractor.write_wren_reg)
-           $display("%s:%0d extractor.RAM[%h]=%h", `__FILE__, `__LINE__, dut.extractor.write_addr_reg, dut.extractor.write_wdata_reg);
-        if (dut.extractor.buffer_engine_selected_we)
-            $display("%s:%0d extractor, next write buffer: %h", `__FILE__, `__LINE__, dut.extractor.buffer_engine_selected_new);
-      end
-    always @(posedge i_clk)
-      begin
-        if (dut.extractor.buffer_mac_selected_we)
-          $display("%s:%0d extactor mac select buffer: %h", `__FILE__, `__LINE__, dut.extractor.buffer_mac_selected_reg);
-      end
+    //always @(posedge i_clk)
+      //begin
+        //if (dut.extractor.write_wren_reg)
+        //   $display("%s:%0d extractor.RAM[%h]=%h", `__FILE__, `__LINE__, dut.extractor.write_addr_reg, dut.extractor.write_wdata_reg);
+        //if (dut.extractor.buffer_engine_selected_we)
+        //    $display("%s:%0d extractor, next write buffer: %h", `__FILE__, `__LINE__, dut.extractor.buffer_engine_selected_new);
+      //end
+    //always @(posedge i_clk)
+    //  begin
+    //    if (dut.extractor.buffer_mac_selected_we)
+    //      $display("%s:%0d extactor mac select buffer: %h", `__FILE__, `__LINE__, dut.extractor.buffer_mac_selected_reg);
+    //  end
   end
 
   if (DEBUG>2) begin

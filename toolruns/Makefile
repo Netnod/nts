@@ -46,6 +46,11 @@ DISPATCHER_SRC = \
  ../src/rtl/nts_dispatcher_mux.v \
  ../src/rtl/preprocessor.v \
 
+EXTRACTOR_SRC = \
+ ../src/rtl/nts_extractor.v \
+ ../src/rtl/nts_extractor_mux.v \
+ ../src/rtl/nts_extractor_tx.v \
+
 ENGINE_SRC = \
  ../src/rtl/nts_engine/ctrl_gre.v \
  ../src/rtl/nts_engine/icmp.v \
@@ -302,7 +307,7 @@ $(OUTPUT)/nts_top_tb.vvp: \
  ../src/tb/nts_top_tb.v \
  ../src/rtl/nts_top.v \
  $(DISPATCHER_SRC) \
- ../src/rtl/nts_extractor.v \
+ $(EXTRACTOR_SRC) \
  ../src/rtl/memory/bram.v \
  $(ENGINE_SRC)
 ifeq (,$(NO_VLINT))

@@ -98,8 +98,10 @@ module preprocessor (
   wire  [3:0] d_ip_version;
 
   wire  [3:0] d_ip4_ihl;
-  wire  [7:0] d_ip4_protocol;
   wire [15:0] d_ip4_total_length;
+  wire        d_ip4_flags_mf;
+  wire [12:0] d_ip4_fragment_offs;
+  wire  [7:0] d_ip4_protocol;
   wire [15:0] d_ip4_udp_port_dst;
   wire  [2:0] d_ip4_ntp_mode;
 
@@ -137,6 +139,12 @@ module preprocessor (
 
   assign d_ip4_ihl            = input1_reg[11:8];
   assign d_ip4_total_length   = input2_reg[63:48];
+//assign d_ip4_identification = input2_reg[47:32];
+//assign d_ip4_flags_reserved = input2_reg[31];
+//assign d_ip4_flags_df       = input2_reg|30];
+  assign d_ip4_flags_mf       = input2_reg[29];
+  assign d_ip4_fragment_offs  = input2_reg[28:16];
+//assign d_ip4_ttl            = input2_reg[15:8];
   assign d_ip4_protocol       = input2_reg[7:0];
   assign d_ip4_udp_port_dst   = input4_reg[31:16];
 //assign d_ip4_udp_len        = input4_reg[15:0];
@@ -260,12 +268,16 @@ module preprocessor (
     if (d_ether_proto == E_TYPE_IPV4) begin
       if (d_ip_version == 4) begin
         if (d_ip4_ihl == 5) begin
-          if (d_ip4_protocol == IP_PROTO_UDP) begin
-            if (port_is_nts) begin
-              if (d_ip4_ntp_mode != NTP_MODE3_CLIENT) begin
-                decode_bad_packet4 = 1;
-              end else if (length_is_nts) begin
-                decode_is_nts4 = 1;
+          if (d_ip4_flags_mf == 1'b0) begin
+            if (d_ip4_fragment_offs == 13'h0) begin
+              if (d_ip4_protocol == IP_PROTO_UDP) begin
+                if (port_is_nts) begin
+                  if (d_ip4_ntp_mode != NTP_MODE3_CLIENT) begin
+                    decode_bad_packet4 = 1;
+                  end else if (length_is_nts) begin
+                    decode_is_nts4 = 1;
+                  end
+                end
               end
             end
           end

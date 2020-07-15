@@ -2436,6 +2436,7 @@ module nts_parser_ctrl #(
     reg        error_cause_we;
     reg [31:0] error_cause_new;
     reg [31:0] error_cause_reg;
+    reg [31:0] error_cause_delay_reg;
 
     reg                      nts_state_we;
     reg [BITS_NTS_STATE-1:0] nts_state_new;
@@ -3387,6 +3388,7 @@ module nts_parser_ctrl #(
         detect_nts_cookie_index_reg <= 0;
 
         error_cause_reg <= 'b0;
+        error_cause_delay_reg <= 'b0;
 
         keymem_get_current_key_reg <= 'b0;
         keymem_get_key_with_id_reg <= 'b0;
@@ -3435,6 +3437,7 @@ module nts_parser_ctrl #(
 
         if (error_cause_we)
           error_cause_reg <= error_cause_new;
+        error_cause_delay_reg <= error_cause_reg;
 
         keymem_get_current_key_reg <= keymem_get_current_key_new;
 
@@ -3906,7 +3909,7 @@ module nts_parser_ctrl #(
     assign nts_csum_en = tx_cen;
     assign nts_csum_bytes = tx_cb;
 
-    assign nts_error_cause = error_cause_reg;
+    assign nts_error_cause = error_cause_delay_reg;
 
     assign nts_idle = nts_state_reg == NTS_S_IDLE;
 

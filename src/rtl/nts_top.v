@@ -62,7 +62,9 @@ module nts_top #(
   localparam ENGINES = ENGINES_NTS + ENGINES_MINI;
   localparam LAST_DATA_VALID_WIDTH = 4;
 
-  reg               [63:0] ntp_time_reg;
+  reg [63:0] ntp_time_reg;
+  reg [63:0] ntp_time_delay_reg;
+
   reg                [7:0] rx_data_valid_reg;
   reg [MAC_DATA_WIDTH-1:0] rx_data_reg;
   reg                      rx_bad_frame_reg;
@@ -105,13 +107,17 @@ module nts_top #(
 
   always @(posedge i_clk or posedge i_areset)
   if (i_areset) begin
-    ntp_time_reg      <= 0;
+    ntp_time_reg       <= 0;
+    ntp_time_delay_reg <= 0;
+
     rx_data_valid_reg <= 0;
     rx_data_reg       <= 0;
     rx_bad_frame_reg  <= 0;
     rx_good_frame_reg <= 0;
   end else begin
-    ntp_time_reg      <= i_ntp_time;
+    ntp_time_reg       <= ntp_time_delay_reg;
+    ntp_time_delay_reg <= i_ntp_time;
+
     rx_data_valid_reg <= i_mac_rx_data_valid;
     rx_data_reg       <= i_mac_rx_data;
     rx_bad_frame_reg  <= i_mac_rx_bad_frame;

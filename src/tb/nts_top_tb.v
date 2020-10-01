@@ -32,14 +32,14 @@ module nts_top_tb;
   localparam ADDR_WIDTH = 8;
 
   localparam DEBUG_CRYPTO_RX = 0;
-  localparam DEBUG_MODEL_RX  = 0;
+  localparam DEBUG_MODEL_RX  = 1;
   localparam DEBUG_GRE       = 0;
   localparam DEBUG_ICMP      = 0;
-  localparam DEBUG           = 0;
+  localparam DEBUG           = 5;
   localparam DEBUG_TX        = 1;
   localparam DEBUG_EXTRACTOR = 1;
   localparam BENCHMARK       = 1;
-  localparam ENGINES_NTS     = 16;
+  localparam ENGINES_NTS     = 8;
   localparam ENGINES_MINI    = 1;
   localparam ENGINES         = ENGINES_NTS + ENGINES_MINI;
 
@@ -50,8 +50,9 @@ module nts_top_tb;
 
   localparam TEST_UI36 = 0;
   localparam TEST_NORMAL = 1;
+  localparam TEST_BUG_LONG_UID = 1;
 
-  localparam TEST_NTP_PERFORMANCE = 1;
+  localparam TEST_NTP_PERFORMANCE = 0;
   localparam TEST_NTP_PERFORMANCE_DELAY_CYCLES = 10;
 
   localparam TEST_NTS_PERFORMANCE = 0;
@@ -455,6 +456,59 @@ module nts_top_tb;
     128'h9f_49_14_71_73_79_f0_38_6b_2f_e7_29_e2_ac_35_a2, // .I.qsyð8k/ç)â¬5¢
      80'h0c_94_59_5e_4e_1b_8a_46_24_06                    // ..Y^N..F$.
   };
+
+  localparam [3711:0] PACKET_LONG_UID_CAUSES_BUG = {
+      128'h2300_0020_0000_0000_0000_0000_0000_0000, //  #.. ............
+      128'h0000_0000_0000_0000_0000_0000_0000_0000, //  ................
+      128'h0000_0000_0000_0000_dc23_4ab3_6ce4_0607, //  .........#J.l...
+      128'h0104_0110_770a_2206_70c6_e153_6996_14a7, //  ....w.".p..Si...
+      128'hcab7_01f4_ac55_6ee8_cb46_1aa8_5147_5be8, //  .....Un..F..QG[.
+      128'h8caa_d8e6_099b_ba48_bf15_df44_ce35_6ee9, //  .......H...D.5n.
+      128'h7bd2_6227_6220_2477_9e98_9f8c_2460_ecef, //  {.b'b $w....$`..
+      128'h616b_f86d_46e0_7650_918b_02c8_2c03_7162, //  ak.mF.vP....,.qb
+      128'h08ab_b631_b2dd_f1c4_4f37_efb5_c477_de85, //  ...1....O7...w..
+      128'h37e9_6a3c_f8af_a48c_c397_81eb_bee9_2727, //  7.j<..........''
+      128'h6049_7fba_c0e8_673c_a712_7034_969a_c494, //  `I....g<..p4....
+      128'h6527_93d8_8a9b_537c_5151_a0db_c768_d554, //  e'....S|QQ...h.T
+      128'h7f12_8236_5c28_c8ed_fd5e_6f7d_2cee_b9e6, //  ...6\(...^o},...
+      128'h571f_cb60_3c13_d00a_0b91_3d79_f79f_5ad6, //  W..`<.....=y..Z.
+      128'h707c_e7fa_827a_d9da_fce4_7e0f_6450_a9f0, //  p|...z....~.dP..
+      128'hbf62_db17_9744_b6ff_def0_3ecb_7865_c642, //  .b...D....>.xe.B
+      128'h0bbf_bef1_7868_eb11_fabd_7e20_ef13_7807, //  ....xh....~ ..x.
+      128'hfa0c_e408_59b1_d220_52b3_c1aa_590d_de6d, //  ....Y.. R...Y..m
+      128'h92d4_3a34_9a16_086a_d2b7_7c3e_0d93_abca, //  ..:4...j..|>....
+      128'h11f0_c6e7_33ad_c459_26b6_1b74_b8ae_b982, //  ....3..Y&..t....
+      128'h0204_0068_b01d_face_cc43_5797_c310_8300, //  ...h.....CW.....
+      128'he21e_1a92_78c0_a6b8_895b_f623_3251_52e5, //  ....x....[.#2QR.
+      128'h9181_2836_8234_746e_6f6e_f16f_4515_f422, //  ..(6.4tnon.oE.."
+      128'h9aad_0dfb_2023_556f_ae13_0cb0_5877_4762, //  .... #Uo....XwGb
+      128'h6d18_d222_cf39_af30_67e5_01b6_cff0_0038, //  m..".9.0g......8
+      128'h118c_3ac3_ea5b_39b8_4c69_1cbb_70b9_fdb5, //  ..:..[9.Li..p...
+      128'h2dd9_0370_49ed_4d89_0404_0028_0010_0010, //  -..pI.M....(....
+      128'h450c_11cb_4dbf_7dfb_35be_7b8d_0bb5_31b3, //  E...M.}.5.{...1.
+      128'h303d_7b1f_ccd9_1212_1bde_b708_19b3_08f3  //  0={.............
+  };
+
+  localparam [15:0] PACKET_LONG_UID_CAUSES_BUG_PAYLOAD_LEN = 16'd464;
+  localparam [15:0] PACKET_LONG_UID_CAUSES_BUG_UDP_PAYLOAD_LEN = PACKET_LONG_UID_CAUSES_BUG_PAYLOAD_LEN + 8;
+  localparam [15:0] PACKET_LONG_UID_CAUSES_BUG_IP4_TOTLEN = PACKET_LONG_UID_CAUSES_BUG_UDP_PAYLOAD_LEN + 20;
+
+  localparam [335:0] PACKET_LONG_UID_CAUSES_BUG_HEADER =  {
+      128'h00_1c_42_a6_21_1a_00_1c_42_71_99_e6_08_00_45_00,
+      PACKET_LONG_UID_CAUSES_BUG_IP4_TOTLEN,
+      128'h8d_27_40_00_40_11_97_29_0a_00_01_1d_0a_00_01_1c,
+       32'h00_7b_00_7b, //UDP PORTS
+       PACKET_LONG_UID_CAUSES_BUG_UDP_PAYLOAD_LEN,
+       16'b00_00 //CSUM. Just zeros for now
+  };
+
+  localparam [4047:0] PACKET_LONG_UID_CAUSES_BUG_FULL = {
+    PACKET_LONG_UID_CAUSES_BUG_HEADER,
+    PACKET_LONG_UID_CAUSES_BUG
+  };
+
+  localparam  [31:0] NTS_B01DFACE_KEY_ID = 32'hb01dface;
+  localparam [255:0] NTS_B01DFACE_KEY    = 256'h2323c3d99ba5c11d7c7acc6e14b8c5da0c4663475c2e5c3adef46f73bcdec043;
 
   localparam API_ADDR_WIDTH  = 12;
   localparam API_RW_WIDTH    = 32;
@@ -990,7 +1044,7 @@ module nts_top_tb;
   task fuzz_ui;
   begin : fuzz_ui_
     integer i;
-    integer j;
+//    integer j;
     reg [15:0] udp_length;
     reg [15:0] tlv_length;
     reg [65535:0] pkt;
@@ -998,6 +1052,7 @@ module nts_top_tb;
 
     // Test with good UI of arbitrary lengths
 
+/*
     for (i = TEST_FUZZ_UI_START; i <= TEST_FUZZ_UI_STOP; i = i + TEST_FUZZ_UI_INC) begin
       udp_length = 8 + 48 + i[15:0] + 4 + 872;
       tlv_length = i[15:0] + 16'h0004;
@@ -1016,10 +1071,10 @@ module nts_top_tb;
       #20000;
       parser_monitor();
     end
-
+*/
     // Test with bad UI with weird lengths
 
-    for (i = 0; i < 7; i = i + 1) begin
+    for (i = 0; i < 9; i = i + 1) begin
       for (engine = 0; engine < ENGINES; engine = engine + 1) begin
         udp_length = 8 + 48 + 4 + 872;
         case (i)
@@ -1030,6 +1085,8 @@ module nts_top_tb;
           4: tlv_length = 22; // Length is not even 4 octets.
           5: tlv_length = 23; // Length is not even 4 octets.
           6: tlv_length = 16'hfffc; // -4: will overflow arithmetics for sure.
+          7: tlv_length = 180;
+          8: tlv_length = 232;
           default: tlv_length = 0;
         endcase
         $display("%s:%0d: *** Fuzz!!! udp_length: %h Weird tlv_length: %h", `__FILE__, `__LINE__, udp_length, tlv_length);
@@ -1109,10 +1166,11 @@ module nts_top_tb;
             5: install_key_256bit( engine, NTS_TEST_REQUEST_MASTER_KEY_ID_1, NTS_TEST_REQUEST_MASTER_KEY_1, 0 );
             6: install_key_256bit( engine, NTS_TEST_REQUEST_MASTER_KEY_ID_2, NTS_TEST_REQUEST_MASTER_KEY_2, 1 );
             7: install_key_256bit( engine, TRACE_MASTER_KEY_ID, TRACE_MASTER_KEY, 2 );
-            8: init_noncegen(engine);
-            9: set_current_key(engine, 2);
-            10: enable_engine(engine);
-            11: if (engine == 0) enable_dispatcher();
+            8: install_key_256bit( engine, NTS_B01DFACE_KEY_ID, NTS_B01DFACE_KEY, 3 );
+            9: init_noncegen(engine);
+            10: set_current_key(engine, 2);
+            11: enable_engine(engine);
+            12: if (engine == 0) enable_dispatcher();
             17: parser_disable_checksum_checks( engine );
             default: ;
           endcase
@@ -1153,6 +1211,7 @@ module nts_top_tb;
           send_packet({64656'b0, PACKET_IPV6_VANILLA_NTP}, 880, 0);
           send_ipv4_ntpauth_md5( PACKET_IPV4_VANILLA_NTP, TESTKEYMD5_1_KEYID, MD5_VANILLA_NTP_MD5TESTKEY1 );
           send_packet( { 64624'b0, PACKET_NTP_AUTH_TESTKEYSHA_1 }, 912, 0 );
+	  send_packet({61488'b0, PACKET_LONG_UID_CAUSES_BUG_FULL}, 4048, 0);
         end
       end
     end
@@ -1261,6 +1320,15 @@ module nts_top_tb;
         end
       end
       #2000;
+    end
+
+    if (TEST_BUG_LONG_UID) begin : test_long_uid
+      integer i;
+      for (i = 0; i < 100; i = i + 1) begin
+        $display("%s:%0d: PACKET_LONG_UID_CAUSES_BUG", `__FILE__, `__LINE__);
+	send_packet({61488'b0, PACKET_LONG_UID_CAUSES_BUG_FULL}, 4048, 0);
+        #20000;
+      end
     end
 
     if (TEST_NTP_PERFORMANCE) begin : ntp_perf
@@ -2268,8 +2336,53 @@ module nts_top_tb;
     `always_inspect( dut.genblk1[ENGINES_NTS].engine.parser.ipdecode_ip4_protocol_reg );
   end
 
+  if (DEBUG>1) begin
+    always @(posedge dut.dispatcher.preprocessor.i_clk)
+      if ( dut.dispatcher.preprocessor.d_sof ) begin
+        $display("%s:%0d: PREPROCESSOR DEBUG: ip:%h ihl:%h tlen:%0d(dec) mf:%h f:%h proto:%h udpport:%d(dec) ntpmode:%h", `__FILE__, `__LINE__,
+          dut.dispatcher.preprocessor.d_ip_version,
+          dut.dispatcher.preprocessor.d_ip4_ihl,
+          dut.dispatcher.preprocessor.d_ip4_total_length,
+          dut.dispatcher.preprocessor.d_ip4_flags_mf,
+          dut.dispatcher.preprocessor.d_ip4_fragment_offs,
+          dut.dispatcher.preprocessor.d_ip4_protocol,
+          dut.dispatcher.preprocessor.d_ip4_udp_port_dst,
+          dut.dispatcher.preprocessor.d_ip4_ntp_mode
+        );
+    end
+  end
+
+  if (DEBUG>1) begin
+    always @(posedge dut.genblk1[0].engine.nts_enabled.crypto.i_clk) begin
+      if ( dut.genblk1[0].engine.nts_enabled.crypto.core_start_reg ) begin
+        $display("%s:%0d: NTS CRYPTO DEBUG: encdec:%h ad:%h,%0d(dec) nonce:%h,%0d(dec) pc::%h,%0d(dec)", `__FILE__, `__LINE__,
+          dut.genblk1[0].engine.nts_enabled.crypto.core_config_encdec_reg,
+          dut.genblk1[0].engine.nts_enabled.crypto.core_ad_start,
+          dut.genblk1[0].engine.nts_enabled.crypto.core_ad_length_reg,
+          dut.genblk1[0].engine.nts_enabled.crypto.core_nonce_start,
+          dut.genblk1[0].engine.nts_enabled.crypto.core_nonce_length,
+          dut.genblk1[0].engine.nts_enabled.crypto.core_pc_start,
+          dut.genblk1[0].engine.nts_enabled.crypto.core_pc_length
+        );
+      end
+      if ( dut.genblk1[0].engine.nts_enabled.crypto.ram_a_en && dut.genblk1[0].engine.nts_enabled.crypto.ram_a_we ) begin
+        $display("%s:%0d: NTS CRYPTO WR_A DEBUG: addr:%h data:%h", `__FILE__, `__LINE__,
+          dut.genblk1[0].engine.nts_enabled.crypto.ram_a_addr,
+          dut.genblk1[0].engine.nts_enabled.crypto.ram_a_wdata
+        );
+      end
+      if ( dut.genblk1[0].engine.nts_enabled.crypto.ram_b_en && dut.genblk1[0].engine.nts_enabled.crypto.ram_b_we ) begin
+        $display("%s:%0d: NTS CRYPTO WR_B DEBUG: addr:%h data:%h", `__FILE__, `__LINE__,
+          dut.genblk1[0].engine.nts_enabled.crypto.ram_b_addr,
+          dut.genblk1[0].engine.nts_enabled.crypto.ram_b_wdata
+        );
+      end
+    end
+  end
+
   if (DEBUG>0) begin
     `always_inspect( dut.dispatcher.mini_state_reg );
+    `always_inspect( dut.dispatcher.nts_state_reg );
     `always_inspect_bin( dut.extractor.tx.b_ready );
     `always_inspect_bin( dut.extractor.tx.b_start );
     `always_inspect_bin( dut.extractor.tx.b_stop );

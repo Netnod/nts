@@ -406,7 +406,6 @@ module nts_parser_ctrl #(
   localparam CRYPTO_FSM_RX_AUTH_PACKET_W5    = 'h0c; // wait for complete, issue packet verify
   localparam CRYPTO_FSM_RX_AUTH_PACKET_W6    = 'h0d; // wait for complete, signal result
   localparam CRYPTO_FSM_GEN_COOKIE           = 'h0e; // issue cookie renecrypt
-  localparam CRYPTO_FSM_EMIT_FIRST_COOKIE    = 'h0f; // issue tx emit cookie
   localparam CRYPTO_FSM_COOKIEBUF_RESET      = 'h10; // issue cookiebuf reset
   localparam CRYPTO_FSM_COOKIEBUF_APPEND     = 'h11; // issue cookiebuf append
   localparam CRYPTO_FSM_COPY_TX_TO_AD        = 'h12; // issue copy
@@ -3212,14 +3211,6 @@ module nts_parser_ctrl #(
           if (i_crypto_busy == 1'b0) begin
             crypto_op_cookie_rencrypt = 1;
             crypto_fsm_we = 1;
-            crypto_fsm_new = CRYPTO_FSM_WAIT_THEN_SUCCESS;
-          end
-        CRYPTO_FSM_EMIT_FIRST_COOKIE:
-          if (i_crypto_busy == 1'b0) begin
-            crypto_tx_addr = copy_tx_addr_reg;
-            crypto_tx_bytes = 'h68; //TODO declare constant?
-            crypto_tx_op_store_cookie = 1;
-            crypto_fsm_we  = 1;
             crypto_fsm_new = CRYPTO_FSM_WAIT_THEN_SUCCESS;
           end
         CRYPTO_FSM_COOKIEBUF_RESET:

@@ -1183,12 +1183,12 @@ module nts_verify_secure #(
           //$display("%s:%0d tx_ctr_reg %0d < tx_ctr_max_reg %0d", `__FILE__, `__LINE__, tx_ctr_reg, tx_ctr_max_reg);
             if (ibuf_tx_read_data_valid_reg) begin
               tx_ctr_rec_we = 1;
-              tx_ctr_rec_new = tx_ctr_rec_reg + 1;
+              tx_ctr_rec_new = tx_ctr_rec_reg + 8;
             end
           if (tx_ctr_reg < tx_ctr_max_reg) begin
             //Loop counter increment
             tx_ctr_we = 1;
-            tx_ctr_new = tx_ctr_reg + 1;
+            tx_ctr_new = tx_ctr_reg + 8;
 
             //TXbuf read
             txo_rd_en_new = 1;

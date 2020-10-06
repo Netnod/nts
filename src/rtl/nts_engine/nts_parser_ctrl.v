@@ -31,6 +31,7 @@
 module nts_parser_ctrl #(
   parameter ADDR_WIDTH = 8,
   parameter NTS_MAX_ALLOWED_PLACEHOLDERS = 7, // 5.7 The client SHOULD NOT include more than seven NTS Cookie Placeholder extension fields in a request.
+  parameter NTS_OPTIMIZE_ERROR_REG_SETTING = 1,
   parameter [15:0] TAG_NTS_UNIQUE_IDENTIFIER  = 'h0104,
   parameter [15:0] TAG_NTS_COOKIE             = 'h0204,
   parameter [15:0] TAG_NTS_COOKIE_PLACEHOLDER = 'h0304,
@@ -2435,7 +2436,9 @@ module nts_parser_ctrl #(
     reg        error_cause_we;
     reg [31:0] error_cause_new;
     reg [31:0] error_cause_reg;
-    reg [31:0] error_cause_delay_reg;
+    /* verilator lint_off UNUSED */
+    reg [31:0] error_cause_delay_reg; //NTS_OPTIMIZE_ERROR_REG_SETTING disables all of these regs
+    /* verilator lint_on UNUSED */
 
     reg                      nts_state_we;
     reg [BITS_NTS_STATE-1:0] nts_state_new;
@@ -3900,7 +3903,10 @@ module nts_parser_ctrl #(
     assign nts_csum_en = tx_cen;
     assign nts_csum_bytes = tx_cb;
 
-    assign nts_error_cause = error_cause_delay_reg;
+    if (NTS_OPTIMIZE_ERROR_REG_SETTING == 0)
+      assign nts_error_cause = error_cause_delay_reg;
+    else
+      assign nts_error_cause = 32'b0;
 
     assign nts_idle = nts_state_reg == NTS_S_IDLE;
 

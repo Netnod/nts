@@ -134,17 +134,17 @@ module nts_verify_secure #(
   localparam NONCE_IDLE    = 0;
   localparam NONCE_WAITING = 1;
 
-  localparam BRAM_WIDTH = 10;
+  localparam BRAM_WIDTH = ADDR_WIDTH + 2;
   localparam [15:BRAM_WIDTH-1] CORE_ADDR_MSB_ZERO=0;
   localparam [19:BRAM_WIDTH+3] CORE_LENGTH_MSB_ZERO=0; // {MSB, length64, LSB}, LSB=3'b000
 
   localparam CRHONY_COOKIE_DIV128 = 4; //4 == 512/128;
 
   /* MEM8 addresses must be lsb=0 */
-  localparam [BRAM_WIDTH-1:0] MEM8_ADDR_NONCE   =   0;
-  localparam [BRAM_WIDTH-1:0] MEM8_ADDR_PC      = 256;
-  localparam [BRAM_WIDTH-1:0] MEM8_ADDR_AD      = 512;
-  localparam [BRAM_WIDTH-1:0] MEM8_ADDR_COOKIES = 768;
+  localparam [BRAM_WIDTH-1:0] MEM8_ADDR_NONCE   = 0;
+  localparam [BRAM_WIDTH-1:0] MEM8_ADDR_PC      = 1<<ADDR_WIDTH;
+  localparam [BRAM_WIDTH-1:0] MEM8_ADDR_AD      = 2<<ADDR_WIDTH;
+  localparam [BRAM_WIDTH-1:0] MEM8_ADDR_COOKIES = 3<<ADDR_WIDTH;
 
   localparam MODE_DECRYPT = 0;
   localparam MODE_ENCRYPT = 1;

@@ -1,5 +1,15 @@
+//======================================================================
 //
-// Copyright (c) 2019, The Swedish Post and Telecom Authority (PTS)
+// bram_dpge.v
+// -----------
+// Dual-Port RAM with One Enable Controlling Both Ports
+// Derived from Xilinx X9744
+//
+//
+// Author: Peter Magnusson
+//
+//
+// Copyright (c) 2019, Netnod Internet Exchange i Sverige AB (Netnod).
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -23,13 +33,7 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
-
-//
-// Author: Peter Magnusson, Assured AB
-//
-
-// Dual-Port RAM with One Enable Controlling Both Ports
-// Derived from Xilinx X9744
+//======================================================================
 
 module bram_dpge #(
     //Parameters

@@ -1,5 +1,13 @@
+//======================================================================
 //
-// Copyright (c) 2020, The Swedish Post and Telecom Authority (PTS)
+// counter64.v
+// -----------
+// 64-bit counter.
+//
+// Author: Peter Magnusson
+//
+//
+// Copyright (c) 2019, Netnod Internet Exchange i Sverige AB (Netnod).
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -23,9 +31,7 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
-
-//
-// Author: Peter Magnusson, Assured AB
+//======================================================================
 //
 
 module counter64 (

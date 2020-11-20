@@ -1,5 +1,13 @@
+//======================================================================
 //
-// Copyright (c) 2020, The Swedish Post and Telecom Authority (PTS)
+// ctrl_gre.v
+// ----------
+// Control for the default packets GRE wrapping functionality.
+//
+// Author: Peter Magnusson
+//
+//
+// Copyright (c) 2019, Netnod Internet Exchange i Sverige AB (Netnod).
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -23,10 +31,8 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
+//======================================================================
 
-//
-// Author: Peter Magnusson, Assured AB
-//
 module ctrl_gre #(
   parameter ADDR_WIDTH = 10
 ) (
@@ -175,7 +181,7 @@ module ctrl_gre #(
   assign o_responder_en = response_en_new;
   assign o_responder_data = response_data_new;
   assign o_responder_length_we = response_length_we;
-  assign o_responder_length_new = response_packet_total_length_reg; 
+  assign o_responder_length_new = response_packet_total_length_reg;
   assign o_responder_update_length = responder_update_length;
 
   //----------------------------------------------------------------
@@ -261,7 +267,7 @@ module ctrl_gre #(
   begin
     tx_ipv4_totlen_new = 0;
     tx_ipv4_totlen_new[ADDR_WIDTH+3-1:0] = i_memory_bound;
-    tx_ipv4_totlen_new = tx_ipv4_totlen_new 
+    tx_ipv4_totlen_new = tx_ipv4_totlen_new
                        + HEADER_LENGTH_IPV4
                        + HEADER_LENGTH_GRE
                        - HEADER_LENGTH_ETHERNET;

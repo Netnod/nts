@@ -1,5 +1,13 @@
+#======================================================================
 #
-# Copyright (c) 2019-2020, The Swedish Post and Telecom Authority (PTS)
+# Makefile
+# --------
+# Makefile for linting, building and running NTS som targets.
+#
+# Author: Peter Magnusson
+#
+#
+# Copyright (c) 2019, Netnod Internet Exchange i Sverige AB (Netnod).
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -23,10 +31,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
-
-#
-# Author: Peter Magnusson, Assured AB
-#
+#======================================================================
 
 .PHONY: DIRS VVP clean default all verilator \
  lint lint_rtl lint_memory lint_engine lint_dispatcher lint_top int_tb lint-submodules \
@@ -337,4 +342,6 @@ ifeq (,$(NO_VLINT))
 endif
 	iverilog -o $@ $^
 
-
+#======================================================================
+# EOF Makefile
+#======================================================================

@@ -1,5 +1,13 @@
+//======================================================================
 //
-// Copyright (c) 2019, The Swedish Post and Telecom Authority (PTS)
+// memory_ctrl.v
+// -------------
+// memory controller.
+//
+// Author: Peter Magnusson
+//
+//
+// Copyright (c) 2019, Netnod Internet Exchange i Sverige AB (Netnod).
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -23,10 +31,7 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
-
-//
-// Author: Peter Magnusson, Assured AB
-//
+//======================================================================
 
 module memory_ctrl #(
   parameter        ADDR_WIDTH = 8,

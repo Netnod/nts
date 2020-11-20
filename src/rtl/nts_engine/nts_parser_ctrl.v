@@ -1,5 +1,13 @@
+//======================================================================
 //
-// Copyright (c) 2019-2020, The Swedish Post and Telecom Authority (PTS)
+// nts_parser_ctrl.v
+// -----------------
+// Packet parser and control in the NTS engine.
+//
+// Author: Peter Magnusson
+//
+//
+// Copyright (c) 2019, Netnod Internet Exchange i Sverige AB (Netnod).
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -23,10 +31,7 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
-
-//
-// Author: Peter Magnusson, Assured AB
-//
+//======================================================================
 
 module nts_parser_ctrl #(
   parameter ADDR_WIDTH = 8,
@@ -3622,7 +3627,7 @@ module nts_parser_ctrl #(
             tx_up_len = 1;
           end
         NTS_S_TX_WRITE_UDP_LENGTH: nts_tx_control_update_udp_header();
-        NTS_S_UDP_CHECKSUM_RESET: 
+        NTS_S_UDP_CHECKSUM_RESET:
           begin
             tx_cr = 1;
             tx_crv = 16'h0011; //Static pseudo header. 00: Zero pre-padding. 0x11/17: UDP protocol.
@@ -3660,7 +3665,7 @@ module nts_parser_ctrl #(
             end
           end
         NTS_S_WRITE_NEW_UDP_CSUM: nts_tx_control_update_udp_header();
-        NTS_S_WRITE_NEW_IP_HEADER_0:  
+        NTS_S_WRITE_NEW_IP_HEADER_0:
           if (detect_ipv4_reg) begin
             tx_a   = HEADER_LENGTH_ETHERNET;
             tx_wen = 1;
@@ -3994,7 +3999,7 @@ module nts_parser_ctrl #(
     assign nts_csum_reset_en = 0;
     assign nts_csum_reset_value = 0;
     assign nts_csum_en = 0;
-    assign nts_csum_bytes = 0; 
+    assign nts_csum_bytes = 0;
 
     assign nts_error_cause = 0;
 

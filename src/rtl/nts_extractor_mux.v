@@ -1,5 +1,13 @@
+//======================================================================
 //
-// Copyright (c) 2020, The Swedish Post and Telecom Authority (PTS)
+// nts_extractor_mux.v
+// -------------------
+// MUX for the NTS packet extractor.
+//
+// Author: Peter Magnusson
+//
+//
+// Copyright (c) 2019, Netnod Internet Exchange i Sverige AB (Netnod).
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -23,10 +31,7 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
-
-//
-// Author: Peter Magnusson, Assured AB
-//
+//======================================================================
 
 module nts_extractor_mux #(
   parameter ADDR_WIDTH = 8,
@@ -482,7 +487,7 @@ module nts_extractor_mux #(
   //----------------------------------------------------------------
 
   always @(posedge i_clk or posedge i_areset)
-  begin 
+  begin
     if (i_areset) begin
       buffer_addr_reg <= 0;
       buffer_state_reg <= 0;

@@ -1,5 +1,13 @@
+//======================================================================
 //
-// Copyright (c) 2020, The Swedish Post and Telecom Authority (PTS)
+// nts_extractor.v
+// ---------------
+// NTS packet extractor (from engines).
+//
+// Author: Peter Magnusson
+//
+//
+// Copyright (c) 2019, Netnod Internet Exchange i Sverige AB (Netnod).
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -23,10 +31,7 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
-
-//
-// Author: Peter Magnusson, Assured AB
-//
+//======================================================================
 
 module nts_extractor #(
   parameter API_ADDR_WIDTH = 12,
@@ -184,9 +189,9 @@ module nts_extractor #(
 
   assign o_api_read_data = api_read_data;
 
-  assign { mux3e_pkt_available, 
-           mux2e_pkt_available, 
-           mux1e_pkt_available, 
+  assign { mux3e_pkt_available,
+           mux2e_pkt_available,
+           mux1e_pkt_available,
            mux0e_pkt_available } = i_engine_packet_available;
 
   assign { mux3e_fifo_empty,
@@ -271,7 +276,7 @@ module nts_extractor #(
     .o_mac_tx_data       ( o_mac_tx_data       )
   );
 
-  nts_extractor_mux #( 
+  nts_extractor_mux #(
     .ADDR_WIDTH( ADDR_WIDTH   ),
     .ENGINES   ( ENGINES_DIV4 )
   ) mux0 (
@@ -293,8 +298,8 @@ module nts_extractor #(
     .o_buffer_wr_en           ( mux0b_wr_en         ),
     .o_buffer_wr_data         ( mux0b_wr_data       )
   );
-   
-  nts_extractor_mux #( 
+
+  nts_extractor_mux #(
     .ADDR_WIDTH( ADDR_WIDTH   ),
     .ENGINES   ( ENGINES_DIV4 )
   ) mux1 (
@@ -316,8 +321,8 @@ module nts_extractor #(
     .o_buffer_wr_en           ( mux1b_wr_en         ),
     .o_buffer_wr_data         ( mux1b_wr_data       )
   );
-   
-  nts_extractor_mux #( 
+
+  nts_extractor_mux #(
     .ADDR_WIDTH( ADDR_WIDTH   ),
     .ENGINES   ( ENGINES_DIV4 )
   ) mux2 (
@@ -339,8 +344,8 @@ module nts_extractor #(
     .o_buffer_wr_en           ( mux2b_wr_en         ),
     .o_buffer_wr_data         ( mux2b_wr_data       )
   );
-   
-  nts_extractor_mux #( 
+
+  nts_extractor_mux #(
     .ADDR_WIDTH( ADDR_WIDTH  ),
     .ENGINES   ( ENGINES_REM )
   ) mux3 (
@@ -362,7 +367,7 @@ module nts_extractor #(
     .o_buffer_wr_en           ( mux3b_wr_en         ),
     .o_buffer_wr_data         ( mux3b_wr_data       )
   );
-   
+
 
 
   //----------------------------------------------------------------

@@ -332,73 +332,101 @@ module nts_engine #(
   //----------------------------------------------------------------
 
   /* verilator lint_off UNUSED */
+  wire [31:0] counter_nts_bad_auth_msb;
   wire [31:0] counter_nts_bad_auth_lsb;
+  reg         counter_nts_bad_auth_lsb_we;
 
+  wire [31:0] counter_nts_bad_cookie_msb;
   wire [31:0] counter_nts_bad_cookie_lsb;
+  reg         counter_nts_bad_cookie_lsb_we;
 
+  wire [31:0] counter_nts_bad_keyid_msb;
   wire [31:0] counter_nts_bad_keyid_lsb;
+  reg        counter_nts_bad_keyid_lsb_we;
 
+  wire [31:0] counter_nts_processed_msb;
   wire [31:0] counter_nts_processed_lsb;
+  reg         counter_nts_processed_lsb_we;
 
+  wire [31:0] counter_error_crypto_msb;
   wire [31:0] counter_error_crypto_lsb;
+  reg         counter_error_crypto_lsb_we;
 
+  wire  [31:0] counter_error_txbuf_msb;
   wire  [31:0] counter_error_txbuf_lsb;
+  reg          counter_error_txbuf_lsb_we;
   /* verilator lint_on UNUSED */
 
   reg [31:0] systick32_reg;
 
   if (SUPPORT_NTS) begin
-    counter32 counter_nts_bad_auth (
+    counter64 counter_nts_bad_auth (
        .i_areset     ( i_areset                       ),
        .i_clk        ( i_clk                          ),
        .i_inc        ( parser_statistics_nts_bad_auth ),
        .i_rst        ( 1'b0                           ),
+       .i_lsb_sample ( counter_nts_bad_auth_lsb_we    ),
+       .o_msb        ( counter_nts_bad_auth_msb       ),
        .o_lsb        ( counter_nts_bad_auth_lsb       )
     );
 
-    counter32 counter_nts_bad_cookie (
+    counter64 counter_nts_bad_cookie (
        .i_areset     ( i_areset                         ),
        .i_clk        ( i_clk                            ),
        .i_inc        ( parser_statistics_nts_bad_cookie ),
        .i_rst        ( 1'b0                             ),
+       .i_lsb_sample ( counter_nts_bad_cookie_lsb_we    ),
+       .o_msb        ( counter_nts_bad_cookie_msb       ),
        .o_lsb        ( counter_nts_bad_cookie_lsb       )
     );
 
-    counter32 counter_nts_bad_keyid (
+    counter64 counter_nts_bad_keyid (
        .i_areset     ( i_areset                        ),
        .i_clk        ( i_clk                           ),
        .i_inc        ( parser_statistics_nts_bad_keyid ),
        .i_rst        ( 1'b0                            ),
+       .i_lsb_sample ( counter_nts_bad_keyid_lsb_we    ),
+       .o_msb        ( counter_nts_bad_keyid_msb       ),
        .o_lsb        ( counter_nts_bad_keyid_lsb       )
     );
 
-    counter32 counter_nts_processed (
+    counter64 counter_nts_processed (
        .i_areset     ( i_areset                        ),
        .i_clk        ( i_clk                           ),
        .i_inc        ( parser_statistics_nts_processed ),
        .i_rst        ( 1'b0                            ),
+       .i_lsb_sample ( counter_nts_processed_lsb_we    ),
+       .o_msb        ( counter_nts_processed_msb       ),
        .o_lsb        ( counter_nts_processed_lsb       )
     );
   end else begin
+    assign counter_nts_bad_auth_msb = 0;
     assign counter_nts_bad_auth_lsb = 0;
+    assign counter_nts_bad_cookie_msb = 0;
     assign counter_nts_bad_cookie_lsb = 0;
+    assign counter_nts_bad_keyid_msb = 0;
     assign counter_nts_bad_keyid_lsb = 0;
+    assign counter_nts_processed_msb = 0;
     assign counter_nts_processed_lsb = 0;
   end
 
-  counter32 counter_error_crypto (
+  counter64 counter_error_crypto (
      .i_areset     ( i_areset                    ),
      .i_clk        ( i_clk                       ),
      .i_inc        ( crypto_error                ),
      .i_rst        ( 1'b0                        ),
+     .i_lsb_sample ( counter_error_crypto_lsb_we ),
+     .o_msb        ( counter_error_crypto_msb    ),
      .o_lsb        ( counter_error_crypto_lsb    )
   );
 
-  counter32 counter_error_txbuf (
+  counter64 counter_error_txbuf (
      .i_areset     ( i_areset                   ),
      .i_clk        ( i_clk                      ),
      .i_inc        ( txbuf_error                ),
      .i_rst        ( 1'b0                       ),
+     .i_lsb_sample ( counter_error_txbuf_lsb_we ),
+     .o_msb        ( counter_error_txbuf_msb    ),
      .o_lsb        ( counter_error_txbuf_lsb    )
   );
 
@@ -462,23 +490,49 @@ module nts_engine #(
   always @*
   begin
     api_read_data_debug = 0;
+    counter_nts_bad_auth_lsb_we = 0;
+    counter_nts_bad_cookie_lsb_we = 0;
+    counter_nts_bad_keyid_lsb_we = 0;
+    counter_nts_processed_lsb_we = 0;
+    counter_error_crypto_lsb_we = 0;
+    counter_error_txbuf_lsb_we = 0;
 
     if (api_cs_debug) begin
       if (api_we) begin
         ;
       end else begin
         case (api_address)
+          ADDR_DEBUG_NTS_PROCESSED:
+            begin
+              api_read_data_debug = counter_nts_processed_msb;
+              counter_nts_processed_lsb_we = 1;
+            end
           ADDR_DEBUG_NTS_PROCESSED + 1:
             begin
               api_read_data_debug = counter_nts_processed_lsb;
+            end
+          ADDR_DEBUG_NTS_BAD_COOKIE:
+            begin
+              api_read_data_debug = counter_nts_bad_cookie_msb;
+              counter_nts_bad_cookie_lsb_we = 1;
             end
           ADDR_DEBUG_NTS_BAD_COOKIE + 1:
             begin
               api_read_data_debug = counter_nts_bad_cookie_lsb;
             end
+          ADDR_DEBUG_NTS_BAD_AUTH:
+            begin
+              api_read_data_debug = counter_nts_bad_auth_msb;
+              counter_nts_bad_auth_lsb_we = 1;
+            end
           ADDR_DEBUG_NTS_BAD_AUTH + 1:
             begin
               api_read_data_debug = counter_nts_bad_auth_lsb;
+            end
+          ADDR_DEBUG_NTS_BAD_KEYID:
+            begin
+              api_read_data_debug = counter_nts_bad_keyid_msb;
+              counter_nts_bad_keyid_lsb_we = 1;
             end
           ADDR_DEBUG_NTS_BAD_KEYID + 1:
             begin
@@ -486,8 +540,18 @@ module nts_engine #(
             end
           ADDR_DEBUG_NAME: api_read_data_debug = DEBUG_NAME;
           ADDR_DEBUG_SYSTICK32: api_read_data_debug = systick32_reg;
+          ADDR_DEBUG_ERROR_CRYPTO:
+            begin
+              api_read_data_debug = counter_error_crypto_msb;
+              counter_error_crypto_lsb_we = 1;
+            end
           ADDR_DEBUG_ERROR_CRYPTO + 1:
             api_read_data_debug = counter_error_crypto_lsb;
+          ADDR_DEBUG_ERROR_TXBUF:
+            begin
+               api_read_data_debug = counter_error_txbuf_msb;
+               counter_error_txbuf_lsb_we = 1;
+            end
           ADDR_DEBUG_ERROR_TXBUF + 1:
             api_read_data_debug = counter_error_txbuf_lsb;
           default: ;

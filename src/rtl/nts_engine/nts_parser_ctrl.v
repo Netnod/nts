@@ -179,6 +179,7 @@ module nts_parser_ctrl #(
   localparam ADDR_ERROR_CAUSE  = 'h15;
   localparam ADDR_ERROR_SIZE   = 'h16;
 
+  /*
   localparam ADDR_CSUM_IPV4_BAD0       = 'h1c;
   localparam ADDR_CSUM_IPV4_BAD1       = 'h1d;
   localparam ADDR_CSUM_IPV4_GOOD0      = 'h1e;
@@ -199,6 +200,7 @@ module nts_parser_ctrl #(
   localparam ADDR_CSUM_IPV6_UDP_BAD1   = 'h2d;
   localparam ADDR_CSUM_IPV6_UDP_GOOD0  = 'h2e;
   localparam ADDR_CSUM_IPV6_UDP_GOOD1  = 'h2f;
+  */
 
   localparam ADDR_MAC_CTRL       = 'h30;
   localparam ADDR_IPV4_CTRL      = 'h31;
@@ -1029,6 +1031,7 @@ module nts_parser_ctrl #(
   wire [31:0] counter_ipv6_nd_pass_msb;
   wire [31:0] counter_ipv6_nd_pass_lsb;
 
+  /*
   reg         counter_ipv4checksum_bad_inc;
   reg         counter_ipv4checksum_bad_lsb_we;
   wire [31:0] counter_ipv4checksum_bad_msb;
@@ -1078,7 +1081,7 @@ module nts_parser_ctrl #(
   reg         counter_ipv6udp_checksum_good_lsb_we;
   wire [31:0] counter_ipv6udp_checksum_good_msb;
   wire [31:0] counter_ipv6udp_checksum_good_lsb;
-
+*/
   wire [31:0] counter_bad_md5_digest_msb;
   wire [31:0] counter_bad_md5_digest_lsb;
 
@@ -1507,6 +1510,7 @@ module nts_parser_ctrl #(
 //ipv6_gen_drop_cnt
 //tx_blocked_cnt
 
+  /*
   counter64 counter_ipv4checksum_bad (
      .i_areset     ( i_areset                         ),
      .i_clk        ( i_clk                            ),
@@ -1606,7 +1610,7 @@ module nts_parser_ctrl #(
      .o_msb        ( counter_ipv6udp_checksum_good_msb    ),
      .o_lsb        ( counter_ipv6udp_checksum_good_lsb    )
   );
-
+*/
   //----------------------------------------------------------------
   // Functions and Tasks
   //----------------------------------------------------------------
@@ -1677,6 +1681,7 @@ module nts_parser_ctrl #(
     config_udp_port_ntp1_we = 0;
     config_udp_port_ntp1_new = 0;
 
+/*
     counter_ipv4checksum_bad_lsb_we = 0;
     counter_ipv4checksum_good_lsb_we = 0;
     counter_ipv4icmp_checksum_bad_lsb_we = 0;
@@ -1687,6 +1692,7 @@ module nts_parser_ctrl #(
     counter_ipv6icmp_checksum_good_lsb_we = 0;
     counter_ipv6udp_checksum_bad_lsb_we = 0;
     counter_ipv6udp_checksum_good_lsb_we = 0;
+*/
 
     if (i_api_cs) begin
       if (i_api_we) begin
@@ -1725,7 +1731,8 @@ module nts_parser_ctrl #(
           ADDR_ERROR_CAUSE: api_read_data = nts_error_cause;
           ADDR_ERROR_SIZE: api_read_data[ADDR_WIDTH+3-1:0] = error_size_reg; //MSB=0 from init
 
-          ADDR_CSUM_IPV4_BAD0:
+/*
+           ADDR_CSUM_IPV4_BAD0:
             begin
               counter_ipv4checksum_bad_lsb_we = 1;
               api_read_data = counter_ipv4checksum_bad_msb;
@@ -1789,7 +1796,7 @@ module nts_parser_ctrl #(
               api_read_data = counter_ipv6udp_checksum_good_msb;
             end
           ADDR_CSUM_IPV6_UDP_GOOD1: api_read_data = counter_ipv6udp_checksum_good_lsb;
-
+*/
           ADDR_MAC_CTRL: api_read_data[3:0] = addr_mac_ctrl;
           ADDR_IPV4_CTRL: api_read_data[7:0] = addr_ipv4_ctrl;
           ADDR_IPV6_CTRL: api_read_data[7:0] = addr_ipv6_ctrl;
@@ -4326,6 +4333,7 @@ module nts_parser_ctrl #(
   // RX csum calculation statistic counters
   //----------------------------------------------------------------
 
+/*
   always @*
   begin
     counter_ipv4checksum_bad_inc = 0;
@@ -4361,7 +4369,8 @@ module nts_parser_ctrl #(
       default: ;
     endcase
   end
-
+*/
+  
   //----------------------------------------------------------------
   // TX IPv4 csum calculation
   //----------------------------------------------------------------

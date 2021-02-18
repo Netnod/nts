@@ -48,16 +48,16 @@ module nts_extractor_mux #(
   input  wire [64 * ENGINES - 1 : 0] i_engine_fifo_rd_data,
   input  wire  [4 * ENGINES - 1 : 0] i_engine_bytes_last_word,
 
-  output  o_buffer_ready,
-  input   i_buffer_start,
-  input   i_buffer_stop,
+  output wire o_buffer_ready,
+  input  wire i_buffer_start,
+  input  wire i_buffer_stop,
 
-  output [ADDR_WIDTH-1:0] o_buffer_length,
-  output            [3:0] o_buffer_lwdv,
+  output wire [ADDR_WIDTH-1:0] o_buffer_length,
+  output wire            [3:0] o_buffer_lwdv,
 
-  output [ADDR_WIDTH-1:0] o_buffer_wr_addr,
-  output                  o_buffer_wr_en,
-  output           [63:0] o_buffer_wr_data
+  output wire [ADDR_WIDTH-1:0] o_buffer_wr_addr,
+  output wire                  o_buffer_wr_en,
+  output wire           [63:0] o_buffer_wr_data
 
 );
   localparam [1:0] BUFFER_STATE_UNUSED  = 2'b00;

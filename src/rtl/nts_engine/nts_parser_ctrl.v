@@ -2645,7 +2645,7 @@ module nts_parser_ctrl #(
             if (ntp_extension_tag_reg[j] == TAG_NTS_AUTHENTICATOR) begin
               authenticators = authenticators  + 1;
               nts_authenticator_start_addr_new = ntp_extension_addr_reg[j];
-              if (ntp_extension_length_reg[j] != LEN_NTS_AUTHENTICATOR ) begin
+              if (ntp_extension_length_reg[j] < LEN_NTS_AUTHENTICATOR ) begin
                 evil_packet = 1;
               end
             end
